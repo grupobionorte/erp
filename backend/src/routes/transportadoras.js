@@ -1,5 +1,6 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
+const { exigirAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.put("/:id", async (req, res) => {
   res.json(transportadora);
 });
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", exigirAdmin, async (req, res) => {
   await prisma.transportadora.update({
     where: { id: Number(req.params.id) },
     data: { ativo: false },

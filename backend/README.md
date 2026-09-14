@@ -3,6 +3,35 @@
 API que sustenta os cadastros (clientes, fornecedores, colaboradores,
 transportadoras, produtos) e o fluxo de emissão de NFe via provedor externo.
 
+## Autenticação
+
+Toda rota de negócio (`/pessoas`, `/colaboradores`, `/transportadoras`, `/produtos`,
+`/documentos-fiscais`) agora exige um token — só `/health` e `/auth/*` ficam abertos.
+
+- **Primeiro acesso**: `POST /auth/registrar` com `{ nome, email, senha }` sem token — o
+  primeiro usuário criado vira automaticamente `admin`. Depois disso, criar novos usuários
+  exige estar logado como admin.
+- **Login**: `POST /auth/login` com `{ email, senha }` devolve `{ token, usuario }`. Use esse
+  token em todas as outras chamadas: header `Authorization: Bearer <token>`. Expira em 8 horas.
+- **Papéis**: `admin` pode tudo, incluindo excluir cadastros e criar novos usuários.
+  `operador` pode ler e criar/editar, mas não excluir.
+
+```bash
+# Criar o primeiro usuário (admin)
+curl -X POST https://erp-biomassa-backend.onrender.com/auth/registrar \
+  -H "Content-Type: application/json" \
+  -d '{"nome":"Seu Nome","email":"voce@empresa.com","senha":"uma-senha-forte"}'
+
+# Login
+curl -X POST https://erp-biomassa-backend.onrender.com/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"voce@empresa.com","senha":"uma-senha-forte"}'
+
+# Usar o token retornado
+curl https://erp-biomassa-backend.onrender.com/pessoas \
+  -H "Authorization: Bearer SEU_TOKEN_AQUI"
+```
+
 ## Deploy no Render (backend + Postgres online)
 
 Este repositório já vem com um `render.yaml` na raiz — o Render lê esse arquivo e sobe o

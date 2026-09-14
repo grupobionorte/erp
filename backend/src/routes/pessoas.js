@@ -1,5 +1,6 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
+const { exigirAdmin } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -88,7 +89,7 @@ router.put("/:id", async (req, res) => {
 
 // Exclusão lógica — mantém o histórico de documentos fiscais emitidos
 // para essa pessoa íntegro, em vez de apagar a linha.
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", exigirAdmin, async (req, res) => {
   await prisma.pessoa.update({
     where: { id: Number(req.params.id) },
     data: { ativo: false },

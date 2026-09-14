@@ -17,6 +17,8 @@ services:
         fromDatabase:
           name: erp-biomassa-db
           property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
       - key: FOCUS_NFE_BASE_URL
         value: https://homologacao.focusnfe.com.br
       - key: FOCUS_NFE_TOKEN

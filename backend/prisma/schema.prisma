@@ -37,6 +37,23 @@ enum TipoCertificado {
   A3
 }
 
+enum PapelUsuario {
+  admin
+  operador
+}
+
+model Usuario {
+  id         Int           @id @default(autoincrement())
+  nome       String
+  email      String        @unique
+  senhaHash  String        @map("senha_hash")
+  papel      PapelUsuario  @default(operador)
+  ativo      Boolean       @default(true)
+  criadoEm   DateTime      @default(now()) @map("criado_em")
+
+  @@map("usuarios")
+}
+
 model Endereco {
   id                Int      @id @default(autoincrement())
   cep               String?

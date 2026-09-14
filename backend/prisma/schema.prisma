@@ -54,6 +54,14 @@ model Usuario {
   @@map("usuarios")
 }
 
+model Ncm {
+  id        Int    @id @default(autoincrement())
+  codigo    String @unique
+  descricao String
+
+  @@map("ncms")
+}
+
 model Endereco {
   id                Int      @id @default(autoincrement())
   cep               String?

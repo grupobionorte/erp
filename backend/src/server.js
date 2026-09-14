@@ -7,6 +7,7 @@ const colaboradoresRouter = require("./routes/colaboradores");
 const transportadorasRouter = require("./routes/transportadoras");
 const produtosRouter = require("./routes/produtos");
 const documentosFiscaisRouter = require("./routes/documentosFiscais");
+const ncmsRouter = require("./routes/ncms");
 const authRouter = require("./routes/auth");
 const { autenticar } = require("./middleware/auth");
 
@@ -30,6 +31,7 @@ app.use("/colaboradores", colaboradoresRouter);
 app.use("/transportadoras", transportadorasRouter);
 app.use("/produtos", produtosRouter);
 app.use("/documentos-fiscais", documentosFiscaisRouter);
+app.use("/ncms", ncmsRouter);
 
 app.use((erro, req, res, next) => {
   console.error(erro);

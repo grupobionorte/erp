@@ -1,0 +1,23 @@
+databases:
+  - name: erp-biomassa-db
+    plan: free
+    postgresMajorVersion: 16
+
+services:
+  - type: web
+    name: erp-biomassa-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: erp-biomassa-db
+          property: connectionString
+      - key: FOCUS_NFE_BASE_URL
+        value: https://homologacao.focusnfe.com.br
+      - key: FOCUS_NFE_TOKEN
+        sync: false

@@ -6,9 +6,9 @@ const { autenticar } = require("../middleware/auth");
 
 const router = express.Router();
 
-function gerarToken(usuario) {
+function gerarToken(usuario, empresaId) {
   return jwt.sign(
-    { sub: usuario.id, papel: usuario.papel, nome: usuario.nome },
+    { sub: usuario.id, papel: usuario.papel, nome: usuario.nome, empresaId: empresaId ?? null },
     process.env.JWT_SECRET,
     { expiresIn: "8h" }
   );
@@ -59,8 +59,20 @@ router.post("/registrar", async (req, res) => {
   res.status(201).json({ id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel });
 });
 
+// Lista pública (sem login) das empresas ativas, só com o essencial —
+// é o que preenche o seletor de empresa na própria tela de login, antes
+// de existir qualquer token.
+router.get("/empresas", async (req, res) => {
+  const empresas = await prisma.empresa.findMany({
+    where: { ativo: true },
+    select: { id: true, razaoSocial: true },
+    orderBy: { razaoSocial: "asc" },
+  });
+  res.json(empresas);
+});
+
 router.post("/login", async (req, res) => {
-  const { email, senha } = req.body;
+  const { email, senha, empresaId } = req.body;
   if (!email || !senha) {
     return res.status(400).json({ erro: "email e senha são obrigatórios" });
   }
@@ -75,15 +87,43 @@ router.post("/login", async (req, res) => {
     return res.status(401).json({ erro: "Credenciais inválidas" });
   }
 
+  // Só exige escolher uma empresa se já existir alguma cadastrada — assim
+  // o primeiro admin consegue logar antes de cadastrar a primeira empresa
+  // em Configurações.
+  const totalEmpresas = await prisma.empresa.count({ where: { ativo: true } });
+  let empresa = null;
+
+  if (totalEmpresas > 0) {
+    if (!empresaId) {
+      return res.status(400).json({ erro: "Selecione uma empresa para continuar" });
+    }
+    empresa = await prisma.empresa.findFirst({
+      where: { id: Number(empresaId), ativo: true },
+      select: { id: true, razaoSocial: true },
+    });
+    if (!empresa) {
+      return res.status(400).json({ erro: "Empresa inválida" });
+    }
+  }
+
   res.json({
-    token: gerarToken(usuario),
+    token: gerarToken(usuario, empresa?.id),
     usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+    empresa,
   });
 });
 
-// Usado pelo frontend pra saber se o token salvo ainda é válido ao abrir a tela.
+// Usado pelo frontend pra saber se o token salvo ainda é válido ao abrir a
+// tela — devolve também a empresa em uso, pra sobreviver a um F5.
 router.get("/me", autenticar, async (req, res) => {
-  res.json(req.usuario);
+  let empresa = null;
+  if (req.usuario.empresaId) {
+    empresa = await prisma.empresa.findUnique({
+      where: { id: req.usuario.empresaId },
+      select: { id: true, razaoSocial: true },
+    });
+  }
+  res.json({ ...req.usuario, empresa });
 });
 
 module.exports = router;

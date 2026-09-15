@@ -8,8 +8,12 @@ const router = express.Router();
 // cada um (usado tanto na tela de cadastro quanto, futuramente, na
 // seleção de veículo ao montar um MDFe).
 router.get("/", async (req, res) => {
+  const { empresaId } = req.usuario;
   const veiculos = await prisma.veiculo.findMany({
-    where: { ativo: true },
+    where: {
+      ativo: true,
+      ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
+    },
     include: { transportadora: true },
     orderBy: { placa: "asc" },
   });
@@ -17,13 +21,18 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { transportadoraId, placa } = req.body;
+  const { transportadoraId, placa, empresaId, ...resto } = req.body;
   if (!transportadoraId || !placa) {
     return res.status(400).json({ erro: "transportadoraId e placa são obrigatórios" });
   }
 
   const veiculo = await prisma.veiculo.create({
-    data: { ...req.body, transportadoraId: Number(transportadoraId) },
+    data: {
+      ...resto,
+      placa,
+      transportadoraId: Number(transportadoraId),
+      empresaId: req.usuario.empresaId || undefined,
+    },
     include: { transportadora: true },
   });
 
@@ -31,10 +40,17 @@ router.post("/", async (req, res) => {
 });
 
 router.put("/:id", async (req, res) => {
-  const { transportadoraId, ...dados } = req.body;
+  const { transportadoraId, empresaId, ...dados } = req.body;
+  const id = Number(req.params.id);
+
+  const existente = await prisma.veiculo.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Veículo não encontrado" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse cadastro pertence a outra empresa" });
+  }
 
   const veiculo = await prisma.veiculo.update({
-    where: { id: Number(req.params.id) },
+    where: { id },
     data: {
       ...dados,
       transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
@@ -49,8 +65,15 @@ router.put("/:id", async (req, res) => {
 // já referenciaram esse veículo. Restrito a admin, igual aos outros
 // cadastros.
 router.delete("/:id", exigirAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const existente = await prisma.veiculo.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Veículo não encontrado" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse cadastro pertence a outra empresa" });
+  }
+
   await prisma.veiculo.update({
-    where: { id: Number(req.params.id) },
+    where: { id },
     data: { ativo: false },
   });
   res.status(204).send();

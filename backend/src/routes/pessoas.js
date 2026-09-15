@@ -7,11 +7,20 @@ const router = express.Router();
 // GET /pessoas?papel=cliente|fornecedor — lista clientes e/ou fornecedores.
 // A mesma tabela serve para os dois porque os campos são idênticos; o que
 // muda é qual flag (e_cliente / e_fornecedor) está marcada.
+// GET /pessoas?papel=cliente|fornecedor — lista clientes e/ou fornecedores.
+// A mesma tabela serve para os dois porque os campos são idênticos; o que
+// muda é qual flag (e_cliente / e_fornecedor) está marcada.
+//
+// Multi-empresa: só mostra registros da empresa em uso na sessão (definida
+// no login) mais os registros antigos sem empresa definida (empresaId nulo),
+// pra não sumir cadastro nenhum de quem já usava o sistema antes disso.
 router.get("/", async (req, res) => {
   const { papel, busca } = req.query;
+  const { empresaId } = req.usuario;
 
   const where = {
     ativo: true,
+    ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
     ...(papel === "cliente" ? { eCliente: true } : {}),
     ...(papel === "fornecedor" ? { eFornecedor: true } : {}),
     ...(busca
@@ -44,7 +53,7 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { endereco, ...dados } = req.body;
+  const { endereco, empresaId, ...dados } = req.body;
 
   if (!dados.nomeRazaoSocial || !dados.documento) {
     return res.status(400).json({ erro: "nomeRazaoSocial e documento são obrigatórios" });
@@ -56,6 +65,7 @@ router.post("/", async (req, res) => {
   const pessoa = await prisma.pessoa.create({
     data: {
       ...dados,
+      empresaId: req.usuario.empresaId || undefined,
       endereco: endereco ? { create: endereco } : undefined,
     },
     include: { endereco: true },
@@ -65,12 +75,17 @@ router.post("/", async (req, res) => {
 });
 
 router.put("/:id", async (req, res) => {
-  const { endereco, ...dados } = req.body;
+  const { endereco, empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
+  const existente = await prisma.pessoa.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Pessoa não encontrada" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse cadastro pertence a outra empresa" });
+  }
+
   if (endereco) {
-    const existente = await prisma.pessoa.findUnique({ where: { id } });
-    if (existente?.enderecoId) {
+    if (existente.enderecoId) {
       await prisma.endereco.update({ where: { id: existente.enderecoId }, data: endereco });
     } else {
       const novoEndereco = await prisma.endereco.create({ data: endereco });
@@ -90,8 +105,15 @@ router.put("/:id", async (req, res) => {
 // Exclusão lógica — mantém o histórico de documentos fiscais emitidos
 // para essa pessoa íntegro, em vez de apagar a linha.
 router.delete("/:id", exigirAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  const existente = await prisma.pessoa.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Pessoa não encontrada" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse cadastro pertence a outra empresa" });
+  }
+
   await prisma.pessoa.update({
-    where: { id: Number(req.params.id) },
+    where: { id },
     data: { ativo: false },
   });
 

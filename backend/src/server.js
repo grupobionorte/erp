@@ -11,6 +11,7 @@ const documentosFiscaisRouter = require("./routes/documentosFiscais");
 const ncmsRouter = require("./routes/ncms");
 const authRouter = require("./routes/auth");
 const usuariosRouter = require("./routes/usuarios");
+const empresasRouter = require("./routes/empresas");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -51,6 +52,7 @@ app.use("/produtos", produtosRouter);
 app.use("/documentos-fiscais", documentosFiscaisRouter);
 app.use("/ncms", ncmsRouter);
 app.use("/usuarios", usuariosRouter);
+app.use("/empresas", empresasRouter);
 
 app.use((erro, req, res, next) => {
   console.error(erro);

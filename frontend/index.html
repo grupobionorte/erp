@@ -46,6 +46,7 @@ function Leaf(props) { return <IconBase {...props}><path d="M11 20A7 7 0 0 1 4 1
 function Eye(props) { return <IconBase {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></IconBase>; }
 function EyeOff(props) { return <IconBase {...props}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.7 19.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconBase>; }
 function Shield(props) { return <IconBase {...props}><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></IconBase>; }
+function Settings(props) { return <IconBase {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>; }
 
 </script>
 
@@ -358,6 +359,62 @@ const MODULES = {
       papel: r.papel,
     }),
   },
+  empresas: {
+    label: "Configurações",
+    icon: Settings,
+    color: "gray",
+    adminOnly: true,
+    apiPath: "/empresas",
+    fields: [
+      { key: "nome", label: "Razão Social", type: "text", required: true },
+      { key: "fantasia", label: "Nome Fantasia", type: "text" },
+      { key: "cnpj", label: "CNPJ", type: "text", required: true },
+      { key: "ie", label: "Inscrição Estadual", type: "text" },
+      { key: "im", label: "Inscrição Municipal", type: "text" },
+      { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true },
+      { key: "endereco", label: "Endereço", type: "endereco" },
+      { key: "nfeSerie", label: "NFe — Série", type: "text" },
+      { key: "nfeProximoNumero", label: "NFe — Próximo número", type: "number" },
+      { key: "cteSerie", label: "CTe — Série", type: "text" },
+      { key: "cteProximoNumero", label: "CTe — Próximo número", type: "number" },
+      { key: "mdfeSerie", label: "MDFe — Série", type: "text" },
+      { key: "mdfeProximoNumero", label: "MDFe — Próximo número", type: "number" },
+    ],
+    columns: ["nome", "cnpj", "regime", "endereco.cidade"],
+    toApi: (data) => ({
+      razaoSocial: data.nome,
+      nomeFantasia: data.fantasia || undefined,
+      cnpj: data.cnpj,
+      ie: data.ie || undefined,
+      im: data.im || undefined,
+      regimeTributario: data.regime === "Lucro Presumido" ? "lucro_presumido"
+        : data.regime === "Lucro Real" ? "lucro_real" : "simples_nacional",
+      endereco: data.endereco || undefined,
+      nfeSerie: data.nfeSerie || undefined,
+      nfeProximoNumero: data.nfeProximoNumero ? Number(data.nfeProximoNumero) : undefined,
+      cteSerie: data.cteSerie || undefined,
+      cteProximoNumero: data.cteProximoNumero ? Number(data.cteProximoNumero) : undefined,
+      mdfeSerie: data.mdfeSerie || undefined,
+      mdfeProximoNumero: data.mdfeProximoNumero ? Number(data.mdfeProximoNumero) : undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      nome: r.razaoSocial,
+      fantasia: r.nomeFantasia,
+      cnpj: r.cnpj,
+      ie: r.ie,
+      im: r.im,
+      regime: r.regimeTributario === "lucro_presumido" ? "Lucro Presumido"
+        : r.regimeTributario === "lucro_real" ? "Lucro Real" : "Simples Nacional",
+      endereco: mapEndereco(r.endereco),
+      nfeSerie: r.nfeSerie,
+      nfeProximoNumero: r.nfeProximoNumero,
+      cteSerie: r.cteSerie,
+      cteProximoNumero: r.cteProximoNumero,
+      mdfeSerie: r.mdfeSerie,
+      mdfeProximoNumero: r.mdfeProximoNumero,
+    }),
+  },
 };
 
 // Alguns módulos (como o cadastro de usuários) só fazem sentido pra quem
@@ -464,6 +521,7 @@ const COLOR_MAP = {
   green: { bg: "#eaf3de", text: "#27500a", border: "#97c459" },
   purple: { bg: "#eeedfe", text: "#3c3489", border: "#afa9ec" },
   pink: { bg: "#fbeaf0", text: "#72243e", border: "#ed93b1" },
+  gray: { bg: "#f1efe8", text: "#444441", border: "#b4b2a9" },
 };
 
 // Rótulos de colunas que existem só pra exibição na tabela (não são um
@@ -621,10 +679,11 @@ function Field({ field, value, onChange, disabled }) {
           type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "password" ? "password" : "text"}
           value={value ?? ""}
           disabled={disabled}
-          maxLength={field.key === "documento" ? 18 : field.key === "cpf" ? 14 : undefined}
+          maxLength={field.key === "documento" || field.key === "cnpj" ? 18 : field.key === "cpf" ? 14 : undefined}
           onChange={e => {
             const raw = e.target.value;
             if (field.key === "documento") onChange(formatDocumento(raw));
+            else if (field.key === "cnpj") onChange(formatCNPJ(raw));
             else if (field.key === "cpf") onChange(formatCPF(raw));
             else if (field.key === "placa") onChange(raw.toUpperCase());
             else onChange(raw);
@@ -696,6 +755,8 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
 function LoginScreen({ onLogin }) {
   const EMAIL_LEMBRADO_KEY = "erpBiomassaEmailLembrado";
+  const EMPRESA_LEMBRADA_KEY = "erpBiomassaEmpresaId";
+
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem(EMAIL_LEMBRADO_KEY) || ""; } catch { return ""; }
   });
@@ -707,21 +768,47 @@ function LoginScreen({ onLogin }) {
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
 
+  // Lista de empresas pra escolher na própria tela de login — é uma rota
+  // pública (não exige token), porque nesse ponto o usuário ainda não logou.
+  const [empresas, setEmpresas] = useState(null);
+  const [empresaId, setEmpresaId] = useState(() => {
+    try { return localStorage.getItem(EMPRESA_LEMBRADA_KEY) || ""; } catch { return ""; }
+  });
+
+  useEffect(() => {
+    let cancelado = false;
+    apiRequest("/auth/empresas")
+      .then((dados) => { if (!cancelado) setEmpresas(dados); })
+      .catch(() => { if (!cancelado) setEmpresas([]); });
+    return () => { cancelado = true; };
+  }, []);
+
+  const precisaEscolherEmpresa = (empresas?.length || 0) > 0;
+
   const entrar = async (e) => {
     e.preventDefault();
     setErro("");
+    if (precisaEscolherEmpresa && !empresaId) {
+      setErro("Selecione uma empresa para continuar.");
+      return;
+    }
     setCarregando(true);
     try {
       const resultado = await apiRequest("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, senha }),
+        body: JSON.stringify({
+          email,
+          senha,
+          empresaId: precisaEscolherEmpresa ? Number(empresaId) : undefined,
+        }),
       });
       setToken(resultado.token);
       try {
         if (lembrarEmail) localStorage.setItem(EMAIL_LEMBRADO_KEY, email);
         else localStorage.removeItem(EMAIL_LEMBRADO_KEY);
+        if (resultado.empresa?.id) localStorage.setItem(EMPRESA_LEMBRADA_KEY, String(resultado.empresa.id));
       } catch { /* localStorage indisponível — segue sem lembrar */ }
-      onLogin(resultado.usuario);
+      onLogin({ ...resultado.usuario, empresa: resultado.empresa || null });
     } catch (e2) {
       setErro(e2.message === "Credenciais inválidas" ? "E-mail ou senha incorretos." : e2.message);
     } finally {
@@ -790,6 +877,24 @@ function LoginScreen({ onLogin }) {
         <form className="login-card" onSubmit={entrar}>
           <h2 className="login-heading">Entrar</h2>
           <p className="login-subtitle">Use seu e-mail e senha cadastrados.</p>
+
+          {precisaEscolherEmpresa && (
+            <div className="login-field">
+              <label className="login-label">Empresa</label>
+              <select
+                className="login-input"
+                value={empresaId}
+                onChange={e => setEmpresaId(e.target.value)}
+                required
+              >
+                <option value="">Selecione…</option>
+                {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.razaoSocial}</option>)}
+              </select>
+            </div>
+          )}
+          {empresas === null && (
+            <p style={{ fontSize: 12, color: "#8a887f", margin: "0 0 18px" }}>Carregando empresas…</p>
+          )}
 
           <div className="login-field">
             <label className="login-label">E-mail</label>
@@ -1323,7 +1428,7 @@ function ErpBiomassa() {
       <div className="sidebar">
         <div className="brand">
           Biomassa ERP
-          <div className="brand-sub">Conectado ao backend</div>
+          <div className="brand-sub">{usuario.empresa?.razaoSocial || "Conectado ao backend"}</div>
         </div>
         {navItems.map(item => {
           const Icon = item.icon;

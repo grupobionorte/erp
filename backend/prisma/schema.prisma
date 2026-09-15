@@ -102,12 +102,28 @@ model Empresa {
   regimeTributario  RegimeTributario  @map("regime_tributario")
   ativo             Boolean           @default(true)
 
+  // Numeração fiscal — cada empresa (CNPJ) tem sua própria série e
+  // contador por tipo de documento. O "próximo número" é incrementado
+  // pelo backend a cada emissão real (ainda não implementado).
+  nfeSerie            String?  @map("nfe_serie")
+  nfeProximoNumero    Int      @default(1) @map("nfe_proximo_numero")
+  cteSerie            String?  @map("cte_serie")
+  cteProximoNumero    Int      @default(1) @map("cte_proximo_numero")
+  mdfeSerie           String?  @map("mdfe_serie")
+  mdfeProximoNumero   Int      @default(1) @map("mdfe_proximo_numero")
+
   enderecoId     Int?                @map("endereco_id")
   endereco       Endereco?           @relation(fields: [enderecoId], references: [id])
   certificadoId  Int?                @map("certificado_id")
   certificado    CertificadoDigital? @relation(fields: [certificadoId], references: [id])
 
   documentosFiscais DocumentoFiscal[]
+
+  pessoas         Pessoa[]
+  colaboradores   Colaborador[]
+  transportadoras Transportadora[]
+  produtos        Produto[]
+  veiculos        Veiculo[]
 
   @@map("empresas")
 }
@@ -130,6 +146,12 @@ model Pessoa {
   enderecoId Int?     @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])
 
+  // Multi-empresa: registros criados antes dessa coluna existir ficam com
+  // empresaId nulo e continuam visíveis pra todo mundo até serem migrados
+  // manualmente pra uma empresa específica.
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
   documentosComoDestinatario DocumentoFiscal[]
 
   @@map("pessoas")
@@ -146,6 +168,9 @@ model Colaborador {
   email         String?
   ativo         Boolean   @default(true)
 
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
   @@map("colaboradores")
 }
 
@@ -161,6 +186,9 @@ model Transportadora {
 
   enderecoId Int?      @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   veiculos          Veiculo[]
   documentosFiscais DocumentoFiscal[]
@@ -180,6 +208,9 @@ model Veiculo {
 
   transportadoraId Int            @map("transportadora_id")
   transportadora   Transportadora @relation(fields: [transportadoraId], references: [id])
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   documentosFiscais DocumentoFiscal[]
 
@@ -201,6 +232,9 @@ model Produto {
   valorUnitario    Float?   @map("valor_unitario")
   pesoLiquidoKg    Float?   @map("peso_liquido_kg")
   ativo            Boolean  @default(true)
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   itens DocumentoItem[]
 

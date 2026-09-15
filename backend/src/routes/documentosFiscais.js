@@ -6,21 +6,47 @@ const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
 router.get("/", asyncHandler(async (req, res) => {
+  const { tipo } = req.query;
+  const { empresaId } = req.usuario;
+
   const documentos = await prisma.documentoFiscal.findMany({
-    include: { destinatario: true, transportadora: true, itens: true },
+    where: {
+      ...(tipo ? { tipo } : {}),
+      ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
+    },
+    include: { destinatario: true, transportadora: true, itens: { include: { produto: true } } },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
 }));
 
-// Passo 1: monta o rascunho da NFe a partir dos cadastros — é aqui que os
-// cadastros de clientes e produtos "viram" um documento fiscal.
-router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
-  const { empresaId, destinatarioId, transportadoraId, itens } = req.body;
+router.get("/:id", asyncHandler(async (req, res) => {
+  const documento = await prisma.documentoFiscal.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { destinatario: true, transportadora: true, itens: { include: { produto: true } } },
+  });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  res.json(documento);
+}));
 
-  if (!empresaId || !destinatarioId || !itens?.length) {
-    return res.status(400).json({ erro: "empresaId, destinatarioId e itens são obrigatórios" });
+// Passo 1: monta o rascunho da NFe a partir dos cadastros — é aqui que os
+// cadastros de clientes e produtos "viram" um documento fiscal. Número e
+// série vêm automaticamente da numeração configurada em Configurações
+// para a empresa da sessão atual (e o contador já sai incrementado, pra
+// nunca repetir número mesmo com duas pessoas emitindo ao mesmo tempo).
+router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
+  const { empresaId } = req.usuario;
+  const { destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens } = req.body;
+
+  if (!empresaId) {
+    return res.status(400).json({ erro: "Escolha uma empresa (na tela de login) antes de emitir notas fiscais" });
   }
+  if (!destinatarioId || !itens?.length) {
+    return res.status(400).json({ erro: "destinatarioId e itens são obrigatórios" });
+  }
+
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return res.status(400).json({ erro: "Empresa inválida" });
 
   const produtos = await prisma.produto.findMany({
     where: { id: { in: itens.map((i) => i.produtoId) } },
@@ -41,6 +67,16 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
 
   const valorTotal = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
 
+  // Incrementa o contador da empresa antes de usar o número — assim duas
+  // notas nunca saem com o mesmo número, mesmo se forem criadas ao mesmo
+  // tempo por pessoas diferentes.
+  const empresaAtualizada = await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { nfeProximoNumero: { increment: 1 } },
+  });
+  const numero = empresaAtualizada.nfeProximoNumero - 1;
+  const serie = Number.parseInt(empresa.nfeSerie, 10);
+
   const documento = await prisma.documentoFiscal.create({
     data: {
       tipo: "NFe",
@@ -48,10 +84,16 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       empresaId,
       destinatarioId,
       transportadoraId: transportadoraId || undefined,
+      numero,
+      serie: Number.isNaN(serie) ? undefined : serie,
+      naturezaOperacao: naturezaOperacao || undefined,
+      modalidadeFrete: modalidadeFrete || undefined,
+      dataSaida: dataSaida ? new Date(dataSaida) : undefined,
+      informacoesComplementares: informacoesComplementares || undefined,
       valorTotal,
       itens: { create: itensCalculados },
     },
-    include: { itens: true, destinatario: true, transportadora: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true },
   });
 
   res.status(201).json(documento);
@@ -230,6 +272,87 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
   }
 
   res.json({ ...documento, statusProvedor: resultado.status });
+}));
+
+// Edita um rascunho (ainda não emitido) — recalcula os itens e o total
+// se uma lista nova de itens for enviada.
+router.put("/:id", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+
+  const existente = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (existente.status !== "rascunho") {
+    return res.status(409).json({ erro: "Só é possível editar documentos em rascunho" });
+  }
+
+  const { destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens } = req.body;
+
+  let dadosItens = {};
+  let valorTotal = existente.valorTotal;
+
+  if (itens?.length) {
+    const produtos = await prisma.produto.findMany({ where: { id: { in: itens.map((i) => i.produtoId) } } });
+    const itensCalculados = itens.map((item) => {
+      const produto = produtos.find((p) => p.id === item.produtoId);
+      if (!produto) throw new Error(`Produto ${item.produtoId} não encontrado`);
+      const valorUnitario = item.valorUnitario ?? produto.valorUnitario ?? 0;
+      return {
+        produtoId: produto.id,
+        quantidade: item.quantidade,
+        valorUnitario,
+        valorTotal: valorUnitario * item.quantidade,
+        cfopUtilizado: item.cfopUtilizado || produto.cfopPadrao,
+      };
+    });
+    valorTotal = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
+    // Troca os itens antigos pelos novos — mais simples do que tentar
+    // casar item a item, e o documento ainda é só um rascunho.
+    await prisma.documentoItem.deleteMany({ where: { documentoId: id } });
+    dadosItens = { itens: { create: itensCalculados } };
+  }
+
+  const documento = await prisma.documentoFiscal.update({
+    where: { id },
+    data: {
+      destinatarioId: destinatarioId || undefined,
+      transportadoraId: transportadoraId === null ? null : transportadoraId || undefined,
+      naturezaOperacao: naturezaOperacao ?? undefined,
+      modalidadeFrete: modalidadeFrete ?? undefined,
+      dataSaida: dataSaida ? new Date(dataSaida) : undefined,
+      informacoesComplementares: informacoesComplementares ?? undefined,
+      valorTotal,
+      ...dadosItens,
+    },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true },
+  });
+
+  res.json(documento);
+}));
+
+// Cancela um rascunho (documento já emitido precisa de um evento de
+// cancelamento de verdade, não simplesmente apagar — mas um rascunho
+// pode ser descartado direto).
+router.delete("/:id", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+
+  const existente = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!existente) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (existente.status !== "rascunho") {
+    return res.status(409).json({ erro: "Só é possível cancelar documentos em rascunho" });
+  }
+
+  await prisma.documentoFiscal.update({
+    where: { id },
+    data: { status: "cancelado" },
+  });
+
+  res.status(204).send();
 }));
 
 module.exports = router;

@@ -1185,32 +1185,22 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
 }
 
 function EmissaoView() {
-  const [tipo, setTipo] = useState("NFe");
+  const [tipo, setTipo] = useState("CTe");
   const { items: clientes } = useApiCollection("clientes");
-  const { items: produtos } = useApiCollection("produtos");
   const { items: transportadoras } = useApiCollection("transportadoras");
   const [clienteId, setClienteId] = useState("");
-  const [produtoIds, setProdutoIds] = useState([]);
   const [transportadoraId, setTransportadoraId] = useState("");
   const [gerado, setGerado] = useState(null);
 
-  const toggleProduto = (id) => {
-    setProdutoIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-  };
-
-  const podeGerar = tipo === "NFe"
-    ? clienteId && produtoIds.length > 0
-    : transportadoraId && (tipo !== "CTe" || clienteId);
+  const podeGerar = transportadoraId && (tipo !== "CTe" || clienteId);
 
   const gerarSimulacao = () => {
     const cliente = (clientes || []).find(c => c.id === Number(clienteId));
-    const itens = (produtos || []).filter(p => produtoIds.includes(p.id));
     const transp = (transportadoras || []).find(t => t.id === Number(transportadoraId));
     setGerado({
       tipo,
       numero: Math.floor(100000 + Math.random() * 900000),
       cliente,
-      itens,
       transportadora: transp,
       data: new Date().toLocaleDateString("pt-BR"),
     });
@@ -1224,14 +1214,14 @@ function EmissaoView() {
             <FileText size={20} />
           </div>
           <div>
-            <h2>Emissão (simulação)</h2>
+            <h2>Emissão de CTe/MDFe (simulação)</h2>
             <p className="subtle">Monta o documento a partir dos cadastros reais — sem envio à SEFAZ</p>
           </div>
         </div>
       </div>
 
       <div className="tabs">
-        {["NFe", "CTe", "MDFe"].map(t => (
+        {["CTe", "MDFe"].map(t => (
           <button key={t} className={`tab ${tipo === t ? "tab-active" : ""}`} onClick={() => { setTipo(t); setGerado(null); }}>
             {t}
           </button>
@@ -1239,7 +1229,7 @@ function EmissaoView() {
       </div>
 
       <div className="emissao-form">
-        {(tipo === "NFe" || tipo === "CTe") && (
+        {tipo === "CTe" && (
           <div className="field-group">
             <label className="field-label">Cliente / Destinatário</label>
             <select value={clienteId} onChange={e => setClienteId(e.target.value)}>
@@ -1250,31 +1240,14 @@ function EmissaoView() {
           </div>
         )}
 
-        {tipo === "NFe" && (
-          <div className="field-group">
-            <label className="field-label">Produtos</label>
-            <div className="checklist">
-              {(produtos || []).length === 0 && <p className="hint">Nenhum produto cadastrado ainda.</p>}
-              {(produtos || []).map(p => (
-                <label key={p.id} className="checklist-item">
-                  <input type="checkbox" checked={produtoIds.includes(p.id)} onChange={() => toggleProduto(p.id)} />
-                  {p.descricao} <span className="subtle">({p.codigo})</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(tipo === "CTe" || tipo === "MDFe") && (
-          <div className="field-group">
-            <label className="field-label">Transportadora</label>
-            <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-              <option value="">Selecione uma transportadora…</option>
-              {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-            {transportadoras?.length === 0 && <p className="hint">Nenhuma transportadora cadastrada ainda.</p>}
-          </div>
-        )}
+        <div className="field-group">
+          <label className="field-label">Transportadora</label>
+          <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
+            <option value="">Selecione uma transportadora…</option>
+            {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+          {transportadoras?.length === 0 && <p className="hint">Nenhuma transportadora cadastrada ainda.</p>}
+        </div>
 
         <button className="btn btn-primary" disabled={!podeGerar} onClick={gerarSimulacao}>
           Gerar simulação de {tipo}
@@ -1289,16 +1262,313 @@ function EmissaoView() {
           </div>
           {gerado.cliente && <p><strong>Destinatário:</strong> {gerado.cliente.nome} — {gerado.cliente.documento}</p>}
           {gerado.transportadora && <p><strong>Transportadora:</strong> {gerado.transportadora.nome} — RNTRC {gerado.transportadora.rntrc || "—"}</p>}
-          {gerado.itens && gerado.itens.length > 0 && (
-            <div>
-              <strong>Itens:</strong>
-              <ul>
-                {gerado.itens.map(i => <li key={i.id}>{i.descricao} — NCM {i.ncm} — {i.unidade || "UN"} {i.valorUnitario ? `— R$ ${i.valorUnitario}` : ""}</li>)}
-              </ul>
-            </div>
-          )}
           <p className="hint" style={{ marginTop: 12 }}>Documento simulado — não foi enviado à SEFAZ.</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Notas Fiscais (NFe) ----------
+// Diferente dos outros cadastros: os itens são uma lista dinâmica, então
+// tem um formulário próprio em vez de usar o Field/RecordForm genérico.
+
+const MODALIDADES_FRETE = ["Sem frete", "Por conta do emitente", "Por conta do destinatário", "Por conta de terceiros"];
+
+function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, onSave, onCancel }) {
+  const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
+  const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
+  const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
+  const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
+  const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
+  const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
+  const [itens, setItens] = useState(() =>
+    nota?.itens?.length
+      ? nota.itens.map(i => ({ produtoId: String(i.produtoId), quantidade: i.quantidade, valorUnitario: i.valorUnitario, cfopUtilizado: i.cfopUtilizado || "" }))
+      : [{ produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "" }]
+  );
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const atualizarItem = (index, campo, valor) => {
+    setItens(prev => prev.map((it, i) => {
+      if (i !== index) return it;
+      const atualizado = { ...it, [campo]: valor };
+      if (campo === "produtoId") {
+        const produto = (produtosDisponiveis || []).find(p => String(p.id) === valor);
+        if (produto) {
+          atualizado.valorUnitario = produto.valorUnitario ?? "";
+          atualizado.cfopUtilizado = produto.cfop || "";
+        }
+      }
+      return atualizado;
+    }));
+  };
+
+  const adicionarItem = () => setItens(prev => [...prev, { produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "" }]);
+  const removerItem = (index) => setItens(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
+
+  const valorTotalGeral = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
+
+  const salvar = async () => {
+    if (!destinatarioId) { setErro("Selecione o cliente."); return; }
+    const itensValidos = itens.filter(it => it.produtoId && Number(it.quantidade) > 0);
+    if (itensValidos.length === 0) { setErro("Adicione pelo menos um item com produto e quantidade."); return; }
+    setErro("");
+    setSalvando(true);
+    try {
+      await onSave({
+        destinatarioId: Number(destinatarioId),
+        transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
+        naturezaOperacao,
+        modalidadeFrete,
+        dataSaida: dataSaida || undefined,
+        informacoesComplementares,
+        itens: itensValidos.map(it => ({
+          produtoId: Number(it.produtoId),
+          quantidade: Number(it.quantidade),
+          valorUnitario: it.valorUnitario !== "" ? Number(it.valorUnitario) : undefined,
+          cfopUtilizado: it.cfopUtilizado || undefined,
+        })),
+      });
+    } catch (e) {
+      setErro(e.message || "Erro ao salvar a nota fiscal");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ width: 640 }}>
+        <div className="modal-header">
+          <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
+          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field-group">
+            <label className="field-label">Cliente<span className="req">*</span></label>
+            <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
+              <option value="">Selecione…</option>
+              {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Transportadora</label>
+            <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
+              <option value="">Nenhuma</option>
+              {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Natureza da operação</label>
+            <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+          </div>
+
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Data de saída</label>
+              <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Modalidade do frete</label>
+              <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
+                {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Itens<span className="req">*</span></label>
+            {itens.map((item, index) => {
+              const totalItem = (Number(item.quantidade) || 0) * (Number(item.valorUnitario) || 0);
+              return (
+                <div key={index} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-end" }}>
+                  <div style={{ flex: 3, minWidth: 0 }}>
+                    <label className="field-label">Produto</label>
+                    <select value={item.produtoId} onChange={e => atualizarItem(index, "produtoId", e.target.value)}>
+                      <option value="">Selecione…</option>
+                      {(produtosDisponiveis || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="field-label">Qtd.</label>
+                    <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="field-label">Vlr. unit.</label>
+                    <input type="number" value={item.valorUnitario} onChange={e => atualizarItem(index, "valorUnitario", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="field-label">CFOP</label>
+                    <input value={item.cfopUtilizado} onChange={e => atualizarItem(index, "cfopUtilizado", e.target.value)} />
+                  </div>
+                  <p style={{ flex: 1, minWidth: 0, fontSize: 13, margin: 0, paddingBottom: 9 }}>R$ {totalItem.toFixed(2)}</p>
+                  <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item" style={{ marginBottom: 4 }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              );
+            })}
+            <button type="button" className="btn" onClick={adicionarItem}><Plus size={14} /> Adicionar item</button>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Informações complementares</label>
+            <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
+          </div>
+
+          <p style={{ fontWeight: 500, fontSize: 14 }}>Total: R$ {valorTotalGeral.toFixed(2)}</p>
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_NOTA_LABEL = {
+  rascunho: "Rascunho",
+  enviado: "Enviado",
+  autorizado: "Autorizado",
+  rejeitado: "Rejeitado",
+  cancelado: "Cancelado",
+};
+
+function NotasFiscaisView() {
+  const { items: clientes } = useApiCollection("clientes");
+  const { items: produtosDisponiveis } = useApiCollection("produtos");
+  const { items: transportadoras } = useApiCollection("transportadoras");
+
+  const [notas, setNotas] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [mostrarForm, setMostrarForm] = useState(false);
+
+  const carregar = useCallback(async () => {
+    try {
+      setErro(null);
+      const dados = await apiRequest("/documentos-fiscais?tipo=NFe");
+      setNotas(dados);
+    } catch (e) {
+      setErro(e.message);
+      setNotas([]);
+    }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const salvar = async (dados) => {
+    if (editando?.id) {
+      await apiRequest(`/documentos-fiscais/${editando.id}`, { method: "PUT", body: JSON.stringify(dados) });
+    } else {
+      await apiRequest("/documentos-fiscais/nfe/rascunho", { method: "POST", body: JSON.stringify(dados) });
+    }
+    setMostrarForm(false);
+    setEditando(null);
+    carregar();
+  };
+
+  const cancelarNota = async (id) => {
+    if (!window.confirm("Cancelar essa nota fiscal? Ela não poderá mais ser editada.")) return;
+    try {
+      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível cancelar: ${e.message}`);
+    }
+  };
+
+  if (notas === null) {
+    return <div className="loading">Carregando notas fiscais…</div>;
+  }
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#fcebeb", color: "#791f1f" }}>
+            <FileText size={20} />
+          </div>
+          <div>
+            <h2>Notas Fiscais</h2>
+            <p className="subtle">{notas.length} nota{notas.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={() => { setEditando(null); setMostrarForm(true); }}>
+          <Plus size={16} /> Nova Nota Fiscal
+        </button>
+      </div>
+
+      {erro && (
+        <div className="error-banner">
+          <AlertCircle size={16} />
+          <span>Não consegui carregar: {erro}. <button className="link-btn" onClick={carregar}>Tentar de novo</button></span>
+        </div>
+      )}
+
+      {notas.length === 0 ? (
+        <div className="empty-state">
+          <FileText size={32} strokeWidth={1.5} />
+          <p>Nenhuma nota fiscal ainda.</p>
+          <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>
+            <Plus size={16} /> Criar a primeira
+          </button>
+        </div>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Número/Série</th>
+              <th>Cliente</th>
+              <th>Valor total</th>
+              <th>Status</th>
+              <th>Emissão</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {notas.map(nota => (
+              <tr key={nota.id}>
+                <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
+                <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
+                <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
+                <td>{STATUS_NOTA_LABEL[nota.status] || nota.status}</td>
+                <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
+                <td className="actions-col">
+                  {nota.status === "rascunho" && (
+                    <>
+                      <button className="icon-btn" onClick={() => { setEditando(nota); setMostrarForm(true); }} aria-label="Editar">
+                        <Pencil size={15} />
+                      </button>
+                      <button className="icon-btn icon-btn-danger" onClick={() => cancelarNota(nota.id)} aria-label="Cancelar">
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {mostrarForm && (
+        <NotaFiscalForm
+          nota={editando}
+          clientes={clientes}
+          produtosDisponiveis={produtosDisponiveis}
+          transportadoras={transportadoras}
+          onSave={salvar}
+          onCancel={() => { setMostrarForm(false); setEditando(null); }}
+        />
       )}
     </div>
   );
@@ -1357,7 +1627,8 @@ function ErpBiomassa() {
   const navItems = [
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
     ...modulosParaUsuario(usuario).map(([key, cfg]) => ({ key, label: cfg.label, icon: cfg.icon })),
-    { key: "emissao", label: "Emissão", icon: FileText },
+    { key: "notasFiscais", label: "Notas Fiscais", icon: FileText },
+    { key: "emissao", label: "Emissão (CTe/MDFe)", icon: Truck },
   ];
 
   const sair = () => {
@@ -1529,6 +1800,7 @@ function ErpBiomassa() {
 
       <div className="main">
         {view === "dashboard" && <Dashboard counts={counts} carregandoContagens={carregandoContagens} onNavigate={setView} usuario={usuario} />}
+        {view === "notasFiscais" && <NotasFiscaisView />}
         {view === "emissao" && <EmissaoView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>

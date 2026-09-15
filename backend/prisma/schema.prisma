@@ -270,6 +270,13 @@ model DocumentoFiscal {
   motivoRejeicao       String?                @map("motivo_rejeicao")
   valorTotal           Float?                 @map("valor_total")
 
+  // Cabeçalho da NFe — os campos que faltavam pra virar um cadastro de
+  // verdade, e não só um rascunho com cliente + itens.
+  naturezaOperacao        String? @map("natureza_operacao")
+  modalidadeFrete         String? @map("modalidade_frete")
+  dataSaida               DateTime? @map("data_saida")
+  informacoesComplementares String? @map("informacoes_complementares")
+
   // Usados apenas no MDFe — o condutor não tem cadastro próprio no sistema
   // ainda, então guardamos os dados exigidos pela SEFAZ direto aqui.
   nomeMotorista String? @map("nome_motorista")

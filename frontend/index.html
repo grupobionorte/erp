@@ -1354,178 +1354,179 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 640 }}>
+      <div className="modal" style={{ width: 760, maxWidth: "95vw" }}>
         <div className="modal-header">
           <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Data de emissão</label>
-              <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+          <div className="nf-section">
+            <h4 className="nf-section-title">Dados gerais</h4>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Colaborador responsável</label>
+                <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="field-group">
-              <label className="field-label">Colaborador responsável</label>
-              <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
-                <option value="">Nenhum</option>
-                {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Cliente<span className="req">*</span></label>
-            <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
-              <option value="">Selecione…</option>
-              {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-            {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Transportadora</label>
-            <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-              <option value="">Nenhuma</option>
-              {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
-
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Natureza da operação</label>
-              <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Finalidade da operação</label>
-              <select value={finalidadeOperacao} onChange={e => setFinalidadeOperacao(e.target.value)}>
-                {FINALIDADES_OPERACAO.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Natureza da operação</label>
+                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Finalidade da operação</label>
+                <select value={finalidadeOperacao} onChange={e => setFinalidadeOperacao(e.target.value)}>
+                  {FINALIDADES_OPERACAO.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Data de saída</label>
-              <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
+          <div className="nf-section">
+            <h4 className="nf-section-title">Destinatário e transporte</h4>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Cliente<span className="req">*</span></label>
+                <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
+              </div>
+              <div className="field-group">
+                <label className="field-label">Transportadora</label>
+                <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
+                  <option value="">Nenhuma</option>
+                  {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="field-group">
-              <label className="field-label">Modalidade do frete</label>
-              <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
-                {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Data de saída</label>
+                <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Modalidade do frete</label>
+                <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
+                  {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
             </div>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Presença do comprador</label>
+                <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
+                  {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Forma de pagamento</label>
+                <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
+                  {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 0, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
+              <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
+              <span>Venda para consumidor final</span>
+            </label>
           </div>
 
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Presença do comprador</label>
-              <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
-                {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Forma de pagamento</label>
-              <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
-                {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
-            <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
-            <span>Venda para consumidor final</span>
-          </label>
-
-          <div className="field-group">
-            <label className="field-label">Itens<span className="req">*</span></label>
-            {itens.map((item, index) => {
-              const totalItem = (Number(item.quantidade) || 0) * (Number(item.valorUnitario) || 0);
-              return (
-                <div key={index} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-end" }}>
-                  <div style={{ flex: 3, minWidth: 0 }}>
-                    <label className="field-label">Produto</label>
+          <div className="nf-section">
+            <h4 className="nf-section-title">Itens<span className="req">*</span></h4>
+            <div className="nf-itens-table">
+              <div className="nf-itens-header">
+                <span>Produto</span>
+                <span>Qtd.</span>
+                <span>Vlr. unit.</span>
+                <span>CFOP</span>
+                <span>NCM</span>
+                <span>CST</span>
+                <span style={{ textAlign: "right" }}>Total</span>
+                <span></span>
+              </div>
+              {itens.map((item, index) => {
+                const totalItem = (Number(item.quantidade) || 0) * (Number(item.valorUnitario) || 0);
+                return (
+                  <div key={index} className="nf-item-row">
                     <select value={item.produtoId} onChange={e => atualizarItem(index, "produtoId", e.target.value)}>
                       <option value="">Selecione…</option>
                       {(produtosDisponiveis || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
                     </select>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label className="field-label">Qtd.</label>
                     <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label className="field-label">Vlr. unit.</label>
                     <input type="number" value={item.valorUnitario} onChange={e => atualizarItem(index, "valorUnitario", e.target.value)} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label className="field-label">CFOP</label>
                     <input value={item.cfopUtilizado} onChange={e => atualizarItem(index, "cfopUtilizado", e.target.value)} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label className="field-label">NCM</label>
                     <input value={item.ncmUtilizado} onChange={e => atualizarItem(index, "ncmUtilizado", e.target.value)} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label className="field-label">CST</label>
                     <input value={item.cstUtilizado} onChange={e => atualizarItem(index, "cstUtilizado", e.target.value)} />
+                    <span className="nf-item-total">R$ {totalItem.toFixed(2)}</span>
+                    <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                  <p style={{ flex: 1, minWidth: 0, fontSize: 13, margin: 0, paddingBottom: 9 }}>R$ {totalItem.toFixed(2)}</p>
-                  <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item" style={{ marginBottom: 4 }}>
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
             <button type="button" className="btn" onClick={adicionarItem}><Plus size={14} /> Adicionar item</button>
           </div>
 
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Valor do frete (R$)</label>
-              <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
+          <div className="nf-section">
+            <h4 className="nf-section-title">Frete, seguro, desconto e volumes</h4>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Valor do frete (R$)</label>
+                <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do seguro (R$)</label>
+                <input type="number" value={valorSeguro} onChange={e => setValorSeguro(e.target.value)} />
+              </div>
             </div>
-            <div className="field-group">
-              <label className="field-label">Valor do seguro (R$)</label>
-              <input type="number" value={valorSeguro} onChange={e => setValorSeguro(e.target.value)} />
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Desconto (R$)</label>
+                <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Volumes (qtd.)</label>
+                <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
+              </div>
+            </div>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Espécie dos volumes</label>
+                <input placeholder="Ex: Caixas, Sacos, Fardos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Peso bruto / líquido total (kg)</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="number" placeholder="Bruto" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
+                  <input type="number" placeholder="Líquido" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
+                </div>
+              </div>
+            </div>
+            <div className="field-group" style={{ marginBottom: 0 }}>
+              <label className="field-label">Informações complementares</label>
+              <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
             </div>
           </div>
 
-          <div className="field-group">
-            <label className="field-label">Desconto (R$)</label>
-            <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
+          <div className="nf-total-card">
+            <div className="nf-total-row"><span>Subtotal dos itens</span><span>R$ {totalItens.toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>+ Frete</span><span>R$ {(Number(valorFrete) || 0).toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>+ Seguro</span><span>R$ {(Number(valorSeguro) || 0).toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>− Desconto</span><span>R$ {(Number(valorDesconto) || 0).toFixed(2)}</span></div>
+            <div className="nf-total-final"><span>Total da nota</span><span>R$ {valorTotalGeral.toFixed(2)}</span></div>
           </div>
 
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Volumes (qtd.)</label>
-              <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Espécie dos volumes</label>
-              <input placeholder="Ex: Caixas, Sacos, Fardos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Peso bruto total (kg)</label>
-              <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Peso líquido total (kg)</label>
-              <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Informações complementares</label>
-            <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
-          </div>
-
-          <p style={{ fontWeight: 500, fontSize: 14 }}>Total: R$ {valorTotalGeral.toFixed(2)}</p>
-
-          {erro && <p className="error-text">{erro}</p>}
+          {erro && <p className="error-text" style={{ marginTop: 14 }}>{erro}</p>}
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
@@ -2100,6 +2101,26 @@ function ErpBiomassa() {
           font-size: 13px; box-sizing: border-box; background: var(--surface-2, #fff); color: var(--text-primary, #1a1a1a);
         }
         .endereco-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        /* Formulário de Nota Fiscal / CTe — seções com título e tabela de itens */
+        .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
+        .nf-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
+        .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }
+        .nf-itens-table { border: 1px solid #e5e3da; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+        .nf-itens-header, .nf-item-row {
+          display: grid;
+          grid-template-columns: 2.4fr 0.8fr 1fr 0.9fr 1fr 0.8fr 1fr 28px;
+          gap: 8px;
+          align-items: center;
+          padding: 8px 10px;
+        }
+        .nf-itens-header { background: #f7f6f2; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #8a887f; }
+        .nf-item-row { border-top: 1px solid #eeece4; }
+        .nf-item-row input, .nf-item-row select { width: 100%; box-sizing: border-box; font-size: 13px; padding: 7px 8px; }
+        .nf-item-total { font-size: 13px; text-align: right; color: #33332f; white-space: nowrap; }
+        .nf-total-card { background: #f7f6f2; border-radius: 8px; padding: 14px 16px; }
+        .nf-total-row { display: flex; justify-content: space-between; font-size: 13px; color: #6b6b68; padding: 3px 0; }
+        .nf-total-final { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; font-weight: 700; color: #1F3B57; padding-top: 10px; margin-top: 8px; border-top: 1px solid #e0ded4; }
         .endereco-grid .col-span-2 { grid-column: span 2; }
         .error-text { color: #a32d2d; font-size: 13px; margin: 8px 0 0; }
         .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }

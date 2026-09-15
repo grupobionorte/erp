@@ -802,13 +802,30 @@ function LoginScreen({ onLogin }) {
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
 
-  // null = ainda na etapa de e-mail/senha. Depois que o backend confirma
-  // a senha, se o usuário tiver acesso a mais de uma empresa, isso vira a
-  // lista pra escolher (segunda etapa, mesma tela).
+  // "credenciais" = só e-mail e senha visíveis. Depois do primeiro clique em
+  // "Entrar", se o usuário tiver acesso a alguma empresa, o campo de empresa
+  // aparece logo abaixo (mesma tela, mesmo formulário) e vira "empresa".
+  const [fase, setFase] = useState("credenciais");
   const [empresasParaEscolher, setEmpresasParaEscolher] = useState(null);
+  const [resultadoPendente, setResultadoPendente] = useState(null);
   const [empresaId, setEmpresaId] = useState(() => {
     try { return localStorage.getItem(EMPRESA_LEMBRADA_KEY) || ""; } catch { return ""; }
   });
+
+  // Se a pessoa voltar a mexer no e-mail ou na senha depois de já ter
+  // visto o seletor de empresa, invalida a verificação anterior — as
+  // empresas liberadas dependem de qual usuário está logando.
+  function editarCredencial(setter) {
+    return (valor) => {
+      setter(valor);
+      if (fase !== "credenciais") {
+        setFase("credenciais");
+        setEmpresasParaEscolher(null);
+        setResultadoPendente(null);
+        setErro("");
+      }
+    };
+  }
 
   function finalizarLogin(resultado) {
     setToken(resultado.token);
@@ -820,43 +837,55 @@ function LoginScreen({ onLogin }) {
     onLogin({ ...resultado.usuario, empresa: resultado.empresa || null });
   }
 
-  const enviarCredenciais = async (e) => {
+  const enviar = async (e) => {
     e.preventDefault();
     setErro("");
     setCarregando(true);
     try {
-      const resultado = await apiRequest("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, senha }),
-      });
-      if (resultado.requerEmpresa) {
-        setEmpresasParaEscolher(resultado.empresas);
+      if (fase === "credenciais") {
+        // Primeiro clique: confere e-mail/senha e descobre quais empresas
+        // esse usuário pode acessar.
+        const resultado = await apiRequest("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, senha }),
+        });
+
+        if (resultado.requerEmpresa) {
+          const lembrada = (() => { try { return localStorage.getItem(EMPRESA_LEMBRADA_KEY); } catch { return null; } })();
+          setEmpresasParaEscolher(resultado.empresas);
+          setEmpresaId(resultado.empresas.some(emp => String(emp.id) === lembrada) ? lembrada : "");
+          setFase("empresa");
+        } else if (resultado.empresa) {
+          // Só uma empresa disponível — mostra ela já selecionada e guarda
+          // o login (já confirmado) pra concluir no próximo clique, sem
+          // precisar checar a senha de novo.
+          setEmpresasParaEscolher([resultado.empresa]);
+          setEmpresaId(String(resultado.empresa.id));
+          setResultadoPendente(resultado);
+          setFase("empresa");
+        } else {
+          // Nenhuma empresa cadastrada no sistema ainda — entra direto.
+          finalizarLogin(resultado);
+        }
       } else {
-        finalizarLogin(resultado);
+        // Segundo clique: empresa escolhida.
+        if (!empresaId) {
+          setErro("Selecione uma empresa para continuar.");
+          setCarregando(false);
+          return;
+        }
+        if (resultadoPendente) {
+          finalizarLogin(resultadoPendente);
+        } else {
+          const resultado = await apiRequest("/auth/login", {
+            method: "POST",
+            body: JSON.stringify({ email, senha, empresaId: Number(empresaId) }),
+          });
+          finalizarLogin(resultado);
+        }
       }
     } catch (e2) {
       setErro(e2.message === "Credenciais inválidas" ? "E-mail ou senha incorretos." : e2.message);
-    } finally {
-      setCarregando(false);
-    }
-  };
-
-  const confirmarEmpresa = async (e) => {
-    e.preventDefault();
-    setErro("");
-    if (!empresaId) {
-      setErro("Selecione uma empresa para continuar.");
-      return;
-    }
-    setCarregando(true);
-    try {
-      const resultado = await apiRequest("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, senha, empresaId: Number(empresaId) }),
-      });
-      finalizarLogin(resultado);
-    } catch (e2) {
-      setErro(e2.message);
     } finally {
       setCarregando(false);
     }
@@ -875,7 +904,7 @@ function LoginScreen({ onLogin }) {
         .login-brand-title { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 12px; }
         .login-brand-tag { font-size: 14.5px; color: rgba(255,255,255,0.7); line-height: 1.65; margin: 0; max-width: 280px; }
 
-        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; }
+        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; border: 1.5px solid #00923F; box-sizing: border-box; }
         .login-card { width: 340px; max-width: 100%; }
         .login-heading { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; color: #1F3B57; }
         .login-subtitle { font-size: 13.5px; color: #6b6b68; margin: 0 0 28px; line-height: 1.5; }
@@ -920,60 +949,44 @@ function LoginScreen({ onLogin }) {
       </div>
 
       <div className="login-form-side">
-        {empresasParaEscolher === null ? (
-          <form className="login-card" onSubmit={enviarCredenciais}>
-            <h2 className="login-heading">Entrar</h2>
-            <p className="login-subtitle">Use seu e-mail e senha cadastrados.</p>
+        <form className="login-card" onSubmit={enviar}>
+          <h2 className="login-heading">Entrar</h2>
+          <p className="login-subtitle">Use seu e-mail e senha cadastrados.</p>
 
-            <div className="login-field">
-              <label className="login-label">E-mail</label>
+          <div className="login-field">
+            <label className="login-label">E-mail</label>
+            <input
+              className="login-input"
+              type="email"
+              value={email}
+              onChange={e => editarCredencial(setEmail)(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="login-field">
+            <label className="login-label">Senha</label>
+            <div className="login-password-wrap">
               <input
                 className="login-input"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                type={mostrarSenha ? "text" : "password"}
+                value={senha}
+                onChange={e => editarCredencial(setSenha)(e.target.value)}
                 required
-                autoFocus
               />
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setMostrarSenha(v => !v)}
+                aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
+          </div>
 
-            <div className="login-field">
-              <label className="login-label">Senha</label>
-              <div className="login-password-wrap">
-                <input
-                  className="login-input"
-                  type={mostrarSenha ? "text" : "password"}
-                  value={senha}
-                  onChange={e => setSenha(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  className="login-password-toggle"
-                  onClick={() => setMostrarSenha(v => !v)}
-                  aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
-                >
-                  {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <label className="login-remember">
-              <input type="checkbox" checked={lembrarEmail} onChange={e => setLembrarEmail(e.target.checked)} />
-              <span>Lembrar meu e-mail</span>
-            </label>
-
-            {erro && <p className="login-error">{erro}</p>}
-
-            <button className="login-submit" type="submit" disabled={carregando}>
-              {carregando ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
-        ) : (
-          <form className="login-card" onSubmit={confirmarEmpresa}>
-            <h2 className="login-heading">Escolha a empresa</h2>
-            <p className="login-subtitle">Seu usuário tem acesso a mais de uma empresa — selecione com qual quer trabalhar.</p>
-
+          {fase === "empresa" && (
             <div className="login-field">
               <label className="login-label">Empresa</label>
               <select
@@ -987,22 +1000,21 @@ function LoginScreen({ onLogin }) {
                 {empresasParaEscolher.map(emp => <option key={emp.id} value={emp.id}>{emp.razaoSocial}</option>)}
               </select>
             </div>
+          )}
 
-            {erro && <p className="login-error">{erro}</p>}
+          {fase === "credenciais" && (
+            <label className="login-remember">
+              <input type="checkbox" checked={lembrarEmail} onChange={e => setLembrarEmail(e.target.checked)} />
+              <span>Lembrar meu e-mail</span>
+            </label>
+          )}
 
-            <button className="login-submit" type="submit" disabled={carregando}>
-              {carregando ? "Entrando…" : "Continuar"}
-            </button>
-            <button
-              type="button"
-              className="login-password-toggle"
-              style={{ position: "static", marginTop: 12, fontSize: 13, color: "#6b6b68", textDecoration: "underline" }}
-              onClick={() => { setEmpresasParaEscolher(null); setErro(""); }}
-            >
-              Voltar
-            </button>
-          </form>
-        )}
+          {erro && <p className="login-error">{erro}</p>}
+
+          <button className="login-submit" type="submit" disabled={carregando}>
+            {carregando ? "Entrando…" : fase === "empresa" ? "Entrar" : "Continuar"}
+          </button>
+        </form>
       </div>
     </div>
   );

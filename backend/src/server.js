@@ -14,7 +14,22 @@ const { autenticar } = require("./middleware/auth");
 
 const app = express();
 
-app.use(cors());
+// Em produção, só a tela publicada pode chamar essa API. Sem Origin
+// (curl, Postman, chamadas de servidor pra servidor) sempre passa —
+// é só o navegador que envia Origin, então isso não afeta scripts/testes.
+const origensPermitidas = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || origensPermitidas.length === 0 || origensPermitidas.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Origem não permitida pelo CORS"));
+  },
+}));
 app.use(express.json());
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));

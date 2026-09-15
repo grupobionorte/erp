@@ -23,6 +23,8 @@ services:
         value: https://homologacao.focusnfe.com.br
       - key: FOCUS_NFE_TOKEN
         sync: false
+      - key: FRONTEND_URL
+        value: https://erp-biomassa-frontend.onrender.com
 
   - type: web
     name: erp-biomassa-frontend

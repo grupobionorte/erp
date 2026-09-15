@@ -1381,6 +1381,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const totalItens = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
   const valorTotalGeral = totalItens + (Number(valorFrete) || 0) + (Number(valorSeguro) || 0) - (Number(valorDesconto) || 0);
 
+  const clienteSelecionado = (clientes || []).find(c => String(c.id) === destinatarioId);
+
   const salvar = async () => {
     if (!destinatarioId) { setErro("Selecione o cliente."); return; }
     const itensValidos = itens.filter(it => it.produtoId && Number(it.quantidade) > 0);
@@ -1435,10 +1437,10 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         <div className="modal-body">
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
-            <div className="nf-grid-4">
+            <div className="nf-grid-3">
               <div className="field-group">
-                <label className="field-label">Data de emissão</label>
-                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+                <label className="field-label">Natureza da operação</label>
+                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Colaborador responsável</label>
@@ -1448,14 +1450,20 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
               <div className="field-group">
-                <label className="field-label">Natureza da operação</label>
-                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
-              </div>
-              <div className="field-group">
                 <label className="field-label">Finalidade da operação</label>
                 <select value={finalidadeOperacao} onChange={e => setFinalidadeOperacao(e.target.value)}>
                   {FINALIDADES_OPERACAO.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
+              </div>
+            </div>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Data de saída</label>
+                <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
             </div>
           </div>
@@ -1472,12 +1480,26 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
               </div>
               <div className="field-group">
+                <label className="field-label">CNPJ / CPF</label>
+                <input value={clienteSelecionado?.documento || ""} disabled placeholder="Selecione o cliente" />
+              </div>
+            </div>
+            <div className="endereco-grid">
+              <div className="field-group">
                 <label className="field-label">Presença do comprador</label>
                 <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
                   {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
+              <div className="field-group">
+                <label className="field-label">Contribuinte</label>
+                <input value={clienteSelecionado?.contribuinte || ""} disabled placeholder="Selecione o cliente" />
+              </div>
             </div>
+          </div>
+
+          <div className="nf-section">
+            <h4 className="nf-section-title">Fatura</h4>
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Forma de pagamento</label>
@@ -1485,8 +1507,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="field-group" style={{ display: "flex", alignItems: "flex-end", paddingBottom: 9 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
+              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                <label className={`nf-toggle ${consumidorFinal ? "nf-toggle-ativo" : ""}`}>
                   <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
                   <span>Venda para consumidor final</span>
                 </label>
@@ -1496,6 +1518,12 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
           <div className="nf-section">
             <h4 className="nf-section-title">Transporte</h4>
+            <div className="field-group">
+              <label className="field-label">Modalidade do frete</label>
+              <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
+                {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Transportadora</label>
@@ -1512,16 +1540,22 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
             </div>
-            <div className="endereco-grid">
+            <div className="nf-grid-4">
               <div className="field-group">
-                <label className="field-label">Data de saída</label>
-                <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
+                <label className="field-label">Volumes (qtd.)</label>
+                <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Modalidade do frete</label>
-                <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
-                  {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                <label className="field-label">Espécie dos volumes</label>
+                <input placeholder="Ex: Caixas, Sacos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Peso bruto total (kg)</label>
+                <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Peso líquido total (kg)</label>
+                <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
               </div>
             </div>
           </div>
@@ -1564,8 +1598,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           </div>
 
           <div className="nf-section">
-            <h4 className="nf-section-title">Frete, seguro, desconto e volumes</h4>
-            <div className="nf-grid-4">
+            <h4 className="nf-section-title">Frete, seguro e desconto</h4>
+            <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Valor do frete (R$)</label>
                 <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
@@ -1577,24 +1611,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               <div className="field-group">
                 <label className="field-label">Desconto (R$)</label>
                 <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Volumes (qtd.)</label>
-                <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
-              </div>
-            </div>
-            <div className="nf-grid-3">
-              <div className="field-group">
-                <label className="field-label">Espécie dos volumes</label>
-                <input placeholder="Ex: Caixas, Sacos, Fardos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Peso bruto total (kg)</label>
-                <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Peso líquido total (kg)</label>
-                <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>
@@ -2230,6 +2246,15 @@ function ErpBiomassa() {
         .nf-total-card { background: #f7f6f2; border-radius: 8px; padding: 14px 16px; }
         .nf-total-row { display: flex; justify-content: space-between; font-size: 13px; color: #6b6b68; padding: 3px 0; }
         .nf-total-final { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; font-weight: 700; color: #1F3B57; padding-top: 10px; margin-top: 8px; border-top: 1px solid #e0ded4; }
+        .nf-toggle {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; box-sizing: border-box;
+          padding: 9px 12px; border: 1px solid #e5e3da; border-radius: 8px;
+          cursor: pointer; font-size: 13px; color: #55534c;
+          transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .nf-toggle input { width: 16px; height: 16px; accent-color: #00923F; cursor: pointer; }
+        .nf-toggle-ativo { background: #eaf3de; border-color: #97c459; color: #27500a; font-weight: 500; }
         .endereco-grid .col-span-2 { grid-column: span 2; }
         .error-text { color: #a32d2d; font-size: 13px; margin: 8px 0 0; }
         .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }

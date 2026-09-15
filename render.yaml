@@ -23,3 +23,10 @@ services:
         value: https://homologacao.focusnfe.com.br
       - key: FOCUS_NFE_TOKEN
         sync: false
+
+  - type: web
+    name: erp-biomassa-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: echo "sem build necessario"
+    staticPublishPath: .

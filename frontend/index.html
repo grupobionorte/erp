@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERP Biomassa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #fafaf8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #root { padding: 16px; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// ---------- Ícones (equivalentes simples, sem depender de pacotes externos) ----------
+const { useState, useEffect, useCallback } = React;
+
+function IconBase({ children, size = 16, ...rest }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...rest}>
+      {children}
+    </svg>
+  );
+}
+function Users(props) { return <IconBase {...props}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></IconBase>; }
+function Truck(props) { return <IconBase {...props}><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></IconBase>; }
+function Package(props) { return <IconBase {...props}><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></IconBase>; }
+function Building2(props) { return <IconBase {...props}><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M14 9h1"/><path d="M14 13h1"/><path d="M9 21v-4h6v4"/></IconBase>; }
+function UserCog(props) { return <IconBase {...props}><circle cx="10" cy="8" r="4"/><path d="M2 21v-1a7 7 0 0 1 12.5-4.3"/><circle cx="19" cy="16" r="2.5"/><path d="M19 12.5v1M19 18.5v1M22 16h-1M17 16h-1M21.1 13.9l-.7.7M16.6 18.4l-.7.7M21.1 18.1l-.7-.7M16.6 13.6l-.7-.7"/></IconBase>; }
+function FileText(props) { return <IconBase {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></IconBase>; }
+function LayoutDashboard(props) { return <IconBase {...props}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></IconBase>; }
+function Plus(props) { return <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>; }
+function Pencil(props) { return <IconBase {...props}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></IconBase>; }
+function Trash2(props) { return <IconBase {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>; }
+function X(props) { return <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>; }
+function Search(props) { return <IconBase {...props}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>; }
+function ChevronRight(props) { return <IconBase {...props}><polyline points="9 18 15 12 9 6"/></IconBase>; }
+function AlertCircle(props) { return <IconBase {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></IconBase>; }
+function Car(props) { return <IconBase {...props}><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><path d="M19 11H5a2 2 0 0 0-2 2v3a1 1 0 0 0 1 1h1"/><path d="M19 11a2 2 0 0 1 2 2v3a1 1 0 0 1-1 1h-1"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></IconBase>; }
+function Leaf(props) { return <IconBase {...props}><path d="M11 20A7 7 0 0 1 4 13c0-4 3-8 10-9 1 5-1 9-3 9s-3-2-3-4"/><path d="M4 13c0 4 3 7 7 7 6 0 9-5 9-11-3-1-7 0-9 2"/></IconBase>; }
+function Eye(props) { return <IconBase {...props}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></IconBase>; }
+function EyeOff(props) { return <IconBase {...props}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.7 19.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconBase>; }
+
+</script>
+
+<script type="text/babel">
+
+// URL do backend publicado no Render. Troque aqui se o nome do serviço mudar.
+const API_BASE_URL = "https://erp-biomassa-backend.onrender.com";
+
+// ---------- Config de módulos ----------
+
+const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+
+const CST_ICMS = ["00","10","20","30","40","41","50","51","60","70","90"];
+const CSOSN = ["101","102","103","201","202","203","300","400","500","900"];
+
+const emptyEndereco = { cep: "", logradouro: "", numero: "", bairro: "", cidade: "", uf: "MT" };
+
+// ---------- Máscaras (CPF, CNPJ, CEP) ----------
+// Aplicadas conforme o usuário digita: guardamos só os dígitos por baixo,
+// mas mostramos com pontos/traço/barra formatados.
+function formatCPF(v) {
+  const d = v.replace(/\D/g, "").slice(0, 11);
+  if (d.length > 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
+  if (d.length > 6) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`;
+  if (d.length > 3) return `${d.slice(0,3)}.${d.slice(3)}`;
+  return d;
+}
+function formatCNPJ(v) {
+  const d = v.replace(/\D/g, "").slice(0, 14);
+  if (d.length > 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
+  if (d.length > 8) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8)}`;
+  if (d.length > 5) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5)}`;
+  if (d.length > 2) return `${d.slice(0,2)}.${d.slice(2)}`;
+  return d;
+}
+// Campo "documento" aceita CPF ou CNPJ: enquanto tiver 11 dígitos ou menos
+// formata como CPF; passando disso, assume que é CNPJ.
+function formatDocumento(v) {
+  const d = v.replace(/\D/g, "");
+  return d.length > 11 ? formatCNPJ(v) : formatCPF(v);
+}
+function formatCEP(v) {
+  const d = v.replace(/\D/g, "").slice(0, 8);
+  if (d.length > 5) return `${d.slice(0,5)}-${d.slice(5)}`;
+  return d;
+}
+
+function mapEndereco(endereco) {
+  if (!endereco) return emptyEndereco;
+  const { cep, logradouro, numero, bairro, cidade, uf } = endereco;
+  return { cep: cep || "", logradouro: logradouro || "", numero: numero || "", bairro: bairro || "", cidade: cidade || "", uf: uf || "MT" };
+}
+
+// Cada módulo sabe seu caminho na API e como converter entre os campos do
+// formulário (em português, como o usuário vê) e os campos do backend
+// (que seguem o schema.prisma). Isso fica isolado aqui para o resto da
+// tela não precisar saber dessa diferença.
+const MODULES = {
+  clientes: {
+    label: "Clientes",
+    icon: Users,
+    color: "blue",
+    apiPath: "/pessoas",
+    listQuery: "papel=cliente",
+    fields: [
+      { key: "tipo", label: "Tipo", type: "select", options: ["Pessoa Jurídica", "Pessoa Física"], default: "Pessoa Jurídica" },
+      { key: "nome", label: "Nome / Razão Social", type: "text", required: true },
+      { key: "fantasia", label: "Nome Fantasia", type: "text" },
+      { key: "documento", label: "CNPJ / CPF", type: "text", required: true },
+      { key: "ie", label: "Inscrição Estadual", type: "text" },
+      { key: "endereco", label: "Endereço", type: "endereco" },
+      { key: "telefone", label: "Telefone", type: "text" },
+      { key: "email", label: "E-mail", type: "text" },
+    ],
+    columns: ["nome", "documento", "endereco.cidade", "telefone"],
+    toApi: (data) => ({
+      tipo: data.tipo === "Pessoa Física" ? "pessoa_fisica" : "pessoa_juridica",
+      nomeRazaoSocial: data.nome,
+      nomeFantasia: data.fantasia || undefined,
+      documento: data.documento,
+      ie: data.ie || undefined,
+      telefone: data.telefone || undefined,
+      email: data.email || undefined,
+      eCliente: true,
+      endereco: data.endereco || undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      tipo: r.tipo === "pessoa_fisica" ? "Pessoa Física" : "Pessoa Jurídica",
+      nome: r.nomeRazaoSocial,
+      fantasia: r.nomeFantasia,
+      documento: r.documento,
+      ie: r.ie,
+      telefone: r.telefone,
+      email: r.email,
+      endereco: mapEndereco(r.endereco),
+    }),
+  },
+  fornecedores: {
+    label: "Fornecedores",
+    icon: Building2,
+    color: "teal",
+    apiPath: "/pessoas",
+    listQuery: "papel=fornecedor",
+    fields: [
+      { key: "tipo", label: "Tipo", type: "select", options: ["Pessoa Jurídica", "Pessoa Física"], default: "Pessoa Jurídica" },
+      { key: "nome", label: "Nome / Razão Social", type: "text", required: true },
+      { key: "fantasia", label: "Nome Fantasia", type: "text" },
+      { key: "documento", label: "CNPJ / CPF", type: "text", required: true },
+      { key: "ie", label: "Inscrição Estadual", type: "text" },
+      { key: "endereco", label: "Endereço", type: "endereco" },
+      { key: "telefone", label: "Telefone", type: "text" },
+      { key: "email", label: "E-mail", type: "text" },
+    ],
+    columns: ["nome", "documento", "endereco.cidade", "telefone"],
+    toApi: (data) => ({
+      tipo: data.tipo === "Pessoa Física" ? "pessoa_fisica" : "pessoa_juridica",
+      nomeRazaoSocial: data.nome,
+      nomeFantasia: data.fantasia || undefined,
+      documento: data.documento,
+      ie: data.ie || undefined,
+      telefone: data.telefone || undefined,
+      email: data.email || undefined,
+      eFornecedor: true,
+      endereco: data.endereco || undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      tipo: r.tipo === "pessoa_fisica" ? "Pessoa Física" : "Pessoa Jurídica",
+      nome: r.nomeRazaoSocial,
+      fantasia: r.nomeFantasia,
+      documento: r.documento,
+      ie: r.ie,
+      telefone: r.telefone,
+      email: r.email,
+      endereco: mapEndereco(r.endereco),
+    }),
+  },
+  colaboradores: {
+    label: "Colaboradores",
+    icon: UserCog,
+    color: "coral",
+    apiPath: "/colaboradores",
+    fields: [
+      { key: "nome", label: "Nome completo", type: "text", required: true },
+      { key: "cpf", label: "CPF", type: "text", required: true },
+      { key: "cargo", label: "Cargo", type: "text" },
+      { key: "setor", label: "Setor", type: "select", options: ["Produção", "Logística", "Administrativo", "Comercial", "Fiscal", "Manutenção"] },
+      { key: "admissao", label: "Data de admissão", type: "date" },
+      { key: "telefone", label: "Telefone", type: "text" },
+      { key: "email", label: "E-mail", type: "text" },
+    ],
+    columns: ["nome", "cargo", "setor", "telefone"],
+    toApi: (data) => ({
+      nome: data.nome,
+      cpf: data.cpf,
+      cargo: data.cargo || undefined,
+      setor: data.setor || undefined,
+      dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
+      telefone: data.telefone || undefined,
+      email: data.email || undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      nome: r.nome,
+      cpf: r.cpf,
+      cargo: r.cargo,
+      setor: r.setor,
+      admissao: r.dataAdmissao ? r.dataAdmissao.slice(0, 10) : "",
+      telefone: r.telefone,
+      email: r.email,
+    }),
+  },
+  transportadoras: {
+    label: "Transportadoras",
+    icon: Truck,
+    color: "amber",
+    apiPath: "/transportadoras",
+    fields: [
+      { key: "nome", label: "Razão Social", type: "text", required: true },
+      { key: "documento", label: "CNPJ", type: "text", required: true },
+      { key: "ie", label: "Inscrição Estadual", type: "text" },
+      { key: "rntrc", label: "RNTRC (ANTT)", type: "text" },
+      { key: "endereco", label: "Endereço", type: "endereco" },
+      { key: "telefone", label: "Telefone", type: "text" },
+      { key: "email", label: "E-mail", type: "text" },
+    ],
+    columns: ["nome", "documento", "rntrc", "endereco.cidade"],
+    toApi: (data) => ({
+      razaoSocial: data.nome,
+      cnpj: data.documento,
+      ie: data.ie || undefined,
+      rntrc: data.rntrc || undefined,
+      telefone: data.telefone || undefined,
+      email: data.email || undefined,
+      endereco: data.endereco || undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      nome: r.razaoSocial,
+      documento: r.cnpj,
+      ie: r.ie,
+      rntrc: r.rntrc,
+      telefone: r.telefone,
+      email: r.email,
+      endereco: mapEndereco(r.endereco),
+    }),
+  },
+  veiculos: {
+    label: "Veículos",
+    icon: Car,
+    color: "purple",
+    apiPath: "/veiculos",
+    fields: [
+      { key: "transportadoraId", label: "Transportadora", type: "transportadora-select", required: true },
+      { key: "placa", label: "Placa", type: "text", required: true },
+      { key: "renavam", label: "Renavam", type: "text" },
+      { key: "tipoRodado", label: "Tipo de rodado", type: "select", options: ["Truck", "Toco", "Cavalo Mecânico", "VAN", "Utilitário", "Outros"] },
+      { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
+      { key: "taraKg", label: "Tara (kg)", type: "number" },
+      { key: "capacidadeKg", label: "Capacidade (kg)", type: "number" },
+    ],
+    columns: ["placa", "transportadoraNome", "tipoRodado", "capacidadeKg"],
+    toApi: (data) => ({
+      transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : undefined,
+      placa: data.placa,
+      renavam: data.renavam || undefined,
+      tipoRodado: data.tipoRodado || undefined,
+      tipoCarroceria: data.tipoCarroceria || undefined,
+      taraKg: data.taraKg ? Number(data.taraKg) : undefined,
+      capacidadeKg: data.capacidadeKg ? Number(data.capacidadeKg) : undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      transportadoraId: r.transportadoraId,
+      transportadoraNome: r.transportadora?.razaoSocial || "—",
+      placa: r.placa,
+      renavam: r.renavam,
+      tipoRodado: r.tipoRodado,
+      tipoCarroceria: r.tipoCarroceria,
+      taraKg: r.taraKg,
+      capacidadeKg: r.capacidadeKg,
+    }),
+  },
+  produtos: {
+    label: "Produtos",
+    icon: Package,
+    color: "green",
+    apiPath: "/produtos",
+    fields: [
+      { key: "codigo", label: "Código interno", type: "text", required: true },
+      { key: "descricao", label: "Descrição", type: "text", required: true },
+      { key: "ncm", label: "NCM", type: "ncm-busca", required: true },
+      { key: "cfop", label: "CFOP padrão", type: "text" },
+      { key: "unidade", label: "Unidade", type: "select", options: ["TON", "KG", "M3", "SC", "UN"] },
+      { key: "origem", label: "Origem da mercadoria", type: "select", options: ["0 - Nacional", "1 - Estrangeira - Importação direta", "2 - Estrangeira - Adquirida no mercado interno"] },
+      { key: "cst", label: "CST ICMS", type: "select", options: CST_ICMS },
+      { key: "csosn", label: "CSOSN (Simples Nacional)", type: "select", options: CSOSN },
+      { key: "valorUnitario", label: "Valor unitário (R$)", type: "number" },
+    ],
+    columns: ["codigo", "descricao", "ncm", "unidade", "valorUnitario"],
+    toApi: (data) => ({
+      codigoInterno: data.codigo,
+      descricao: data.descricao,
+      ncm: data.ncm,
+      cfopPadrao: data.cfop || undefined,
+      unidade: data.unidade || undefined,
+      origemMercadoria: data.origem || undefined,
+      cstIcms: data.cst || undefined,
+      csosn: data.csosn || undefined,
+      valorUnitario: data.valorUnitario ? Number(data.valorUnitario) : undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      codigo: r.codigoInterno,
+      descricao: r.descricao,
+      ncm: r.ncm,
+      cfop: r.cfopPadrao,
+      unidade: r.unidade,
+      origem: r.origemMercadoria,
+      cst: r.cstIcms,
+      csosn: r.csosn,
+      valorUnitario: r.valorUnitario,
+    }),
+  },
+};
+
+// ---------- Cliente da API ----------
+
+// Token fica no localStorage do navegador só desse artifact — cada pessoa
+// que abrir precisa logar com seu próprio usuário.
+function getToken() {
+  try { return localStorage.getItem("erpBiomassaToken"); } catch { return null; }
+}
+function setToken(token) {
+  try {
+    if (token) localStorage.setItem("erpBiomassaToken", token);
+    else localStorage.removeItem("erpBiomassaToken");
+  } catch { /* localStorage indisponível — sessão não persiste ao recarregar */ }
+}
+
+async function apiRequest(path, options = {}) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (res.status === 401) {
+    setToken(null);
+    window.dispatchEvent(new Event("erp-sessao-expirada"));
+  }
+  if (!res.ok) {
+    let detalhe = res.statusText;
+    try {
+      const corpo = await res.json();
+      detalhe = corpo.erro || detalhe;
+    } catch {
+      // resposta sem corpo JSON
+    }
+    throw new Error(detalhe);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// Busca, cria, edita e apaga usando o backend real — nada fica só no
+// navegador, então qualquer pessoa que abrir esse artifact e apontar pro
+// mesmo backend vê os mesmos dados.
+function useApiCollection(moduleKey) {
+  const config = MODULES[moduleKey];
+  const [items, setItems] = useState(null);
+  const [erro, setErro] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      setErro(null);
+      const query = config.listQuery ? `?${config.listQuery}` : "";
+      const dados = await apiRequest(`${config.apiPath}${query}`);
+      setItems(dados.map(config.fromApi));
+    } catch (e) {
+      setErro(e.message);
+      setItems([]);
+    }
+  }, [moduleKey]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const criar = useCallback(async (data) => {
+    const registro = await apiRequest(config.apiPath, {
+      method: "POST",
+      body: JSON.stringify(config.toApi(data)),
+    });
+    setItems((atual) => [...(atual || []), config.fromApi(registro)]);
+  }, [moduleKey]);
+
+  const editar = useCallback(async (id, data) => {
+    const registro = await apiRequest(`${config.apiPath}/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(config.toApi(data)),
+    });
+    setItems((atual) => atual.map((it) => (it.id === id ? config.fromApi(registro) : it)));
+  }, [moduleKey]);
+
+  const remover = useCallback(async (id) => {
+    await apiRequest(`${config.apiPath}/${id}`, { method: "DELETE" });
+    setItems((atual) => atual.filter((it) => it.id !== id));
+  }, [moduleKey]);
+
+  return { items, erro, recarregar: carregar, criar, editar, remover };
+}
+
+// ---------- UI helpers ----------
+
+const COLOR_MAP = {
+  blue: { bg: "#e6f1fb", text: "#0c447c", border: "#85b7eb" },
+  teal: { bg: "#e1f5ee", text: "#085041", border: "#5dcaa5" },
+  coral: { bg: "#faece7", text: "#712b13", border: "#f0997b" },
+  amber: { bg: "#faeeda", text: "#633806", border: "#ef9f27" },
+  green: { bg: "#eaf3de", text: "#27500a", border: "#97c459" },
+  purple: { bg: "#eeedfe", text: "#3c3489", border: "#afa9ec" },
+};
+
+// Rótulos de colunas que existem só pra exibição na tabela (não são um
+// campo do formulário) — por exemplo, o nome da transportadora dona do
+// veículo, que vem calculado no fromApi.
+const COLUMN_LABELS = {
+  transportadoraNome: "Transportadora",
+};
+
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => (o ? o[k] : undefined), obj);
+}
+
+function NcmField({ value, onChange }) {
+  const [sugestoes, setSugestoes] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    if (!value || value.length < 2) { setSugestoes([]); return; }
+    const espera = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const resultado = await apiRequest(`/ncms?busca=${encodeURIComponent(value)}`);
+        setSugestoes(resultado);
+      } catch {
+        setSugestoes([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 350);
+    return () => clearTimeout(espera);
+  }, [value]);
+
+  return (
+    <div className="ncm-field">
+      <input
+        value={value ?? ""}
+        onChange={e => { onChange(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder="Digite o código ou parte da descrição"
+      />
+      {aberto && (buscando || sugestoes.length > 0) && (
+        <div className="ncm-suggestions">
+          {buscando && <div className="ncm-suggestion-loading">Buscando…</div>}
+          {sugestoes.map(s => (
+            <button
+              key={s.codigo}
+              type="button"
+              className="ncm-suggestion"
+              onMouseDown={() => { onChange(s.codigo); setAberto(false); }}
+            >
+              <span className="ncm-codigo">{s.codigo}</span>
+              <span className="ncm-descricao">{s.descricao}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ field, value, onChange }) {
+  if (field.type === "endereco") {
+    const v = value || emptyEndereco;
+    const [buscandoCep, setBuscandoCep] = useState(false);
+    const set = (k, val) => onChange({ ...v, [k]: val });
+
+    // Assim que o CEP tem 8 dígitos, busca o endereço na base pública dos
+    // Correios (ViaCEP) e preenche rua, bairro, cidade e UF sozinho — o
+    // usuário só confere e completa o número.
+    const buscarPorCep = async (cepDigitado) => {
+      const digitos = cepDigitado.replace(/\D/g, "");
+      set("cep", cepDigitado);
+      if (digitos.length !== 8) return;
+      setBuscandoCep(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
+        const dados = await res.json();
+        if (!dados.erro) {
+          onChange({
+            ...v,
+            cep: cepDigitado,
+            logradouro: dados.logradouro || v.logradouro,
+            bairro: dados.bairro || v.bairro,
+            cidade: dados.localidade || v.cidade,
+            uf: dados.uf || v.uf,
+          });
+        }
+      } catch {
+        // sem internet ou CEP inválido — usuário preenche na mão mesmo
+      } finally {
+        setBuscandoCep(false);
+      }
+    };
+
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <div className="endereco-grid">
+          <input placeholder={buscandoCep ? "Buscando…" : "CEP"} value={v.cep} onChange={e => buscarPorCep(formatCEP(e.target.value))} maxLength={9} />
+          <input placeholder="Logradouro" value={v.logradouro} onChange={e => set("logradouro", e.target.value)} className="col-span-2" />
+          <input placeholder="Número" value={v.numero} onChange={e => set("numero", e.target.value)} />
+          <input placeholder="Bairro" value={v.bairro} onChange={e => set("bairro", e.target.value)} />
+          <input placeholder="Cidade" value={v.cidade} onChange={e => set("cidade", e.target.value)} />
+          <select value={v.uf} onChange={e => set("uf", e.target.value)}>
+            {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "transportadora-select") {
+    const [opcoes, setOpcoes] = useState(null);
+    useEffect(() => {
+      let cancelado = false;
+      apiRequest("/transportadoras")
+        .then((dados) => { if (!cancelado) setOpcoes(dados); })
+        .catch(() => { if (!cancelado) setOpcoes([]); });
+      return () => { cancelado = true; };
+    }, []);
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
+        <select value={value ?? ""} onChange={e => onChange(e.target.value)}>
+          <option value="">{opcoes === null ? "Carregando…" : "Selecione…"}</option>
+          {(opcoes || []).map(t => <option key={t.id} value={t.id}>{t.razaoSocial}</option>)}
+        </select>
+        {opcoes?.length === 0 && <p className="hint">Nenhuma transportadora cadastrada ainda.</p>}
+      </div>
+    );
+  }
+
+  if (field.type === "ncm-busca") {
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
+        <NcmField value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="field-group">
+      <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
+      {field.type === "select" ? (
+        <select value={value ?? field.default ?? ""} onChange={e => onChange(e.target.value)}>
+          <option value="">Selecione…</option>
+          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      ) : (
+        <input
+          type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+          value={value ?? ""}
+          maxLength={field.key === "documento" ? 18 : field.key === "cpf" ? 14 : undefined}
+          onChange={e => {
+            const raw = e.target.value;
+            if (field.key === "documento") onChange(formatDocumento(raw));
+            else if (field.key === "cpf") onChange(formatCPF(raw));
+            else if (field.key === "placa") onChange(raw.toUpperCase());
+            else onChange(raw);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RecordForm({ moduleKey, record, onSave, onCancel }) {
+  const config = MODULES[moduleKey];
+  const [data, setData] = useState(() => record || {});
+  const [error, setError] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const setField = (key, value) => setData(d => ({ ...d, [key]: value }));
+
+  const handleSubmit = async () => {
+    const missing = config.fields.filter(f => f.required && !data[f.key]);
+    if (missing.length) {
+      setError(`Preencha: ${missing.map(f => f.label).join(", ")}`);
+      return;
+    }
+    setError("");
+    setSalvando(true);
+    try {
+      await onSave(data);
+    } catch (e) {
+      setError(e.message || "Erro ao salvar no servidor");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <div className="modal-header">
+          <h3>{record?.id ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
+          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          {config.fields.map(f => (
+            <Field key={f.key} field={f} value={data[f.key]} onChange={v => setField(f.key, v)} />
+          ))}
+          {error && <p className="error-text">{error}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginScreen({ onLogin }) {
+  const EMAIL_LEMBRADO_KEY = "erpBiomassaEmailLembrado";
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem(EMAIL_LEMBRADO_KEY) || ""; } catch { return ""; }
+  });
+  const [lembrarEmail, setLembrarEmail] = useState(() => {
+    try { return !!localStorage.getItem(EMAIL_LEMBRADO_KEY); } catch { return false; }
+  });
+  const [senha, setSenha] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  const entrar = async (e) => {
+    e.preventDefault();
+    setErro("");
+    setCarregando(true);
+    try {
+      const resultado = await apiRequest("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, senha }),
+      });
+      setToken(resultado.token);
+      try {
+        if (lembrarEmail) localStorage.setItem(EMAIL_LEMBRADO_KEY, email);
+        else localStorage.removeItem(EMAIL_LEMBRADO_KEY);
+      } catch { /* localStorage indisponível — segue sem lembrar */ }
+      onLogin(resultado.usuario);
+    } catch (e2) {
+      setErro(e2.message === "Credenciais inválidas" ? "E-mail ou senha incorretos." : e2.message);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  return (
+    <div className="login-wrap">
+      <style>{`
+        .login-wrap {
+          display: flex; min-height: 600px; width: 100%;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          -webkit-font-smoothing: antialiased;
+        }
+        .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 3rem 2.5rem; }
+        .login-brand-mark { width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; margin-bottom: 22px; color: #fff; }
+        .login-brand-title { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 12px; }
+        .login-brand-tag { font-size: 14.5px; color: rgba(255,255,255,0.7); line-height: 1.65; margin: 0; max-width: 280px; }
+
+        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; }
+        .login-card { width: 340px; max-width: 100%; }
+        .login-heading { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; color: #1F3B57; }
+        .login-subtitle { font-size: 13.5px; color: #6b6b68; margin: 0 0 28px; line-height: 1.5; }
+
+        .login-field { margin-bottom: 18px; }
+        .login-label { display: block; font-size: 13px; font-weight: 500; color: #33332f; margin-bottom: 6px; }
+        .login-input {
+          width: 100%; box-sizing: border-box; padding: 11px 12px; font-size: 14px;
+          border-radius: 8px; border: 1px solid #d6d3c8; background: #fff; color: #1a1a1a;
+          font-family: inherit; transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .login-input:focus { outline: none; border-color: #00923F; box-shadow: 0 0 0 3px rgba(0,146,63,0.12); }
+        .login-password-wrap { position: relative; }
+        .login-password-wrap .login-input { padding-right: 40px; }
+        .login-password-toggle {
+          position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+          border: none; background: none; cursor: pointer; color: #8a887f; padding: 8px;
+          display: flex; border-radius: 6px;
+        }
+        .login-password-toggle:hover { color: #1F3B57; background: #f1efe8; }
+
+        .login-remember { display: flex; align-items: center; gap: 8px; margin: -6px 0 20px; user-select: none; cursor: pointer; }
+        .login-remember input { width: 15px; height: 15px; accent-color: #00923F; cursor: pointer; }
+        .login-remember span { font-size: 13px; color: #55534c; }
+
+        .login-error { color: #a32d2d; font-size: 13px; margin: -8px 0 16px; }
+        .login-submit {
+          width: 100%; padding: 11px 14px; border-radius: 8px; border: none;
+          background: #00923F; color: #fff; font-size: 14px; font-weight: 600;
+          cursor: pointer; transition: background 0.15s;
+        }
+        .login-submit:hover:not(:disabled) { background: #00732F; }
+        .login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        @media (max-width: 640px) { .login-brand { display: none; } }
+      `}</style>
+
+      <div className="login-brand">
+        <div className="login-brand-mark"><Leaf size={24} /></div>
+        <h1 className="login-brand-title">Biomassa ERP</h1>
+        <p className="login-brand-tag">Cadastros, transporte e emissão fiscal em um só lugar.</p>
+      </div>
+
+      <div className="login-form-side">
+        <form className="login-card" onSubmit={entrar}>
+          <h2 className="login-heading">Entrar</h2>
+          <p className="login-subtitle">Use seu e-mail e senha cadastrados.</p>
+
+          <div className="login-field">
+            <label className="login-label">E-mail</label>
+            <input
+              className="login-input"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="login-field">
+            <label className="login-label">Senha</label>
+            <div className="login-password-wrap">
+              <input
+                className="login-input"
+                type={mostrarSenha ? "text" : "password"}
+                value={senha}
+                onChange={e => setSenha(e.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="login-password-toggle"
+                onClick={() => setMostrarSenha(v => !v)}
+                aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <label className="login-remember">
+            <input type="checkbox" checked={lembrarEmail} onChange={e => setLembrarEmail(e.target.checked)} />
+            <span>Lembrar meu e-mail</span>
+          </label>
+
+          {erro && <p className="login-error">{erro}</p>}
+
+          <button className="login-submit" type="submit" disabled={carregando}>
+            {carregando ? "Entrando…" : "Entrar"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ModuleView({ moduleKey }) {
+  const config = MODULES[moduleKey];
+  const Icon = config.icon;
+  const colors = COLOR_MAP[config.color];
+  const { items, erro, recarregar, criar, editar, remover } = useApiCollection(moduleKey);
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+
+  if (items === null) {
+    return <div className="loading">Carregando {config.label.toLowerCase()}… (o servidor pode levar alguns segundos pra acordar)</div>;
+  }
+
+  const filtered = items.filter(it => {
+    if (!query) return true;
+    const hay = JSON.stringify(it).toLowerCase();
+    return hay.includes(query.toLowerCase());
+  });
+
+  const handleSave = async (data) => {
+    if (data.id) {
+      await editar(data.id, data);
+    } else {
+      await criar(data);
+    }
+    setShowForm(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await remover(id);
+    } catch (e) {
+      alert(`Não foi possível excluir: ${e.message}`);
+    }
+  };
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: colors.bg, color: colors.text }}>
+            <Icon size={20} />
+          </div>
+          <div>
+            <h2>{config.label}</h2>
+            <p className="subtle">{items.length} cadastro{items.length !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
+          <Plus size={16} /> Novo
+        </button>
+      </div>
+
+      {erro && (
+        <div className="error-banner">
+          <AlertCircle size={16} />
+          <span>Não consegui falar com o servidor: {erro}. <button className="link-btn" onClick={recarregar}>Tentar de novo</button></span>
+        </div>
+      )}
+
+      <div className="search-bar">
+        <Search size={16} className="search-icon" />
+        <input placeholder={`Buscar em ${config.label.toLowerCase()}…`} value={query} onChange={e => setQuery(e.target.value)} />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="empty-state">
+          <Icon size={32} strokeWidth={1.5} />
+          <p>{items.length === 0 ? `Nenhum cadastro ainda.` : `Nada encontrado para "${query}".`}</p>
+          {items.length === 0 && (
+            <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+              <Plus size={16} /> Criar o primeiro
+            </button>
+          )}
+        </div>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              {config.columns.map(col => (
+                <th key={col}>{config.fields.find(f => f.key === col.split(".")[0])?.label || COLUMN_LABELS[col] || col}</th>
+              ))}
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(item => (
+              <tr key={item.id}>
+                {config.columns.map(col => (
+                  <td key={col}>{getPath(item, col) || "—"}</td>
+                ))}
+                <td className="actions-col">
+                  <button className="icon-btn" onClick={() => { setEditing(item); setShowForm(true); }} aria-label="Editar">
+                    <Pencil size={15} />
+                  </button>
+                  <button className="icon-btn icon-btn-danger" onClick={() => handleDelete(item.id)} aria-label="Excluir">
+                    <Trash2 size={15} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {showForm && (
+        <RecordForm
+          moduleKey={moduleKey}
+          record={editing}
+          onSave={handleSave}
+          onCancel={() => { setShowForm(false); setEditing(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Dashboard({ counts, carregandoContagens, onNavigate }) {
+  const cards = Object.entries(MODULES).map(([key, cfg]) => ({ key, cfg, count: counts[key] }));
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#eeedfe", color: "#3c3489" }}>
+            <LayoutDashboard size={20} />
+          </div>
+          <div>
+            <h2>Visão geral</h2>
+            <p className="subtle">Cadastros da empresa, direto do backend em produção</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="dash-grid">
+        {cards.map(({ key, cfg, count }) => {
+          const Icon = cfg.icon;
+          const colors = COLOR_MAP[cfg.color];
+          return (
+            <button key={key} className="dash-card" onClick={() => onNavigate(key)}>
+              <div className="icon-badge" style={{ background: colors.bg, color: colors.text }}>
+                <Icon size={20} />
+              </div>
+              <div className="dash-card-body">
+                <p className="dash-count">{carregandoContagens ? "…" : count ?? 0}</p>
+                <p className="dash-label">{cfg.label}</p>
+              </div>
+              <ChevronRight size={16} className="subtle" />
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="info-banner">
+        <FileText size={18} />
+        <div>
+          <p className="banner-title">Conectado ao backend real</p>
+          <p className="banner-text">Este protótipo já lê e grava direto na API publicada no Render — qualquer cadastro feito aqui fica salvo no banco de dados de verdade. A aba "Emissão" continua simulada: monta o documento a partir dos cadastros, mas ainda não envia para o provedor fiscal.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmissaoView() {
+  const [tipo, setTipo] = useState("NFe");
+  const { items: clientes } = useApiCollection("clientes");
+  const { items: produtos } = useApiCollection("produtos");
+  const { items: transportadoras } = useApiCollection("transportadoras");
+  const [clienteId, setClienteId] = useState("");
+  const [produtoIds, setProdutoIds] = useState([]);
+  const [transportadoraId, setTransportadoraId] = useState("");
+  const [gerado, setGerado] = useState(null);
+
+  const toggleProduto = (id) => {
+    setProdutoIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  };
+
+  const podeGerar = tipo === "NFe"
+    ? clienteId && produtoIds.length > 0
+    : transportadoraId && (tipo !== "CTe" || clienteId);
+
+  const gerarSimulacao = () => {
+    const cliente = (clientes || []).find(c => c.id === Number(clienteId));
+    const itens = (produtos || []).filter(p => produtoIds.includes(p.id));
+    const transp = (transportadoras || []).find(t => t.id === Number(transportadoraId));
+    setGerado({
+      tipo,
+      numero: Math.floor(100000 + Math.random() * 900000),
+      cliente,
+      itens,
+      transportadora: transp,
+      data: new Date().toLocaleDateString("pt-BR"),
+    });
+  };
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#faece7", color: "#712b13" }}>
+            <FileText size={20} />
+          </div>
+          <div>
+            <h2>Emissão (simulação)</h2>
+            <p className="subtle">Monta o documento a partir dos cadastros reais — sem envio à SEFAZ</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="tabs">
+        {["NFe", "CTe", "MDFe"].map(t => (
+          <button key={t} className={`tab ${tipo === t ? "tab-active" : ""}`} onClick={() => { setTipo(t); setGerado(null); }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="emissao-form">
+        {(tipo === "NFe" || tipo === "CTe") && (
+          <div className="field-group">
+            <label className="field-label">Cliente / Destinatário</label>
+            <select value={clienteId} onChange={e => setClienteId(e.target.value)}>
+              <option value="">Selecione um cliente…</option>
+              {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
+          </div>
+        )}
+
+        {tipo === "NFe" && (
+          <div className="field-group">
+            <label className="field-label">Produtos</label>
+            <div className="checklist">
+              {(produtos || []).length === 0 && <p className="hint">Nenhum produto cadastrado ainda.</p>}
+              {(produtos || []).map(p => (
+                <label key={p.id} className="checklist-item">
+                  <input type="checkbox" checked={produtoIds.includes(p.id)} onChange={() => toggleProduto(p.id)} />
+                  {p.descricao} <span className="subtle">({p.codigo})</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(tipo === "CTe" || tipo === "MDFe") && (
+          <div className="field-group">
+            <label className="field-label">Transportadora</label>
+            <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
+              <option value="">Selecione uma transportadora…</option>
+              {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+            {transportadoras?.length === 0 && <p className="hint">Nenhuma transportadora cadastrada ainda.</p>}
+          </div>
+        )}
+
+        <button className="btn btn-primary" disabled={!podeGerar} onClick={gerarSimulacao}>
+          Gerar simulação de {tipo}
+        </button>
+      </div>
+
+      {gerado && (
+        <div className="doc-preview">
+          <div className="doc-preview-header">
+            <p className="doc-tipo">{gerado.tipo} nº {gerado.numero}</p>
+            <p className="subtle">{gerado.data}</p>
+          </div>
+          {gerado.cliente && <p><strong>Destinatário:</strong> {gerado.cliente.nome} — {gerado.cliente.documento}</p>}
+          {gerado.transportadora && <p><strong>Transportadora:</strong> {gerado.transportadora.nome} — RNTRC {gerado.transportadora.rntrc || "—"}</p>}
+          {gerado.itens && gerado.itens.length > 0 && (
+            <div>
+              <strong>Itens:</strong>
+              <ul>
+                {gerado.itens.map(i => <li key={i.id}>{i.descricao} — NCM {i.ncm} — {i.unidade || "UN"} {i.valorUnitario ? `— R$ ${i.valorUnitario}` : ""}</li>)}
+              </ul>
+            </div>
+          )}
+          <p className="hint" style={{ marginTop: 12 }}>Documento simulado — não foi enviado à SEFAZ.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ErpBiomassa() {
+  const [view, setView] = useState("dashboard");
+  const [counts, setCounts] = useState({});
+  const [carregandoContagens, setCarregandoContagens] = useState(true);
+  const [usuario, setUsuario] = useState(null);
+  const [verificandoSessao, setVerificandoSessao] = useState(true);
+
+  useEffect(() => {
+    async function verificarSessao() {
+      if (!getToken()) { setVerificandoSessao(false); return; }
+      try {
+        const dados = await apiRequest("/auth/me");
+        setUsuario(dados);
+      } catch {
+        setToken(null);
+      } finally {
+        setVerificandoSessao(false);
+      }
+    }
+    verificarSessao();
+
+    const aoExpirar = () => setUsuario(null);
+    window.addEventListener("erp-sessao-expirada", aoExpirar);
+    return () => window.removeEventListener("erp-sessao-expirada", aoExpirar);
+  }, []);
+
+  useEffect(() => {
+    if (!usuario) return;
+    let cancelado = false;
+    async function carregarContagens() {
+      const entradas = await Promise.all(
+        Object.entries(MODULES).map(async ([key, cfg]) => {
+          try {
+            const query = cfg.listQuery ? `?${cfg.listQuery}` : "";
+            const dados = await apiRequest(`${cfg.apiPath}${query}`);
+            return [key, dados.length];
+          } catch {
+            return [key, undefined];
+          }
+        })
+      );
+      if (!cancelado) {
+        setCounts(Object.fromEntries(entradas));
+        setCarregandoContagens(false);
+      }
+    }
+    carregarContagens();
+    return () => { cancelado = true; };
+  }, [view, usuario]);
+
+  const navItems = [
+    { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
+    ...Object.entries(MODULES).map(([key, cfg]) => ({ key, label: cfg.label, icon: cfg.icon })),
+    { key: "emissao", label: "Emissão", icon: FileText },
+  ];
+
+  const sair = () => {
+    setToken(null);
+    setUsuario(null);
+  };
+
+  if (verificandoSessao) {
+    return <div className="erp-root"><div className="loading">Verificando sessão…</div></div>;
+  }
+
+  if (!usuario) {
+    return (
+      <div className="erp-root">
+        <style>{`.erp-root { min-height: 600px; border-radius: 12px; overflow: hidden; border: 0.5px solid #e5e3da; }`}</style>
+        <LoginScreen onLogin={setUsuario} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="erp-root">
+      <style>{`
+        .login-screen { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+        .login-card { width: 320px; max-width: 100%; }
+        .login-title { font-size: 20px; font-weight: 500; margin: 0; color: var(--erp-azul); }
+        .user-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; margin-top: 8px; border-top: 0.5px solid rgba(255,255,255,0.15); }
+        .user-name { font-size: 13px; font-weight: 500; color: #fff; }
+        .user-role { font-size: 11px; color: rgba(255,255,255,0.65); text-transform: capitalize; }
+        .logout-btn { font-size: 12px; border: none; background: none; color: rgba(255,255,255,0.75); cursor: pointer; text-decoration: underline; }
+        .erp-root {
+          --erp-azul: #1F3B57;
+          --erp-azul-claro: #EAF1F6;
+          --erp-verde: #00923F;
+          --erp-verde-escuro: #00732F;
+          --sidebar-w: 220px;
+          display: flex;
+          min-height: 600px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          background: var(--surface-0, #fafaf8);
+          border-radius: 12px;
+          overflow: hidden;
+          border: 0.5px solid var(--border, #e5e3da);
+        }
+        .sidebar {
+          width: var(--sidebar-w);
+          flex-shrink: 0;
+          background: var(--erp-azul);
+          padding: 1rem 0.75rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .brand {
+          font-size: 15px;
+          font-weight: 500;
+          padding: 0.5rem 0.5rem 1rem;
+          color: #fff;
+        }
+        .brand-sub { font-size: 12px; color: rgba(255,255,255,0.6); font-weight: 400; }
+        .nav-item {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; padding: 8px 10px; border: none; background: none;
+          border-radius: 8px; font-size: 14px; text-align: left; cursor: pointer;
+          color: rgba(255,255,255,0.85); margin-bottom: 2px;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.08); }
+        .nav-item.active { background: var(--erp-verde); color: #fff; font-weight: 500; }
+        .main { flex: 1; padding: 1.5rem 1.75rem; overflow-x: auto; }
+        .view-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+        .view-title { display: flex; align-items: center; gap: 12px; }
+        .view-title h2 { margin: 0; font-size: 18px; font-weight: 500; color: var(--erp-azul); }
+        .subtle { color: var(--text-secondary, #6b6b68); font-size: 13px; margin: 2px 0 0; }
+        .icon-badge { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+          border: 0.5px solid var(--border-strong, #c9c6ba); background: var(--surface-2, #fff);
+          cursor: pointer; color: var(--erp-azul);
+        }
+        .btn:hover { background: var(--erp-azul-claro); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--erp-verde); color: #fff; border-color: var(--erp-verde); }
+        .btn-primary:hover { background: var(--erp-verde-escuro); }
+        .search-bar { position: relative; margin-bottom: 1rem; max-width: 320px; }
+        .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary, #6b6b68); }
+        .search-bar input { width: 100%; padding: 8px 10px 8px 32px; border-radius: 8px; border: 0.5px solid var(--border-strong, #c9c6ba); font-size: 13px; box-sizing: border-box; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th { text-align: left; padding: 8px 10px; color: var(--text-secondary, #6b6b68); font-weight: 500; border-bottom: 0.5px solid var(--border-strong, #c9c6ba); }
+        .data-table td { padding: 10px; border-bottom: 0.5px solid var(--border, #e5e3da); color: var(--text-primary, #1a1a1a); }
+        .actions-col { width: 70px; text-align: right; }
+        .icon-btn { border: none; background: none; cursor: pointer; padding: 5px; border-radius: 6px; color: var(--text-secondary, #6b6b68); }
+        .icon-btn:hover { background: rgba(0,0,0,0.06); }
+        .icon-btn-danger:hover { color: #791f1f; background: #faece7; }
+        .empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 3rem 1rem; color: var(--text-secondary, #6b6b68); text-align: center; }
+        .error-banner { display: flex; align-items: center; gap: 8px; background: #faece7; color: #712b13; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 1rem; }
+        .link-btn { background: none; border: none; padding: 0; text-decoration: underline; cursor: pointer; color: inherit; font-size: inherit; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+        .modal { background: var(--surface-2, #fff); border-radius: 12px; width: 480px; max-width: 100%; max-height: 85vh; display: flex; flex-direction: column; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 0.5px solid var(--border, #e5e3da); }
+        .modal-header h3 { margin: 0; font-size: 16px; font-weight: 500; }
+        .modal-body { padding: 1rem 1.25rem; overflow-y: auto; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border, #e5e3da); }
+        .field-group { margin-bottom: 12px; }
+        .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary, #6b6b68); margin-bottom: 4px; }
+        .req { color: #a32d2d; margin-left: 2px; }
+        .field-group input, .field-group select {
+          width: 100%; padding: 8px 10px; border-radius: 8px; border: 0.5px solid var(--border-strong, #c9c6ba);
+          font-size: 13px; box-sizing: border-box; background: var(--surface-2, #fff); color: var(--text-primary, #1a1a1a);
+        }
+        .endereco-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .endereco-grid .col-span-2 { grid-column: span 2; }
+        .error-text { color: #a32d2d; font-size: 13px; margin: 8px 0 0; }
+        .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+        .dash-card { display: flex; align-items: center; gap: 12px; padding: 1rem; border-radius: 12px; border: 0.5px solid var(--border, #e5e3da); background: var(--surface-2, #fff); cursor: pointer; text-align: left; }
+        .dash-card:hover { border-color: var(--erp-verde); }
+        .dash-card-body { flex: 1; }
+        .dash-count { font-size: 22px; font-weight: 500; margin: 0; }
+        .dash-label { font-size: 13px; color: var(--text-secondary, #6b6b68); margin: 0; }
+        .info-banner { display: flex; gap: 12px; padding: 1rem; border-radius: 12px; background: var(--erp-azul-claro); }
+        .banner-title { font-size: 13px; font-weight: 500; margin: 0 0 4px; }
+        .banner-text { font-size: 13px; color: var(--text-secondary, #6b6b68); margin: 0; line-height: 1.6; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 1rem; border-bottom: 0.5px solid var(--border, #e5e3da); }
+        .tab { padding: 8px 14px; border: none; background: none; font-size: 13px; cursor: pointer; color: var(--text-secondary, #6b6b68); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+        .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
+        .emissao-form { max-width: 420px; }
+        .checklist { display: flex; flex-direction: column; gap: 6px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; padding: 8px; max-height: 160px; overflow-y: auto; }
+        .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .hint { font-size: 12px; color: var(--text-secondary, #6b6b68); margin: 4px 0 0; }
+        .doc-preview { margin-top: 1.5rem; padding: 1rem 1.25rem; border-radius: 12px; border: 0.5px solid var(--border, #e5e3da); background: var(--surface-2, #fff); max-width: 480px; font-size: 13px; line-height: 1.8; }
+        .doc-preview-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+        .doc-tipo { font-size: 15px; font-weight: 500; margin: 0; }
+        .loading { padding: 2rem; color: var(--text-secondary, #6b6b68); font-size: 13px; }
+        .ncm-field { position: relative; }
+        .ncm-suggestions { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface-2, #fff); border: 0.5px solid var(--border-strong, #c9c6ba); border-radius: 8px; max-height: 220px; overflow-y: auto; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .ncm-suggestion { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; border: none; background: none; cursor: pointer; text-align: left; border-bottom: 0.5px solid var(--border, #e5e3da); }
+        .ncm-suggestion:last-child { border-bottom: none; }
+        .ncm-suggestion:hover { background: var(--erp-azul-claro); }
+        .ncm-codigo { font-size: 12px; font-weight: 500; color: var(--erp-azul); }
+        .ncm-descricao { font-size: 12px; color: var(--text-secondary, #6b6b68); }
+        .ncm-suggestion-loading { padding: 8px 10px; font-size: 12px; color: var(--text-secondary, #6b6b68); }
+      `}</style>
+
+      <div className="sidebar">
+        <div className="brand">
+          Biomassa ERP
+          <div className="brand-sub">Conectado ao backend</div>
+        </div>
+        {navItems.map(item => {
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              className={`nav-item ${view === item.key ? "active" : ""}`}
+              onClick={() => setView(item.key)}
+            >
+              <Icon size={16} />
+              {item.label}
+            </button>
+          );
+        })}
+        <div className="user-footer">
+          <div>
+            <div className="user-name">{usuario.nome}</div>
+            <div className="user-role">{usuario.papel}</div>
+          </div>
+          <button className="logout-btn" onClick={sair}>Sair</button>
+        </div>
+      </div>
+
+      <div className="main">
+        {view === "dashboard" && <Dashboard counts={counts} carregandoContagens={carregandoContagens} onNavigate={setView} />}
+        {view === "emissao" && <EmissaoView />}
+        {Object.keys(MODULES).includes(view) && <ModuleView moduleKey={view} />}
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<ErpBiomassa />);
+</script>
+</body>
+</html>

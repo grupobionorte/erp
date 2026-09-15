@@ -1350,6 +1350,12 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [especieVolumes, setEspecieVolumes] = useState(nota?.especieVolumes || "");
   const [pesoBrutoTotal, setPesoBrutoTotal] = useState(nota?.pesoBrutoTotal ?? "");
   const [pesoLiquidoTotal, setPesoLiquidoTotal] = useState(nota?.pesoLiquidoTotal ?? "");
+  const [baseCalculoIcms, setBaseCalculoIcms] = useState(nota?.baseCalculoIcms ?? "");
+  const [valorIcms, setValorIcms] = useState(nota?.valorIcms ?? "");
+  const [baseCalculoIcmsSt, setBaseCalculoIcmsSt] = useState(nota?.baseCalculoIcmsSt ?? "");
+  const [valorIcmsSt, setValorIcmsSt] = useState(nota?.valorIcmsSt ?? "");
+  const [outrasDespesas, setOutrasDespesas] = useState(nota?.outrasDespesas ?? "");
+  const [valorIpi, setValorIpi] = useState(nota?.valorIpi ?? "");
   const [itens, setItens] = useState(() =>
     nota?.itens?.length
       ? nota.itens.map(i => ({ produtoId: String(i.produtoId), quantidade: i.quantidade, valorUnitario: i.valorUnitario, cfopUtilizado: i.cfopUtilizado || "", ncmUtilizado: i.ncmUtilizado || "", cstUtilizado: i.cstUtilizado || "" }))
@@ -1379,7 +1385,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const removerItem = (index) => setItens(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
 
   const totalItens = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
-  const valorTotalGeral = totalItens + (Number(valorFrete) || 0) + (Number(valorSeguro) || 0) - (Number(valorDesconto) || 0);
+  const valorTotalGeral = totalItens
+    + (Number(valorFrete) || 0) + (Number(valorSeguro) || 0) - (Number(valorDesconto) || 0)
+    + (Number(valorIpi) || 0) + (Number(outrasDespesas) || 0);
 
   const clienteSelecionado = (clientes || []).find(c => String(c.id) === destinatarioId);
 
@@ -1411,6 +1419,12 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         especieVolumes: especieVolumes || undefined,
         pesoBrutoTotal: pesoBrutoTotal !== "" ? Number(pesoBrutoTotal) : undefined,
         pesoLiquidoTotal: pesoLiquidoTotal !== "" ? Number(pesoLiquidoTotal) : undefined,
+        baseCalculoIcms: baseCalculoIcms !== "" ? Number(baseCalculoIcms) : undefined,
+        valorIcms: valorIcms !== "" ? Number(valorIcms) : undefined,
+        baseCalculoIcmsSt: baseCalculoIcmsSt !== "" ? Number(baseCalculoIcmsSt) : undefined,
+        valorIcmsSt: valorIcmsSt !== "" ? Number(valorIcmsSt) : undefined,
+        outrasDespesas: outrasDespesas !== "" ? Number(outrasDespesas) : undefined,
+        valorIpi: valorIpi !== "" ? Number(valorIpi) : undefined,
         itens: itensValidos.map(it => ({
           produtoId: Number(it.produtoId),
           quantidade: Number(it.quantidade),
@@ -1619,11 +1633,46 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             </div>
           </div>
 
+          <div className="nf-section">
+            <h4 className="nf-section-title">Impostos</h4>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Base de cálculo do ICMS (R$)</label>
+                <input type="number" value={baseCalculoIcms} onChange={e => setBaseCalculoIcms(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS (R$)</label>
+                <input type="number" value={valorIcms} onChange={e => setValorIcms(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do IPI (R$)</label>
+                <input type="number" value={valorIpi} onChange={e => setValorIpi(e.target.value)} />
+              </div>
+            </div>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Base de cálculo do ICMS ST (R$)</label>
+                <input type="number" value={baseCalculoIcmsSt} onChange={e => setBaseCalculoIcmsSt(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS ST (R$)</label>
+                <input type="number" value={valorIcmsSt} onChange={e => setValorIcmsSt(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Outras despesas (R$)</label>
+                <input type="number" value={outrasDespesas} onChange={e => setOutrasDespesas(e.target.value)} />
+              </div>
+            </div>
+            <p className="hint" style={{ marginTop: -4 }}>ICMS e ICMS ST são informativos (já embutidos no valor dos itens). IPI e outras despesas entram no total da nota.</p>
+          </div>
+
           <div className="nf-total-card">
             <div className="nf-total-row"><span>Subtotal dos itens</span><span>R$ {totalItens.toFixed(2)}</span></div>
             <div className="nf-total-row"><span>+ Frete</span><span>R$ {(Number(valorFrete) || 0).toFixed(2)}</span></div>
             <div className="nf-total-row"><span>+ Seguro</span><span>R$ {(Number(valorSeguro) || 0).toFixed(2)}</span></div>
             <div className="nf-total-row"><span>− Desconto</span><span>R$ {(Number(valorDesconto) || 0).toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>+ IPI</span><span>R$ {(Number(valorIpi) || 0).toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>+ Outras despesas</span><span>R$ {(Number(outrasDespesas) || 0).toFixed(2)}</span></div>
             <div className="nf-total-final"><span>Total da nota</span><span>R$ {valorTotalGeral.toFixed(2)}</span></div>
           </div>
 

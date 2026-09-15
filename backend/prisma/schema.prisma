@@ -300,6 +300,15 @@ model DocumentoFiscal {
   pesoBrutoTotal      Float?   @map("peso_bruto_total")
   pesoLiquidoTotal    Float?   @map("peso_liquido_total")
 
+  // Impostos — só ICMS/ICMS ST são informativos (já embutidos no valor
+  // do produto); IPI e outras despesas somam no total da nota.
+  baseCalculoIcms    Float? @map("base_calculo_icms")
+  valorIcms          Float? @map("valor_icms")
+  baseCalculoIcmsSt  Float? @map("base_calculo_icms_st")
+  valorIcmsSt        Float? @map("valor_icms_st")
+  outrasDespesas     Float? @map("outras_despesas")
+  valorIpi           Float? @map("valor_ipi")
+
   // Usados apenas no MDFe — o condutor não tem cadastro próprio no sistema
   // ainda, então guardamos os dados exigidos pela SEFAZ direto aqui.
   nomeMotorista String? @map("nome_motorista")

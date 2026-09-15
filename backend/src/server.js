@@ -36,17 +36,6 @@ app.use(express.json());
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// Rota temporária de diagnóstico — mostra quais campos o Prisma Client
-// que está rodando agora acredita que o modelo Pessoa tem. Remove depois
-// de resolver o mistério do "Unknown argument empresaId".
-app.get("/health/schema-pessoa", (req, res) => {
-  const { Prisma } = require("@prisma/client");
-  const modelo = Prisma.dmmf.datamodel.models.find((m) => m.name === "Pessoa");
-  res.json({
-    campos: modelo ? modelo.fields.map((f) => f.name) : "modelo Pessoa não encontrado",
-  });
-});
-
 // /auth fica de fora da autenticação (é como se entra e como se cria o
 // primeiro usuário). Tudo abaixo disso exige token válido.
 app.use("/auth", authRouter);

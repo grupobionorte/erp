@@ -133,7 +133,7 @@ model Pessoa {
   tipo             TipoPessoa
   nomeRazaoSocial  String     @map("nome_razao_social")
   nomeFantasia     String?    @map("nome_fantasia")
-  documento        String     @unique
+  documento        String
   ie               String?
   ieIsento         Boolean    @default(false) @map("ie_isento")
   telefone         String?
@@ -154,13 +154,17 @@ model Pessoa {
 
   documentosComoDestinatario DocumentoFiscal[]
 
+  // CPF/CNPJ único por empresa, não mais pro sistema inteiro — assim duas
+  // empresas do grupo podem ter o mesmo cliente/fornecedor cadastrado cada
+  // uma na sua base, sem conflito.
+  @@unique([documento, empresaId])
   @@map("pessoas")
 }
 
 model Colaborador {
   id            Int       @id @default(autoincrement())
   nome          String
-  cpf           String    @unique
+  cpf           String
   cargo         String?
   setor         String?
   dataAdmissao  DateTime? @map("data_admissao")
@@ -171,13 +175,14 @@ model Colaborador {
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
+  @@unique([cpf, empresaId])
   @@map("colaboradores")
 }
 
 model Transportadora {
   id           Int      @id @default(autoincrement())
   razaoSocial  String   @map("razao_social")
-  cnpj         String   @unique
+  cnpj         String
   ie           String?
   rntrc        String?
   telefone     String?
@@ -193,6 +198,7 @@ model Transportadora {
   veiculos          Veiculo[]
   documentosFiscais DocumentoFiscal[]
 
+  @@unique([cnpj, empresaId])
   @@map("transportadoras")
 }
 
@@ -219,7 +225,7 @@ model Veiculo {
 
 model Produto {
   id               Int      @id @default(autoincrement())
-  codigoInterno    String   @unique @map("codigo_interno")
+  codigoInterno    String   @map("codigo_interno")
   descricao        String
   ncm              String
   cest             String?
@@ -238,6 +244,7 @@ model Produto {
 
   itens DocumentoItem[]
 
+  @@unique([codigoInterno, empresaId])
   @@map("produtos")
 }
 

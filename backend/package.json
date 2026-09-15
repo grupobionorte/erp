@@ -8,7 +8,8 @@
     "start": "node src/server.js",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed:ncm": "node scripts/seed-ncm.js"
+    "seed:ncm": "node scripts/seed-ncm.js",
+    "limpar:cadastros": "node scripts/limpar-cadastros.js"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

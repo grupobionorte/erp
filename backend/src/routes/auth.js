@@ -19,8 +19,12 @@ function gerarToken(usuario, empresaId) {
 // e não precisa de token (é o "bootstrap" — sem isso ninguém conseguiria
 // criar o primeiro login). A partir do segundo usuário, só um admin logado
 // pode cadastrar novas pessoas.
+//
+// empresaIds: quais empresas esse usuário pode acessar ao logar. Só tem
+// efeito prático pra quem é "operador" — um "admin" acessa todas as
+// empresas ativas automaticamente, então a lista é ignorada nesse caso.
 router.post("/registrar", asyncHandler(async (req, res) => {
-  const { nome, email, senha, papel } = req.body;
+  const { nome, email, senha, papel, empresaIds } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: "nome, email e senha são obrigatórios" });
   }
@@ -54,31 +58,37 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       email,
       senhaHash,
       papel: totalUsuarios === 0 ? "admin" : papel === "admin" ? "admin" : "operador",
+      empresas: empresaIds?.length ? { connect: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
     },
+    include: { empresas: { select: { id: true, razaoSocial: true } } },
   });
 
-  res.status(201).json({ id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel });
-}));
-
-// Lista pública (sem login) das empresas ativas, só com o essencial —
-// é o que preenche o seletor de empresa na própria tela de login, antes
-// de existir qualquer token.
-router.get("/empresas", asyncHandler(async (req, res) => {
-  const empresas = await prisma.empresa.findMany({
-    where: { ativo: true },
-    select: { id: true, razaoSocial: true },
-    orderBy: { razaoSocial: "asc" },
+  res.status(201).json({
+    id: usuario.id,
+    nome: usuario.nome,
+    email: usuario.email,
+    papel: usuario.papel,
+    empresas: usuario.empresas,
   });
-  res.json(empresas);
 }));
 
+// Login em duas etapas:
+//  1. { email, senha } — se o usuário só tiver acesso a 0 ou 1 empresa
+//     (ou nenhuma empresa existir ainda), já devolve o token de uma vez.
+//     Se tiver acesso a mais de uma, devolve { requerEmpresa: true, empresas }
+//     em vez de token, e o frontend pede pra escolher.
+//  2. { email, senha, empresaId } — reenvia com a empresa escolhida (tem
+//     que ser uma das que esse usuário realmente pode acessar).
 router.post("/login", asyncHandler(async (req, res) => {
   const { email, senha, empresaId } = req.body;
   if (!email || !senha) {
     return res.status(400).json({ erro: "email e senha são obrigatórios" });
   }
 
-  const usuario = await prisma.usuario.findUnique({ where: { email } });
+  const usuario = await prisma.usuario.findUnique({
+    where: { email },
+    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true } } },
+  });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Credenciais inválidas" });
   }
@@ -88,29 +98,54 @@ router.post("/login", asyncHandler(async (req, res) => {
     return res.status(401).json({ erro: "Credenciais inválidas" });
   }
 
-  // Só exige escolher uma empresa se já existir alguma cadastrada — assim
-  // o primeiro admin consegue logar antes de cadastrar a primeira empresa
-  // em Configurações.
   const totalEmpresas = await prisma.empresa.count({ where: { ativo: true } });
-  let empresa = null;
 
-  if (totalEmpresas > 0) {
-    if (!empresaId) {
-      return res.status(400).json({ erro: "Selecione uma empresa para continuar" });
-    }
-    empresa = await prisma.empresa.findFirst({
-      where: { id: Number(empresaId), ativo: true },
-      select: { id: true, razaoSocial: true },
+  // Ninguém cadastrou nenhuma empresa ainda — deixa logar sem empresa (é
+  // o que permite o primeiro admin acessar Configurações e criar a
+  // primeira empresa).
+  if (totalEmpresas === 0) {
+    return res.json({
+      token: gerarToken(usuario, null),
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+      empresa: null,
     });
-    if (!empresa) {
-      return res.status(400).json({ erro: "Empresa inválida" });
-    }
+  }
+
+  // Admin enxerga todas as empresas ativas automaticamente, mesmo sem
+  // estar explicitamente vinculado a elas.
+  const empresasPermitidas = usuario.papel === "admin"
+    ? await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true, razaoSocial: true }, orderBy: { razaoSocial: "asc" } })
+    : usuario.empresas;
+
+  if (empresasPermitidas.length === 0) {
+    return res.status(403).json({ erro: "Seu usuário não tem acesso a nenhuma empresa. Peça para um admin liberar o acesso." });
+  }
+
+  // Só uma opção — loga direto nela, sem precisar perguntar.
+  if (empresasPermitidas.length === 1 && !empresaId) {
+    const unica = empresasPermitidas[0];
+    return res.json({
+      token: gerarToken(usuario, unica.id),
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+      empresa: unica,
+    });
+  }
+
+  // Mais de uma opção e ainda não escolheu — devolve a lista pro frontend
+  // mostrar o seletor, sem emitir token ainda.
+  if (!empresaId) {
+    return res.json({ requerEmpresa: true, empresas: empresasPermitidas });
+  }
+
+  const empresaEscolhida = empresasPermitidas.find((e) => e.id === Number(empresaId));
+  if (!empresaEscolhida) {
+    return res.status(400).json({ erro: "Você não tem acesso a essa empresa" });
   }
 
   res.json({
-    token: gerarToken(usuario, empresa?.id),
+    token: gerarToken(usuario, empresaEscolhida.id),
     usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
-    empresa,
+    empresa: empresaEscolhida,
   });
 }));
 

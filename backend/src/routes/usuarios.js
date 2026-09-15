@@ -12,14 +12,17 @@ const router = express.Router();
 router.get("/", exigirAdmin, asyncHandler(async (req, res) => {
   const usuarios = await prisma.usuario.findMany({
     where: { ativo: true },
-    select: { id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true },
+    select: {
+      id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true,
+      empresas: { select: { id: true, razaoSocial: true } },
+    },
     orderBy: { nome: "asc" },
   });
   res.json(usuarios);
 }));
 
 router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
-  const { nome, papel, ativo } = req.body;
+  const { nome, papel, ativo, empresaIds } = req.body;
 
   const usuario = await prisma.usuario.update({
     where: { id: Number(req.params.id) },
@@ -27,8 +30,15 @@ router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
       nome: nome || undefined,
       papel: papel || undefined,
       ativo: typeof ativo === "boolean" ? ativo : undefined,
+      // "set" substitui a lista inteira de empresas vinculadas pela nova —
+      // só mexe nisso se o front mandou array (mesmo vazio, pra permitir
+      // remover todo acesso).
+      empresas: Array.isArray(empresaIds) ? { set: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
     },
-    select: { id: true, nome: true, email: true, papel: true, ativo: true },
+    select: {
+      id: true, nome: true, email: true, papel: true, ativo: true,
+      empresas: { select: { id: true, razaoSocial: true } },
+    },
   });
 
   res.json(usuario);

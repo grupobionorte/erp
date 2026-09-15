@@ -51,6 +51,11 @@ model Usuario {
   ativo      Boolean       @default(true)
   criadoEm   DateTime      @default(now()) @map("criado_em")
 
+  // Quais empresas esse usuário pode acessar ao logar. Só vale de verdade
+  // pra quem é "operador" — um "admin" enxerga todas as empresas ativas
+  // automaticamente, mesmo sem estar nessa lista.
+  empresas Empresa[] @relation("UsuarioEmpresas")
+
   @@map("usuarios")
 }
 
@@ -124,6 +129,8 @@ model Empresa {
   transportadoras Transportadora[]
   produtos        Produto[]
   veiculos        Veiculo[]
+
+  usuarios Usuario[] @relation("UsuarioEmpresas")
 
   @@map("empresas")
 }

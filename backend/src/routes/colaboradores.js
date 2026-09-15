@@ -2,9 +2,10 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const colaboradores = await prisma.colaborador.findMany({
     where: {
@@ -14,9 +15,9 @@ router.get("/", async (req, res) => {
     orderBy: { nome: "asc" },
   });
   res.json(colaboradores);
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncHandler(async (req, res) => {
   const { empresaId, ...dados } = req.body;
   if (!dados.nome || !dados.cpf) {
     return res.status(400).json({ erro: "nome e cpf são obrigatórios" });
@@ -26,9 +27,9 @@ router.post("/", async (req, res) => {
     data: { ...dados, empresaId: req.usuario.empresaId || undefined },
   });
   res.status(201).json(colaborador);
-});
+}));
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", asyncHandler(async (req, res) => {
   const { empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
@@ -40,9 +41,9 @@ router.put("/:id", async (req, res) => {
 
   const colaborador = await prisma.colaborador.update({ where: { id }, data: dados });
   res.json(colaborador);
-});
+}));
 
-router.delete("/:id", exigirAdmin, async (req, res) => {
+router.delete("/:id", exigirAdmin, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existente = await prisma.colaborador.findUnique({ where: { id } });
   if (!existente) return res.status(404).json({ erro: "Colaborador não encontrado" });
@@ -55,6 +56,6 @@ router.delete("/:id", exigirAdmin, async (req, res) => {
     data: { ativo: false },
   });
   res.status(204).send();
-});
+}));
 
 module.exports = router;

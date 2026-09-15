@@ -2,12 +2,13 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
 // Lista todos os veículos ativos, com o nome da transportadora dona de
 // cada um (usado tanto na tela de cadastro quanto, futuramente, na
 // seleção de veículo ao montar um MDFe).
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const veiculos = await prisma.veiculo.findMany({
     where: {
@@ -18,9 +19,9 @@ router.get("/", async (req, res) => {
     orderBy: { placa: "asc" },
   });
   res.json(veiculos);
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncHandler(async (req, res) => {
   const { transportadoraId, placa, empresaId, ...resto } = req.body;
   if (!transportadoraId || !placa) {
     return res.status(400).json({ erro: "transportadoraId e placa são obrigatórios" });
@@ -37,9 +38,9 @@ router.post("/", async (req, res) => {
   });
 
   res.status(201).json(veiculo);
-});
+}));
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", asyncHandler(async (req, res) => {
   const { transportadoraId, empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
@@ -59,12 +60,12 @@ router.put("/:id", async (req, res) => {
   });
 
   res.json(veiculo);
-});
+}));
 
 // Exclusão lógica (marca ativo: false) — mantém o histórico de MDFe que
 // já referenciaram esse veículo. Restrito a admin, igual aos outros
 // cadastros.
-router.delete("/:id", exigirAdmin, async (req, res) => {
+router.delete("/:id", exigirAdmin, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existente = await prisma.veiculo.findUnique({ where: { id } });
   if (!existente) return res.status(404).json({ erro: "Veículo não encontrado" });
@@ -77,6 +78,6 @@ router.delete("/:id", exigirAdmin, async (req, res) => {
     data: { ativo: false },
   });
   res.status(204).send();
-});
+}));
 
 module.exports = router;

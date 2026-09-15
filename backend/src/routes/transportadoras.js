@@ -2,9 +2,10 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const transportadoras = await prisma.transportadora.findMany({
     where: {
@@ -15,9 +16,9 @@ router.get("/", async (req, res) => {
     orderBy: { razaoSocial: "asc" },
   });
   res.json(transportadoras);
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncHandler(async (req, res) => {
   const { endereco, veiculos, empresaId, ...dados } = req.body;
 
   if (!dados.razaoSocial || !dados.cnpj) {
@@ -35,17 +36,17 @@ router.post("/", async (req, res) => {
   });
 
   res.status(201).json(transportadora);
-});
+}));
 
 // Adiciona um veículo a uma transportadora existente, usado no MDFe.
-router.post("/:id/veiculos", async (req, res) => {
+router.post("/:id/veiculos", asyncHandler(async (req, res) => {
   const veiculo = await prisma.veiculo.create({
     data: { ...req.body, transportadoraId: Number(req.params.id), empresaId: req.usuario.empresaId || undefined },
   });
   res.status(201).json(veiculo);
-});
+}));
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", asyncHandler(async (req, res) => {
   const { endereco, veiculos, empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
@@ -60,9 +61,9 @@ router.put("/:id", async (req, res) => {
     data: dados,
   });
   res.json(transportadora);
-});
+}));
 
-router.delete("/:id", exigirAdmin, async (req, res) => {
+router.delete("/:id", exigirAdmin, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existente = await prisma.transportadora.findUnique({ where: { id } });
   if (!existente) return res.status(404).json({ erro: "Transportadora não encontrada" });
@@ -75,6 +76,6 @@ router.delete("/:id", exigirAdmin, async (req, res) => {
     data: { ativo: false },
   });
   res.status(204).send();
-});
+}));
 
 module.exports = router;

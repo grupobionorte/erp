@@ -2,9 +2,10 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const produtos = await prisma.produto.findMany({
     where: {
@@ -14,9 +15,9 @@ router.get("/", async (req, res) => {
     orderBy: { descricao: "asc" },
   });
   res.json(produtos);
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncHandler(async (req, res) => {
   const { empresaId, ...dados } = req.body;
   const { codigoInterno, descricao, ncm } = dados;
   if (!codigoInterno || !descricao || !ncm) {
@@ -27,9 +28,9 @@ router.post("/", async (req, res) => {
     data: { ...dados, empresaId: req.usuario.empresaId || undefined },
   });
   res.status(201).json(produto);
-});
+}));
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", asyncHandler(async (req, res) => {
   const { empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
@@ -41,9 +42,9 @@ router.put("/:id", async (req, res) => {
 
   const produto = await prisma.produto.update({ where: { id }, data: dados });
   res.json(produto);
-});
+}));
 
-router.delete("/:id", exigirAdmin, async (req, res) => {
+router.delete("/:id", exigirAdmin, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existente = await prisma.produto.findUnique({ where: { id } });
   if (!existente) return res.status(404).json({ erro: "Produto não encontrado" });
@@ -56,6 +57,6 @@ router.delete("/:id", exigirAdmin, async (req, res) => {
     data: { ativo: false },
   });
   res.status(204).send();
-});
+}));
 
 module.exports = router;

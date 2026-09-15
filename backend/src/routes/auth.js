@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const { autenticar } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
 function gerarToken(usuario, empresaId) {
@@ -18,7 +19,7 @@ function gerarToken(usuario, empresaId) {
 // e não precisa de token (é o "bootstrap" — sem isso ninguém conseguiria
 // criar o primeiro login). A partir do segundo usuário, só um admin logado
 // pode cadastrar novas pessoas.
-router.post("/registrar", async (req, res) => {
+router.post("/registrar", asyncHandler(async (req, res) => {
   const { nome, email, senha, papel } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: "nome, email e senha são obrigatórios" });
@@ -57,21 +58,21 @@ router.post("/registrar", async (req, res) => {
   });
 
   res.status(201).json({ id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel });
-});
+}));
 
 // Lista pública (sem login) das empresas ativas, só com o essencial —
 // é o que preenche o seletor de empresa na própria tela de login, antes
 // de existir qualquer token.
-router.get("/empresas", async (req, res) => {
+router.get("/empresas", asyncHandler(async (req, res) => {
   const empresas = await prisma.empresa.findMany({
     where: { ativo: true },
     select: { id: true, razaoSocial: true },
     orderBy: { razaoSocial: "asc" },
   });
   res.json(empresas);
-});
+}));
 
-router.post("/login", async (req, res) => {
+router.post("/login", asyncHandler(async (req, res) => {
   const { email, senha, empresaId } = req.body;
   if (!email || !senha) {
     return res.status(400).json({ erro: "email e senha são obrigatórios" });
@@ -111,11 +112,11 @@ router.post("/login", async (req, res) => {
     usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
     empresa,
   });
-});
+}));
 
 // Usado pelo frontend pra saber se o token salvo ainda é válido ao abrir a
 // tela — devolve também a empresa em uso, pra sobreviver a um F5.
-router.get("/me", autenticar, async (req, res) => {
+router.get("/me", autenticar, asyncHandler(async (req, res) => {
   let empresa = null;
   if (req.usuario.empresaId) {
     empresa = await prisma.empresa.findUnique({
@@ -124,6 +125,6 @@ router.get("/me", autenticar, async (req, res) => {
     });
   }
   res.json({ ...req.usuario, empresa });
-});
+}));
 
 module.exports = router;

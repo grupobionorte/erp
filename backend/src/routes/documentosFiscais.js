@@ -2,19 +2,20 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const focusNfe = require("../services/focusNfe");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const documentos = await prisma.documentoFiscal.findMany({
     include: { destinatario: true, transportadora: true, itens: true },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
-});
+}));
 
 // Passo 1: monta o rascunho da NFe a partir dos cadastros — é aqui que os
 // cadastros de clientes e produtos "viram" um documento fiscal.
-router.post("/nfe/rascunho", async (req, res) => {
+router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId, destinatarioId, transportadoraId, itens } = req.body;
 
   if (!empresaId || !destinatarioId || !itens?.length) {
@@ -54,12 +55,12 @@ router.post("/nfe/rascunho", async (req, res) => {
   });
 
   res.status(201).json(documento);
-});
+}));
 
 // Rascunho de CTe — o tomador do serviço normalmente é o destinatário da
 // mercadoria (quem recebe e paga o frete). transportadoraId aqui é
 // informativo, caso o frete seja subcontratado de terceiros.
-router.post("/cte/rascunho", async (req, res) => {
+router.post("/cte/rascunho", asyncHandler(async (req, res) => {
   const { empresaId, tomadorId, transportadoraId, valorTotal } = req.body;
 
   if (!empresaId || !tomadorId || !valorTotal) {
@@ -79,11 +80,11 @@ router.post("/cte/rascunho", async (req, res) => {
   });
 
   res.status(201).json(documento);
-});
+}));
 
 // Rascunho de MDFe — reúne o veículo, o motorista e as NFe/CTe (já
 // autorizadas) que vão ser transportadas nessa viagem.
-router.post("/mdfe/rascunho", async (req, res) => {
+router.post("/mdfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId, transportadoraId, veiculoId, nomeMotorista, cpfMotorista, ufPercurso, documentosVinculadosIds } = req.body;
 
   if (!empresaId || !transportadoraId || !veiculoId || !documentosVinculadosIds?.length) {
@@ -118,12 +119,12 @@ router.post("/mdfe/rascunho", async (req, res) => {
   });
 
   res.status(201).json(documento);
-});
+}));
 
 // Passo 2: envia o rascunho para o provedor de emissão. Fica separado do
 // passo 1 de propósito — permite revisar o rascunho antes de emitir de
 // verdade, já que a emissão é irreversível (exige evento de cancelamento).
-router.post("/:id/emitir", async (req, res) => {
+router.post("/:id/emitir", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
 
   const documento = await prisma.documentoFiscal.findUnique({
@@ -183,11 +184,11 @@ router.post("/:id/emitir", async (req, res) => {
     });
     res.status(502).json({ erro: "Falha ao enviar para o provedor", detalhe: erro.message });
   }
-});
+}));
 
 // Passo 3: consulta o status na Focus NFe e atualiza o registro local —
 // chame periodicamente (ou via webhook do provedor) até sair de "enviado".
-router.get("/:id/status", async (req, res) => {
+router.get("/:id/status", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
@@ -229,6 +230,6 @@ router.get("/:id/status", async (req, res) => {
   }
 
   res.json({ ...documento, statusProvedor: resultado.status });
-});
+}));
 
 module.exports = router;

@@ -2,11 +2,9 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
+const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-// GET /pessoas?papel=cliente|fornecedor — lista clientes e/ou fornecedores.
-// A mesma tabela serve para os dois porque os campos são idênticos; o que
-// muda é qual flag (e_cliente / e_fornecedor) está marcada.
 // GET /pessoas?papel=cliente|fornecedor — lista clientes e/ou fornecedores.
 // A mesma tabela serve para os dois porque os campos são idênticos; o que
 // muda é qual flag (e_cliente / e_fornecedor) está marcada.
@@ -14,7 +12,7 @@ const router = express.Router();
 // Multi-empresa: só mostra registros da empresa em uso na sessão (definida
 // no login) mais os registros antigos sem empresa definida (empresaId nulo),
 // pra não sumir cadastro nenhum de quem já usava o sistema antes disso.
-router.get("/", async (req, res) => {
+router.get("/", asyncHandler(async (req, res) => {
   const { papel, busca } = req.query;
   const { empresaId } = req.usuario;
 
@@ -40,9 +38,9 @@ router.get("/", async (req, res) => {
   });
 
   res.json(pessoas);
-});
+}));
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", asyncHandler(async (req, res) => {
   const pessoa = await prisma.pessoa.findUnique({
     where: { id: Number(req.params.id) },
     include: { endereco: true },
@@ -50,9 +48,9 @@ router.get("/:id", async (req, res) => {
 
   if (!pessoa) return res.status(404).json({ erro: "Pessoa não encontrada" });
   res.json(pessoa);
-});
+}));
 
-router.post("/", async (req, res) => {
+router.post("/", asyncHandler(async (req, res) => {
   const { endereco, empresaId, ...dados } = req.body;
 
   if (!dados.nomeRazaoSocial || !dados.documento) {
@@ -72,9 +70,9 @@ router.post("/", async (req, res) => {
   });
 
   res.status(201).json(pessoa);
-});
+}));
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", asyncHandler(async (req, res) => {
   const { endereco, empresaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
@@ -100,11 +98,11 @@ router.put("/:id", async (req, res) => {
   });
 
   res.json(pessoa);
-});
+}));
 
 // Exclusão lógica — mantém o histórico de documentos fiscais emitidos
 // para essa pessoa íntegro, em vez de apagar a linha.
-router.delete("/:id", exigirAdmin, async (req, res) => {
+router.delete("/:id", exigirAdmin, asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const existente = await prisma.pessoa.findUnique({ where: { id } });
   if (!existente) return res.status(404).json({ erro: "Pessoa não encontrada" });
@@ -118,6 +116,6 @@ router.delete("/:id", exigirAdmin, async (req, res) => {
   });
 
   res.status(204).send();
-});
+}));
 
 module.exports = router;

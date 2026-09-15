@@ -185,6 +185,8 @@ model Colaborador {
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
+  documentosComoResponsavel DocumentoFiscal[]
+
   @@unique([cpf, empresaId])
   @@map("colaboradores")
 }
@@ -307,6 +309,9 @@ model DocumentoFiscal {
   empresaId Int     @map("empresa_id")
   empresa   Empresa @relation(fields: [empresaId], references: [id])
 
+  colaboradorResponsavelId Int?         @map("colaborador_responsavel_id")
+  colaboradorResponsavel   Colaborador? @relation(fields: [colaboradorResponsavelId], references: [id])
+
   destinatarioId Int?    @map("destinatario_id")
   destinatario   Pessoa? @relation(fields: [destinatarioId], references: [id])
 
@@ -334,6 +339,8 @@ model DocumentoItem {
   valorUnitario  Float @map("valor_unitario")
   valorTotal     Float @map("valor_total")
   cfopUtilizado  String? @map("cfop_utilizado")
+  ncmUtilizado   String? @map("ncm_utilizado")
+  cstUtilizado   String? @map("cst_utilizado")
 
   documentoId Int             @map("documento_id")
   documento   DocumentoFiscal @relation(fields: [documentoId], references: [id])

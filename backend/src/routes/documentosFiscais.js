@@ -12,9 +12,12 @@ router.get("/", asyncHandler(async (req, res) => {
   const documentos = await prisma.documentoFiscal.findMany({
     where: {
       ...(tipo ? { tipo } : {}),
-      ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
+      // Diferente dos outros cadastros, documento fiscal sempre tem uma
+      // empresa (é obrigatório desde o início) — não existe "documento
+      // sem empresa" pra tratar aqui.
+      ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, transportadora: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, transportadora: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
@@ -23,7 +26,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, transportadora: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, transportadora: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);
@@ -40,6 +43,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
     destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
+    dataEmissao, colaboradorResponsavelId,
   } = req.body;
 
   if (!empresaId) {
@@ -66,6 +70,8 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       valorUnitario,
       valorTotal: valorUnitario * item.quantidade,
       cfopUtilizado: item.cfopUtilizado || produto.cfopPadrao,
+      ncmUtilizado: item.ncmUtilizado || produto.ncm,
+      cstUtilizado: item.cstUtilizado || produto.cstIcms,
     };
   });
 
@@ -91,8 +97,10 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       empresaId,
       destinatarioId,
       transportadoraId: transportadoraId || undefined,
+      colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
+      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
       naturezaOperacao: naturezaOperacao || undefined,
       modalidadeFrete: modalidadeFrete || undefined,
       dataSaida: dataSaida ? new Date(dataSaida) : undefined,
@@ -111,7 +119,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       valorTotal,
       itens: { create: itensCalculados },
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, colaboradorResponsavel: true },
   });
 
   res.status(201).json(documento);
@@ -340,6 +348,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
+    dataEmissao, colaboradorResponsavelId,
   } = req.body;
 
   let dadosItens = {};
@@ -362,6 +371,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
         valorUnitario,
         valorTotal: valorUnitario * item.quantidade,
         cfopUtilizado: item.cfopUtilizado || produto.cfopPadrao,
+        ncmUtilizado: item.ncmUtilizado || produto.ncm,
+        cstUtilizado: item.cstUtilizado || produto.cstIcms,
       };
     });
     const totalItens = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
@@ -406,10 +417,12 @@ router.put("/:id", asyncHandler(async (req, res) => {
       especieVolumes: especieVolumes ?? undefined,
       pesoBrutoTotal: pesoBrutoTotal ?? undefined,
       pesoLiquidoTotal: pesoLiquidoTotal ?? undefined,
+      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
+      colaboradorResponsavelId: colaboradorResponsavelId === null ? null : colaboradorResponsavelId || undefined,
       valorTotal,
       ...dadosItens,
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, colaboradorResponsavel: true },
   });
 
   res.json(documento);

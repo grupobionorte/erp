@@ -1257,7 +1257,10 @@ const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"]
 const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
 const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
-function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, onSave, onCancel }) {
+function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, onSave, onCancel }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
   const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
@@ -1277,8 +1280,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [pesoLiquidoTotal, setPesoLiquidoTotal] = useState(nota?.pesoLiquidoTotal ?? "");
   const [itens, setItens] = useState(() =>
     nota?.itens?.length
-      ? nota.itens.map(i => ({ produtoId: String(i.produtoId), quantidade: i.quantidade, valorUnitario: i.valorUnitario, cfopUtilizado: i.cfopUtilizado || "" }))
-      : [{ produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "" }]
+      ? nota.itens.map(i => ({ produtoId: String(i.produtoId), quantidade: i.quantidade, valorUnitario: i.valorUnitario, cfopUtilizado: i.cfopUtilizado || "", ncmUtilizado: i.ncmUtilizado || "", cstUtilizado: i.cstUtilizado || "" }))
+      : [{ produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "", ncmUtilizado: "", cstUtilizado: "" }]
   );
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -1292,13 +1295,15 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         if (produto) {
           atualizado.valorUnitario = produto.valorUnitario ?? "";
           atualizado.cfopUtilizado = produto.cfop || "";
+          atualizado.ncmUtilizado = produto.ncm || "";
+          atualizado.cstUtilizado = produto.cst || "";
         }
       }
       return atualizado;
     }));
   };
 
-  const adicionarItem = () => setItens(prev => [...prev, { produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "" }]);
+  const adicionarItem = () => setItens(prev => [...prev, { produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "", ncmUtilizado: "", cstUtilizado: "" }]);
   const removerItem = (index) => setItens(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
 
   const totalItens = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
@@ -1314,6 +1319,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
       await onSave({
         destinatarioId: Number(destinatarioId),
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
+        colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
+        dataEmissao: dataEmissao || undefined,
         naturezaOperacao,
         modalidadeFrete,
         dataSaida: dataSaida || undefined,
@@ -1334,6 +1341,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           quantidade: Number(it.quantidade),
           valorUnitario: it.valorUnitario !== "" ? Number(it.valorUnitario) : undefined,
           cfopUtilizado: it.cfopUtilizado || undefined,
+          ncmUtilizado: it.ncmUtilizado || undefined,
+          cstUtilizado: it.cstUtilizado || undefined,
         })),
       });
     } catch (e) {
@@ -1351,6 +1360,20 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Data de emissão</label>
+              <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Colaborador responsável</label>
+              <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
+                <option value="">Nenhum</option>
+                {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+          </div>
+
           <div className="field-group">
             <label className="field-label">Cliente<span className="req">*</span></label>
             <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
@@ -1439,6 +1462,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     <label className="field-label">CFOP</label>
                     <input value={item.cfopUtilizado} onChange={e => atualizarItem(index, "cfopUtilizado", e.target.value)} />
                   </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="field-label">NCM</label>
+                    <input value={item.ncmUtilizado} onChange={e => atualizarItem(index, "ncmUtilizado", e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label className="field-label">CST</label>
+                    <input value={item.cstUtilizado} onChange={e => atualizarItem(index, "cstUtilizado", e.target.value)} />
+                  </div>
                   <p style={{ flex: 1, minWidth: 0, fontSize: 13, margin: 0, paddingBottom: 9 }}>R$ {totalItem.toFixed(2)}</p>
                   <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item" style={{ marginBottom: 4 }}>
                     <Trash2 size={15} />
@@ -1517,6 +1548,7 @@ function NotasFiscaisView() {
   const { items: clientes } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
   const { items: transportadoras } = useApiCollection("transportadoras");
+  const { items: colaboradores } = useApiCollection("colaboradores");
 
   const [notas, setNotas] = useState(null);
   const [erro, setErro] = useState(null);
@@ -1637,6 +1669,7 @@ function NotasFiscaisView() {
           clientes={clientes}
           produtosDisponiveis={produtosDisponiveis}
           transportadoras={transportadoras}
+          colaboradores={colaboradores}
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />

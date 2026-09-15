@@ -176,6 +176,7 @@ model Veiculo {
   capacidadeKg     Float?  @map("capacidade_kg")
   tipoRodado       String? @map("tipo_rodado")
   tipoCarroceria   String? @map("tipo_carroceria")
+  ativo            Boolean @default(true)
 
   transportadoraId Int            @map("transportadora_id")
   transportadora   Transportadora @relation(fields: [transportadoraId], references: [id])

@@ -248,7 +248,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (documento.status !== "rascunho") {
+  if (documento.status !== "rascunho" && documento.status !== "rejeitado") {
     return res.status(409).json({ erro: `Documento já está em status "${documento.status}"` });
   }
 
@@ -290,11 +290,18 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     });
     res.json(atualizado);
   } catch (erro) {
+    // Axios só coloca "Request failed with status code 400" em erro.message
+    // — a explicação de verdade que a Focus NFe manda (campo inválido,
+    // certificado não encontrado, etc.) vem no corpo da resposta de erro.
+    const detalheProvedor = erro.response?.data
+      ? JSON.stringify(erro.response.data)
+      : erro.message;
+
     await prisma.documentoFiscal.update({
       where: { id },
-      data: { status: "rejeitado", motivoRejeicao: erro.message },
+      data: { status: "rejeitado", motivoRejeicao: detalheProvedor },
     });
-    res.status(502).json({ erro: "Falha ao enviar para o provedor", detalhe: erro.message });
+    res.status(502).json({ erro: "Falha ao enviar para o provedor", detalhe: detalheProvedor });
   }
 }));
 
@@ -357,8 +364,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
   if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (existente.status !== "rascunho") {
-    return res.status(409).json({ erro: "Só é possível editar documentos em rascunho" });
+  if (existente.status !== "rascunho" && existente.status !== "rejeitado") {
+    return res.status(409).json({ erro: "Só é possível editar documentos em rascunho ou rejeitados" });
   }
 
   const {
@@ -469,8 +476,8 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (existente.status !== "rascunho") {
-    return res.status(409).json({ erro: "Só é possível cancelar documentos em rascunho" });
+  if (existente.status !== "rascunho" && existente.status !== "rejeitado") {
+    return res.status(409).json({ erro: "Só é possível cancelar documentos em rascunho ou rejeitados" });
   }
 
   await prisma.documentoFiscal.update({

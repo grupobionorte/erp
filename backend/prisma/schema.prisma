@@ -283,6 +283,11 @@ model DocumentoFiscal {
   cpfMotorista  String? @map("cpf_motorista")
   ufPercurso    String? @map("uf_percurso") // ex: "MT,GO,SP"
 
+  // Origem/destino do trajeto — usados no CTe (e reaproveitáveis se um dia
+  // o MDFe também quiser mostrar cidade em vez de só a lista de UFs).
+  origemPercurso  String? @map("origem_percurso")
+  destinoPercurso String? @map("destino_percurso")
+
   empresaId Int     @map("empresa_id")
   empresa   Empresa @relation(fields: [empresaId], references: [id])
 

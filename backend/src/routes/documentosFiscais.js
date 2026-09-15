@@ -102,12 +102,32 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
 // Rascunho de CTe — o tomador do serviço normalmente é o destinatário da
 // mercadoria (quem recebe e paga o frete). transportadoraId aqui é
 // informativo, caso o frete seja subcontratado de terceiros.
+// Rascunho de CTe — o tomador do serviço normalmente é o destinatário da
+// mercadoria (quem recebe e paga o frete). Número e série vêm da
+// numeração de CTe configurada em Configurações, igual a NFe.
 router.post("/cte/rascunho", asyncHandler(async (req, res) => {
-  const { empresaId, tomadorId, transportadoraId, valorTotal } = req.body;
+  const { empresaId } = req.usuario;
+  const {
+    tomadorId, transportadoraId, veiculoId, nomeMotorista, cpfMotorista,
+    origemPercurso, destinoPercurso, naturezaOperacao, informacoesComplementares, valorTotal,
+  } = req.body;
 
-  if (!empresaId || !tomadorId || !valorTotal) {
-    return res.status(400).json({ erro: "empresaId, tomadorId e valorTotal são obrigatórios" });
+  if (!empresaId) {
+    return res.status(400).json({ erro: "Escolha uma empresa (na tela de login) antes de emitir CTe" });
   }
+  if (!tomadorId || !valorTotal) {
+    return res.status(400).json({ erro: "tomadorId e valorTotal são obrigatórios" });
+  }
+
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return res.status(400).json({ erro: "Empresa inválida" });
+
+  const empresaAtualizada = await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { cteProximoNumero: { increment: 1 } },
+  });
+  const numero = empresaAtualizada.cteProximoNumero - 1;
+  const serie = Number.parseInt(empresa.cteSerie, 10);
 
   const documento = await prisma.documentoFiscal.create({
     data: {
@@ -116,9 +136,18 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       empresaId,
       destinatarioId: tomadorId,
       transportadoraId: transportadoraId || undefined,
+      veiculoId: veiculoId || undefined,
+      nomeMotorista: nomeMotorista || undefined,
+      cpfMotorista: cpfMotorista || undefined,
+      origemPercurso: origemPercurso || undefined,
+      destinoPercurso: destinoPercurso || undefined,
+      naturezaOperacao: naturezaOperacao || undefined,
+      informacoesComplementares: informacoesComplementares || undefined,
+      numero,
+      serie: Number.isNaN(serie) ? undefined : serie,
       valorTotal,
     },
-    include: { destinatario: true, transportadora: true },
+    include: { destinatario: true, transportadora: true, veiculo: true },
   });
 
   res.status(201).json(documento);
@@ -288,7 +317,10 @@ router.put("/:id", asyncHandler(async (req, res) => {
     return res.status(409).json({ erro: "Só é possível editar documentos em rascunho" });
   }
 
-  const { destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens } = req.body;
+  const {
+    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
+    veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
+  } = req.body;
 
   let dadosItens = {};
   let valorTotal = existente.valorTotal;
@@ -312,6 +344,10 @@ router.put("/:id", asyncHandler(async (req, res) => {
     // casar item a item, e o documento ainda é só um rascunho.
     await prisma.documentoItem.deleteMany({ where: { documentoId: id } });
     dadosItens = { itens: { create: itensCalculados } };
+  } else if (valorTotalManual != null) {
+    // CTe não tem itens de produto — o valor da prestação é digitado
+    // direto (não é calculado a partir de uma lista).
+    valorTotal = valorTotalManual;
   }
 
   const documento = await prisma.documentoFiscal.update({
@@ -319,6 +355,11 @@ router.put("/:id", asyncHandler(async (req, res) => {
     data: {
       destinatarioId: destinatarioId || undefined,
       transportadoraId: transportadoraId === null ? null : transportadoraId || undefined,
+      veiculoId: veiculoId === null ? null : veiculoId || undefined,
+      nomeMotorista: nomeMotorista ?? undefined,
+      cpfMotorista: cpfMotorista ?? undefined,
+      origemPercurso: origemPercurso ?? undefined,
+      destinoPercurso: destinoPercurso ?? undefined,
       naturezaOperacao: naturezaOperacao ?? undefined,
       modalidadeFrete: modalidadeFrete ?? undefined,
       dataSaida: dataSaida ? new Date(dataSaida) : undefined,

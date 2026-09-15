@@ -143,6 +143,9 @@ model Pessoa {
   documento        String
   ie               String?
   ieIsento         Boolean    @default(false) @map("ie_isento")
+  // Indicador de IE do destinatário, exigido na NFe: "Contribuinte",
+  // "Não Contribuinte" ou "Contribuinte Isento".
+  indicadorIe      String?    @map("indicador_ie")
   telefone         String?
   email            String?
   eCliente         Boolean    @default(false) @map("e_cliente")

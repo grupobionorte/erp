@@ -60,7 +60,7 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       papel: totalUsuarios === 0 ? "admin" : papel === "admin" ? "admin" : "operador",
       empresas: empresaIds?.length ? { connect: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
     },
-    include: { empresas: { select: { id: true, razaoSocial: true } } },
+    include: { empresas: { select: { id: true, razaoSocial: true, logoUrl: true } } },
   });
 
   res.status(201).json({
@@ -79,6 +79,16 @@ router.post("/registrar", asyncHandler(async (req, res) => {
 //     em vez de token, e o frontend pede pra escolher.
 //  2. { email, senha, empresaId } — reenvia com a empresa escolhida (tem
 //     que ser uma das que esse usuário realmente pode acessar).
+// Pública — usada na tela de login pra mostrar a logo da empresa lembrada
+// (localStorage) antes mesmo de logar. Só devolve a logo, nada sensível.
+router.get("/empresas/:id/logo", asyncHandler(async (req, res) => {
+  const empresa = await prisma.empresa.findFirst({
+    where: { id: Number(req.params.id), ativo: true },
+    select: { logoUrl: true },
+  });
+  res.json({ logoUrl: empresa?.logoUrl || null });
+}));
+
 router.post("/login", asyncHandler(async (req, res) => {
   const { email, senha, empresaId } = req.body;
   if (!email || !senha) {
@@ -87,7 +97,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   const usuario = await prisma.usuario.findUnique({
     where: { email },
-    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true } } },
+    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true, logoUrl: true } } },
   });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Credenciais inválidas" });
@@ -114,7 +124,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   // Admin enxerga todas as empresas ativas automaticamente, mesmo sem
   // estar explicitamente vinculado a elas.
   const empresasPermitidas = usuario.papel === "admin"
-    ? await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true, razaoSocial: true }, orderBy: { razaoSocial: "asc" } })
+    ? await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true, razaoSocial: true, logoUrl: true }, orderBy: { razaoSocial: "asc" } })
     : usuario.empresas;
 
   if (empresasPermitidas.length === 0) {
@@ -156,7 +166,7 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
   if (req.usuario.empresaId) {
     empresa = await prisma.empresa.findUnique({
       where: { id: req.usuario.empresaId },
-      select: { id: true, razaoSocial: true },
+      select: { id: true, razaoSocial: true, logoUrl: true },
     });
   }
   res.json({ ...req.usuario, empresa });

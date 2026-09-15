@@ -107,6 +107,11 @@ model Empresa {
   regimeTributario  RegimeTributario  @map("regime_tributario")
   ativo             Boolean           @default(true)
 
+  // Guardada como data URL (base64) direto no banco — simples e
+  // suficiente pra uma logo pequena, sem precisar de um serviço de
+  // armazenamento de arquivos à parte.
+  logoUrl           String?           @map("logo_url")
+
   // Numeração fiscal — cada empresa (CNPJ) tem sua própria série e
   // contador por tipo de documento. O "próximo número" é incrementado
   // pelo backend a cada emissão real (ainda não implementado).

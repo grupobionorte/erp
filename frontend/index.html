@@ -374,6 +374,7 @@ const MODULES = {
     fields: [
       { key: "nome", label: "Razão Social", type: "text", required: true },
       { key: "fantasia", label: "Nome Fantasia", type: "text" },
+      { key: "logo", label: "Logo da Empresa", type: "imagem-upload" },
       { key: "cnpj", label: "CNPJ", type: "text", required: true },
       { key: "ie", label: "Inscrição Estadual", type: "text" },
       { key: "im", label: "Inscrição Municipal", type: "text" },
@@ -393,6 +394,7 @@ const MODULES = {
       cnpj: data.cnpj,
       ie: data.ie || undefined,
       im: data.im || undefined,
+      logoUrl: data.logo || undefined,
       regimeTributario: data.regime === "Lucro Presumido" ? "lucro_presumido"
         : data.regime === "Lucro Real" ? "lucro_real" : "simples_nacional",
       endereco: data.endereco || undefined,
@@ -410,6 +412,7 @@ const MODULES = {
       cnpj: r.cnpj,
       ie: r.ie,
       im: r.im,
+      logo: r.logoUrl,
       regime: r.regimeTributario === "lucro_presumido" ? "Lucro Presumido"
         : r.regimeTributario === "lucro_real" ? "Lucro Real" : "Simples Nacional",
       endereco: mapEndereco(r.endereco),
@@ -643,6 +646,58 @@ function Field({ field, value, onChange, disabled }) {
     );
   }
 
+  if (field.type === "imagem-upload") {
+    const [erroUpload, setErroUpload] = useState("");
+    const inputRef = React.useRef(null);
+
+    const selecionarArquivo = (e) => {
+      const arquivo = e.target.files?.[0];
+      if (!arquivo) return;
+      if (!arquivo.type.startsWith("image/")) {
+        setErroUpload("Escolha um arquivo de imagem.");
+        return;
+      }
+      if (arquivo.size > 2 * 1024 * 1024) {
+        setErroUpload("A imagem precisa ter até 2 MB.");
+        return;
+      }
+      setErroUpload("");
+      const leitor = new FileReader();
+      leitor.onload = () => onChange(leitor.result);
+      leitor.readAsDataURL(arquivo);
+    };
+
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 8, border: "1px solid #e5e3da",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            overflow: "hidden", background: "#fafaf8", flexShrink: 0,
+          }}>
+            {value
+              ? <img src={value} alt="Logo da empresa" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              : <Building2 size={22} color="#b4b2a9" />}
+          </div>
+          <div>
+            <button type="button" className="btn" onClick={() => inputRef.current?.click()}>
+              {value ? "Trocar imagem" : "Escolher imagem"}
+            </button>
+            {value && (
+              <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => onChange("")}>
+                Remover
+              </button>
+            )}
+            <input ref={inputRef} type="file" accept="image/*" onChange={selecionarArquivo} style={{ display: "none" }} />
+          </div>
+        </div>
+        {erroUpload && <p className="error-text">{erroUpload}</p>}
+        <p className="hint">PNG ou JPG, até 2 MB. Aparece na tela de login.</p>
+      </div>
+    );
+  }
+
   if (field.type === "empresas-multiselect") {
     const [opcoes, setOpcoes] = useState(null);
     useEffect(() => {
@@ -816,6 +871,18 @@ function LoginScreen({ onLogin }) {
     try { return localStorage.getItem(EMPRESA_LEMBRADA_KEY) || ""; } catch { return ""; }
   });
 
+  // Mostra a logo da empresa lembrada (do último login neste navegador)
+  // já na tela inicial, antes mesmo de digitar e-mail/senha.
+  const [logoEmpresa, setLogoEmpresa] = useState(null);
+  useEffect(() => {
+    if (!empresaId) return;
+    let cancelado = false;
+    apiRequest(`/auth/empresas/${empresaId}/logo`)
+      .then((dados) => { if (!cancelado && dados.logoUrl) setLogoEmpresa(dados.logoUrl); })
+      .catch(() => {});
+    return () => { cancelado = true; };
+  }, []);
+
   // Se a pessoa voltar a mexer no e-mail ou na senha depois de já ter
   // visto o seletor de empresa, invalida a verificação anterior — as
   // empresas liberadas dependem de qual usuário está logando.
@@ -904,9 +971,8 @@ function LoginScreen({ onLogin }) {
           -webkit-font-smoothing: antialiased;
         }
         .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 3rem 2.5rem; }
-        .login-brand-mark { width: 48px; height: 48px; border-radius: 12px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; margin-bottom: 22px; color: #fff; }
-        .login-brand-title { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 12px; }
-        .login-brand-tag { font-size: 14.5px; color: rgba(255,255,255,0.7); line-height: 1.65; margin: 0; max-width: 280px; }
+        .login-brand-mark { width: 72px; height: 72px; border-radius: 12px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #fff; }
+        .login-brand-title { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 18px; text-align: center; }
 
         .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; border: 1.5px solid #00923F; box-sizing: border-box; }
         .login-card { width: 340px; max-width: 100%; }
@@ -947,9 +1013,10 @@ function LoginScreen({ onLogin }) {
       `}</style>
 
       <div className="login-brand">
-        <div className="login-brand-mark"><Leaf size={24} /></div>
         <h1 className="login-brand-title">Biomassa ERP</h1>
-        <p className="login-brand-tag">Cadastros, transporte e emissão fiscal em um só lugar.</p>
+        <div className="login-brand-mark">
+          {logoEmpresa ? <img src={logoEmpresa} alt="Logo da empresa" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 12 }} /> : <Leaf size={24} />}
+        </div>
       </div>
 
       <div className="login-form-side">
@@ -996,7 +1063,11 @@ function LoginScreen({ onLogin }) {
               <select
                 className="login-input"
                 value={empresaId}
-                onChange={e => setEmpresaId(e.target.value)}
+                onChange={e => {
+                  setEmpresaId(e.target.value);
+                  const escolhida = empresasParaEscolher.find(emp => String(emp.id) === e.target.value);
+                  setLogoEmpresa(escolhida?.logoUrl || null);
+                }}
                 required
                 autoFocus
               >
@@ -1257,10 +1328,11 @@ const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"]
 const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
 const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
-function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, onSave, onCancel }) {
+function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : "");
+  const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
   const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
@@ -1319,6 +1391,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
       await onSave({
         destinatarioId: Number(destinatarioId),
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
+        veiculoId: veiculoId ? Number(veiculoId) : undefined,
         colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
         dataEmissao: dataEmissao || undefined,
         naturezaOperacao,
@@ -1354,7 +1427,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 760, maxWidth: "95vw" }}>
+      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
         <div className="modal-header">
           <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -1362,7 +1435,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         <div className="modal-body">
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
-            <div className="endereco-grid">
+            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Data de emissão</label>
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
@@ -1374,8 +1447,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
               </div>
-            </div>
-            <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Natureza da operação</label>
                 <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
@@ -1390,7 +1461,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           </div>
 
           <div className="nf-section">
-            <h4 className="nf-section-title">Destinatário e transporte</h4>
+            <h4 className="nf-section-title">Destinatário</h4>
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Cliente<span className="req">*</span></label>
@@ -1401,10 +1472,43 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
               </div>
               <div className="field-group">
+                <label className="field-label">Presença do comprador</label>
+                <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
+                  {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Forma de pagamento</label>
+                <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
+                  {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="field-group" style={{ display: "flex", alignItems: "flex-end", paddingBottom: 9 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
+                  <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
+                  <span>Venda para consumidor final</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="nf-section">
+            <h4 className="nf-section-title">Transporte</h4>
+            <div className="endereco-grid">
+              <div className="field-group">
                 <label className="field-label">Transportadora</label>
                 <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
                   <option value="">Nenhuma</option>
                   {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Veículo (placa)</label>
+                <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                 </select>
               </div>
             </div>
@@ -1420,24 +1524,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
             </div>
-            <div className="endereco-grid">
-              <div className="field-group">
-                <label className="field-label">Presença do comprador</label>
-                <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
-                  {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Forma de pagamento</label>
-                <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
-                  {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 0, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
-              <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
-              <span>Venda para consumidor final</span>
-            </label>
           </div>
 
           <div className="nf-section">
@@ -1479,7 +1565,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
           <div className="nf-section">
             <h4 className="nf-section-title">Frete, seguro, desconto e volumes</h4>
-            <div className="endereco-grid">
+            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Valor do frete (R$)</label>
                 <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
@@ -1488,8 +1574,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <label className="field-label">Valor do seguro (R$)</label>
                 <input type="number" value={valorSeguro} onChange={e => setValorSeguro(e.target.value)} />
               </div>
-            </div>
-            <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Desconto (R$)</label>
                 <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
@@ -1499,17 +1583,18 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
               </div>
             </div>
-            <div className="endereco-grid">
+            <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Espécie dos volumes</label>
                 <input placeholder="Ex: Caixas, Sacos, Fardos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Peso bruto / líquido total (kg)</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input type="number" placeholder="Bruto" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
-                  <input type="number" placeholder="Líquido" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
-                </div>
+                <label className="field-label">Peso bruto total (kg)</label>
+                <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Peso líquido total (kg)</label>
+                <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>
@@ -1550,6 +1635,7 @@ function NotasFiscaisView() {
   const { items: produtosDisponiveis } = useApiCollection("produtos");
   const { items: transportadoras } = useApiCollection("transportadoras");
   const { items: colaboradores } = useApiCollection("colaboradores");
+  const { items: veiculos } = useApiCollection("veiculos");
 
   const [notas, setNotas] = useState(null);
   const [erro, setErro] = useState(null);
@@ -1602,7 +1688,7 @@ function NotasFiscaisView() {
             <FileText size={20} />
           </div>
           <div>
-            <h2>Notas Fiscais</h2>
+            <h2>Vendas/NFe</h2>
             <p className="subtle">{notas.length} nota{notas.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
@@ -1671,6 +1757,7 @@ function NotasFiscaisView() {
           produtosDisponiveis={produtosDisponiveis}
           transportadoras={transportadoras}
           colaboradores={colaboradores}
+          veiculos={veiculos}
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />
@@ -1985,12 +2072,22 @@ function ErpBiomassa() {
     return () => { cancelado = true; };
   }, [view, usuario]);
 
+  const modulosVisiveis = modulosParaUsuario(usuario);
+  const modulosPorChave = Object.fromEntries(modulosVisiveis);
+  const cadastroNaOrdem = (chaves) => chaves
+    .filter(k => modulosPorChave[k])
+    .map(k => ({ key: k, label: modulosPorChave[k].label, icon: modulosPorChave[k].icon }));
+
   const navItems = [
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
-    ...modulosParaUsuario(usuario).map(([key, cfg]) => ({ key, label: cfg.label, icon: cfg.icon })),
-    { key: "notasFiscais", label: "Notas Fiscais", icon: FileText },
+    { divider: true },
+    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "colaboradores"]),
+    { divider: true },
+    { key: "notasFiscais", label: "Vendas/NFe", icon: FileText },
     { key: "cte", label: "CTe", icon: Truck },
-    { key: "emissao", label: "Emissão (MDFe)", icon: Truck },
+    { key: "emissao", label: "MDFe", icon: Truck },
+    { divider: true },
+    ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];
 
   const sair = () => {
@@ -2046,10 +2143,19 @@ function ErpBiomassa() {
         .brand {
           font-size: 15px;
           font-weight: 500;
-          padding: 0.5rem 0.5rem 1rem;
+          padding: 0.5rem 0 1rem;
           color: #fff;
         }
+        .brand-title { padding: 0 10px; text-align: center; }
         .brand-sub { font-size: 12px; color: rgba(255,255,255,0.6); font-weight: 400; }
+        .empresa-badge {
+          display: flex; align-items: flex-start; gap: 6px;
+          width: 100%; box-sizing: border-box;
+          background: rgba(0,146,63,0.22); border: 1px solid rgba(0,146,63,0.5);
+          color: #fff; font-size: 12px; font-weight: 500;
+          padding: 8px 10px; border-radius: 8px; margin-top: 8px;
+          line-height: 1.35;
+        }
         .nav-item {
           display: flex; align-items: center; gap: 10px;
           width: 100%; padding: 8px 10px; border: none; background: none;
@@ -2058,6 +2164,7 @@ function ErpBiomassa() {
         }
         .nav-item:hover { background: rgba(255,255,255,0.08); }
         .nav-item.active { background: var(--erp-verde); color: #fff; font-weight: 500; }
+        .nav-divider { height: 1px; background: rgba(255,255,255,0.12); margin: 8px 4px; }
         .main { flex: 1; padding: 1.5rem 1.75rem; overflow-x: auto; }
         .view-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
         .view-title { display: flex; align-items: center; gap: 12px; }
@@ -2101,6 +2208,8 @@ function ErpBiomassa() {
           font-size: 13px; box-sizing: border-box; background: var(--surface-2, #fff); color: var(--text-primary, #1a1a1a);
         }
         .endereco-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .nf-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .nf-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
 
         /* Formulário de Nota Fiscal / CTe — seções com título e tabela de itens */
         .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
@@ -2155,10 +2264,13 @@ function ErpBiomassa() {
 
       <div className="sidebar">
         <div className="brand">
-          Biomassa ERP
-          <div className="brand-sub">{usuario.empresa?.razaoSocial || "Conectado ao backend"}</div>
+          <div className="brand-title">Biomassa ERP</div>
+          {usuario.empresa
+            ? <div className="empresa-badge"><Building2 size={13} /> {usuario.empresa.razaoSocial}</div>
+            : <div className="brand-sub" style={{ padding: "0 10px" }}>Conectado ao backend</div>}
         </div>
-        {navItems.map(item => {
+        {navItems.map((item, i) => {
+          if (item.divider) return <div key={`div-${i}`} className="nav-divider" />;
           const Icon = item.icon;
           return (
             <button

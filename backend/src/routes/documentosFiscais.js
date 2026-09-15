@@ -17,7 +17,7 @@ router.get("/", asyncHandler(async (req, res) => {
       // sem empresa" pra tratar aqui.
       ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, transportadora: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
@@ -26,7 +26,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, transportadora: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);
@@ -40,7 +40,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
+    destinatarioId, transportadoraId, veiculoId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
     dataEmissao, colaboradorResponsavelId,
@@ -97,6 +97,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       empresaId,
       destinatarioId,
       transportadoraId: transportadoraId || undefined,
+      veiculoId: veiculoId || undefined,
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
@@ -119,7 +120,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       valorTotal,
       itens: { create: itensCalculados },
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, colaboradorResponsavel: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true },
   });
 
   res.status(201).json(documento);
@@ -422,7 +423,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorTotal,
       ...dadosItens,
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, colaboradorResponsavel: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true },
   });
 
   res.json(documento);

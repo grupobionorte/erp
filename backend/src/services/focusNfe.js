@@ -9,40 +9,94 @@ const client = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Tabelas de código da SEFAZ — convertidas a partir dos rótulos em
+// português que aparecem no formulário, pra montar o payload da Focus NFe.
+const CODIGO_FINALIDADE = { "Normal": 1, "Complementar": 2, "Ajuste": 3, "Devolução": 4 };
+const CODIGO_PRESENCA = {
+  "Não se aplica": 0, "Presencial": 1, "Internet": 2, "Teleatendimento": 3,
+  "Entrega a domicílio": 4, "Presencial fora do estabelecimento": 5,
+};
+const CODIGO_MODALIDADE_FRETE = {
+  "Por conta do emitente": 0, "Por conta do destinatário": 1, "Por conta de terceiros": 2, "Sem frete": 9,
+};
+const CODIGO_FORMA_PAGAMENTO = {
+  "Dinheiro": "01", "Cartão de Crédito": "03", "Cartão de Débito": "04", "PIX": "17",
+  "Boleto": "15", "Transferência Bancária": "16", "Sem pagamento (a prazo)": "90",
+};
+
 // Monta o payload que a Focus NFe espera para uma NFe a partir dos nossos
-// registros já carregados do banco (empresa, destinatário, itens com produto).
-// Ajuste os nomes de campo conforme a versão da documentação do provedor.
-function montarPayloadNfe({ empresa, destinatario, itens }) {
+// registros já carregados do banco (empresa, destinatário, itens com
+// produto, transportadora/veículo, colaborador responsável e os campos de
+// cabeçalho preenchidos no cadastro). Ajuste os nomes de campo conforme a
+// versão da documentação do provedor.
+function montarPayloadNfe({ empresa, destinatario, itens, documento, transportadora, veiculo }) {
   return {
-    natureza_operacao: "Venda de mercadoria",
-    data_emissao: new Date().toISOString(),
+    natureza_operacao: documento.naturezaOperacao || "Venda de mercadoria",
+    data_emissao: (documento.dataEmissao || new Date()).toISOString(),
+    data_entrada_saida: documento.dataSaida ? documento.dataSaida.toISOString() : undefined,
     tipo_documento: 1, // 1 = saída
-    finalidade_emissao: 1, // 1 = normal
+    finalidade_emissao: CODIGO_FINALIDADE[documento.finalidadeOperacao] ?? 1,
+    consumidor_final: documento.consumidorFinal ? 1 : 0,
+    presenca_comprador: CODIGO_PRESENCA[documento.indicadorPresenca] ?? 0,
     cnpj_emitente: empresa.cnpj,
 
     nome_destinatario: destinatario.nomeRazaoSocial,
     cpf_destinatario: destinatario.tipo === "pessoa_fisica" ? destinatario.documento : undefined,
     cnpj_destinatario: destinatario.tipo === "pessoa_juridica" ? destinatario.documento : undefined,
     inscricao_estadual_destinatario: destinatario.ie || undefined,
+    indicador_ie_destinatario: destinatario.indicadorIe === "Contribuinte" ? 1 : destinatario.indicadorIe === "Contribuinte Isento" ? 2 : 9,
     logradouro_destinatario: destinatario.endereco?.logradouro,
     numero_destinatario: destinatario.endereco?.numero,
+    complemento_destinatario: destinatario.endereco?.complemento || undefined,
     bairro_destinatario: destinatario.endereco?.bairro,
     municipio_destinatario: destinatario.endereco?.cidade,
     uf_destinatario: destinatario.endereco?.uf,
     cep_destinatario: destinatario.endereco?.cep,
+    telefone_destinatario: destinatario.telefone || undefined,
+    email_destinatario: destinatario.email || undefined,
+
+    modalidade_frete: CODIGO_MODALIDADE_FRETE[documento.modalidadeFrete] ?? 9,
+    nome_transportador: transportadora?.razaoSocial || undefined,
+    cnpj_transportador: transportadora?.cnpj || undefined,
+    veiculo_placa: veiculo?.placa || undefined,
+    volumes: documento.quantidadeVolumes
+      ? [{
+          quantidade: documento.quantidadeVolumes,
+          especie: documento.especieVolumes || undefined,
+          peso_bruto: documento.pesoBrutoTotal || undefined,
+          peso_liquido: documento.pesoLiquidoTotal || undefined,
+        }]
+      : undefined,
+
+    formas_pagamento: [{
+      forma_pagamento: CODIGO_FORMA_PAGAMENTO[documento.formaPagamento] ?? "90",
+      valor_pagamento: documento.valorTotal,
+    }],
+
+    valor_frete: documento.valorFrete || undefined,
+    valor_seguro: documento.valorSeguro || undefined,
+    valor_desconto: documento.valorDesconto || undefined,
+    valor_outras_despesas: documento.outrasDespesas || undefined,
+    valor_ipi: documento.valorIpi || undefined,
+    valor_bc_icms: documento.baseCalculoIcms || undefined,
+    valor_icms: documento.valorIcms || undefined,
+    valor_bc_icms_st: documento.baseCalculoIcmsSt || undefined,
+    valor_icms_st: documento.valorIcmsSt || undefined,
+
+    informacoes_adicionais_contribuinte: documento.informacoesComplementares || undefined,
 
     items: itens.map((item, indice) => ({
       numero_item: indice + 1,
       codigo_produto: item.produto.codigoInterno,
       descricao: item.produto.descricao,
-      ncm: item.produto.ncm,
+      ncm: item.ncmUtilizado || item.produto.ncm,
       cfop: item.cfopUtilizado || item.produto.cfopPadrao,
       unidade_comercial: item.produto.unidade,
       quantidade_comercial: item.quantidade,
       valor_unitario_comercial: item.valorUnitario,
       valor_bruto: item.valorTotal,
       icms_origem: item.produto.origemMercadoria || "0",
-      icms_situacao_tributaria: item.produto.cstIcms || item.produto.csosn,
+      icms_situacao_tributaria: item.cstUtilizado || item.produto.cstIcms || item.produto.csosn,
     })),
   };
 }

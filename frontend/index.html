@@ -1706,6 +1706,7 @@ function NotasFiscaisView() {
   const [erro, setErro] = useState(null);
   const [editando, setEditando] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [processando, setProcessando] = useState(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -1738,6 +1739,36 @@ function NotasFiscaisView() {
       carregar();
     } catch (e) {
       alert(`Não foi possível cancelar: ${e.message}`);
+    }
+  };
+
+  // Passo 2 do fluxo: envia o rascunho pra Focus NFe. A emissão fiscal de
+  // verdade exige um token da Focus NFe configurado no backend — sem isso,
+  // essa chamada volta com erro do provedor (a nota fica "Rejeitado" com o
+  // motivo explicando o que faltou).
+  const emitirNota = async (id) => {
+    if (!window.confirm("Emitir essa nota fiscal? Depois de emitida ela não pode mais ser editada.")) return;
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível emitir: ${e.message}`);
+      carregar();
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const consultarStatusNota = async (id) => {
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}/status`);
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível consultar: ${e.message}`);
+    } finally {
+      setProcessando(null);
     }
   };
 
@@ -1785,6 +1816,7 @@ function NotasFiscaisView() {
               <th>Cliente</th>
               <th>Valor total</th>
               <th>Status</th>
+              <th>Chave / Motivo</th>
               <th>Emissão</th>
               <th className="actions-col"></th>
             </tr>
@@ -1796,6 +1828,9 @@ function NotasFiscaisView() {
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
                 <td>{STATUS_DOCUMENTO_LABEL[nota.status] || nota.status}</td>
+                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || ""}>
+                  {nota.chaveAcesso || nota.motivoRejeicao || "—"}
+                </td>
                 <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
                 <td className="actions-col">
                   {nota.status === "rascunho" && (
@@ -1803,10 +1838,28 @@ function NotasFiscaisView() {
                       <button className="icon-btn" onClick={() => { setEditando(nota); setMostrarForm(true); }} aria-label="Editar">
                         <Pencil size={15} />
                       </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                        disabled={processando === nota.id}
+                        onClick={() => emitirNota(nota.id)}
+                      >
+                        {processando === nota.id ? "Emitindo…" : "Emitir"}
+                      </button>
                       <button className="icon-btn icon-btn-danger" onClick={() => cancelarNota(nota.id)} aria-label="Cancelar">
                         <Trash2 size={15} />
                       </button>
                     </>
+                  )}
+                  {nota.status === "enviado" && (
+                    <button
+                      className="btn"
+                      style={{ padding: "4px 10px", fontSize: 12 }}
+                      disabled={processando === nota.id}
+                      onClick={() => consultarStatusNota(nota.id)}
+                    >
+                      {processando === nota.id ? "Consultando…" : "Consultar status"}
+                    </button>
                   )}
                 </td>
               </tr>

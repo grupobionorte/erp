@@ -238,12 +238,16 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       empresa: true,
       destinatario: { include: { endereco: true } },
       itens: { include: { produto: true } },
+      transportadora: true,
       veiculo: true,
       documentosVinculados: true,
     },
   });
 
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
   if (documento.status !== "rascunho") {
     return res.status(409).json({ erro: `Documento já está em status "${documento.status}"` });
   }
@@ -257,6 +261,9 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
           empresa: documento.empresa,
           destinatario: documento.destinatario,
           itens: documento.itens,
+          documento,
+          transportadora: documento.transportadora,
+          veiculo: documento.veiculo,
         })
       : documento.tipo === "CTe"
       ? focusNfe.montarPayloadCte({
@@ -297,6 +304,9 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
 
   const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
   const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });

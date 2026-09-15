@@ -280,6 +280,19 @@ model DocumentoFiscal {
   dataSaida               DateTime? @map("data_saida")
   informacoesComplementares String? @map("informacoes_complementares")
 
+  // Mais campos de cabeçalho da NFe.
+  finalidadeOperacao  String?  @map("finalidade_operacao") // Normal, Devolução, Complementar, Ajuste
+  consumidorFinal     Boolean? @default(false) @map("consumidor_final")
+  indicadorPresenca   String?  @map("indicador_presenca")  // Presencial, Internet, Teleatendimento, Entrega a domicílio, Não se aplica
+  formaPagamento      String?  @map("forma_pagamento")
+  valorFrete          Float?   @map("valor_frete")
+  valorSeguro         Float?   @map("valor_seguro")
+  valorDesconto       Float?   @map("valor_desconto")
+  quantidadeVolumes   Int?     @map("quantidade_volumes")
+  especieVolumes      String?  @map("especie_volumes")
+  pesoBrutoTotal      Float?   @map("peso_bruto_total")
+  pesoLiquidoTotal    Float?   @map("peso_liquido_total")
+
   // Usados apenas no MDFe — o condutor não tem cadastro próprio no sistema
   // ainda, então guardamos os dados exigidos pela SEFAZ direto aqui.
   nomeMotorista String? @map("nome_motorista")

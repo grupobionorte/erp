@@ -36,7 +36,11 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // nunca repetir número mesmo com duas pessoas emitindo ao mesmo tempo).
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
-  const { destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens } = req.body;
+  const {
+    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
+    finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
+    valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
+  } = req.body;
 
   if (!empresaId) {
     return res.status(400).json({ erro: "Escolha uma empresa (na tela de login) antes de emitir notas fiscais" });
@@ -65,7 +69,10 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
     };
   });
 
-  const valorTotal = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
+  // Total da nota = soma dos itens + frete + seguro - desconto (mesma
+  // conta que a SEFAZ usa pro vNF da NFe).
+  const totalItens = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
+  const valorTotal = totalItens + (valorFrete || 0) + (valorSeguro || 0) - (valorDesconto || 0);
 
   // Incrementa o contador da empresa antes de usar o número — assim duas
   // notas nunca saem com o mesmo número, mesmo se forem criadas ao mesmo
@@ -90,6 +97,17 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       modalidadeFrete: modalidadeFrete || undefined,
       dataSaida: dataSaida ? new Date(dataSaida) : undefined,
       informacoesComplementares: informacoesComplementares || undefined,
+      finalidadeOperacao: finalidadeOperacao || undefined,
+      consumidorFinal: typeof consumidorFinal === "boolean" ? consumidorFinal : undefined,
+      indicadorPresenca: indicadorPresenca || undefined,
+      formaPagamento: formaPagamento || undefined,
+      valorFrete: valorFrete || undefined,
+      valorSeguro: valorSeguro || undefined,
+      valorDesconto: valorDesconto || undefined,
+      quantidadeVolumes: quantidadeVolumes || undefined,
+      especieVolumes: especieVolumes || undefined,
+      pesoBrutoTotal: pesoBrutoTotal || undefined,
+      pesoLiquidoTotal: pesoLiquidoTotal || undefined,
       valorTotal,
       itens: { create: itensCalculados },
     },
@@ -320,10 +338,17 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const {
     destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
+    finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
+    valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
   } = req.body;
 
   let dadosItens = {};
   let valorTotal = existente.valorTotal;
+  // Frete/seguro/desconto podem vir atualizados mesmo sem mexer nos itens
+  // — se não vierem no corpo, mantém o que já estava salvo.
+  const freteAtual = valorFrete ?? existente.valorFrete ?? 0;
+  const seguroAtual = valorSeguro ?? existente.valorSeguro ?? 0;
+  const descontoAtual = valorDesconto ?? existente.valorDesconto ?? 0;
 
   if (itens?.length) {
     const produtos = await prisma.produto.findMany({ where: { id: { in: itens.map((i) => i.produtoId) } } });
@@ -339,7 +364,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
         cfopUtilizado: item.cfopUtilizado || produto.cfopPadrao,
       };
     });
-    valorTotal = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
+    const totalItens = itensCalculados.reduce((soma, i) => soma + i.valorTotal, 0);
+    valorTotal = totalItens + freteAtual + seguroAtual - descontoAtual;
     // Troca os itens antigos pelos novos — mais simples do que tentar
     // casar item a item, e o documento ainda é só um rascunho.
     await prisma.documentoItem.deleteMany({ where: { documentoId: id } });
@@ -348,6 +374,11 @@ router.put("/:id", asyncHandler(async (req, res) => {
     // CTe não tem itens de produto — o valor da prestação é digitado
     // direto (não é calculado a partir de uma lista).
     valorTotal = valorTotalManual;
+  } else if (valorFrete != null || valorSeguro != null || valorDesconto != null) {
+    // Só mexeram no frete/seguro/desconto, sem reenviar os itens —
+    // recalcula o total em cima dos itens que já existiam.
+    const totalItensExistente = valorTotal - (existente.valorFrete || 0) - (existente.valorSeguro || 0) + (existente.valorDesconto || 0);
+    valorTotal = totalItensExistente + freteAtual + seguroAtual - descontoAtual;
   }
 
   const documento = await prisma.documentoFiscal.update({
@@ -364,6 +395,17 @@ router.put("/:id", asyncHandler(async (req, res) => {
       modalidadeFrete: modalidadeFrete ?? undefined,
       dataSaida: dataSaida ? new Date(dataSaida) : undefined,
       informacoesComplementares: informacoesComplementares ?? undefined,
+      finalidadeOperacao: finalidadeOperacao ?? undefined,
+      consumidorFinal: typeof consumidorFinal === "boolean" ? consumidorFinal : undefined,
+      indicadorPresenca: indicadorPresenca ?? undefined,
+      formaPagamento: formaPagamento ?? undefined,
+      valorFrete: valorFrete ?? undefined,
+      valorSeguro: valorSeguro ?? undefined,
+      valorDesconto: valorDesconto ?? undefined,
+      quantidadeVolumes: quantidadeVolumes ?? undefined,
+      especieVolumes: especieVolumes ?? undefined,
+      pesoBrutoTotal: pesoBrutoTotal ?? undefined,
+      pesoLiquidoTotal: pesoLiquidoTotal ?? undefined,
       valorTotal,
       ...dadosItens,
     },

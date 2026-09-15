@@ -1253,6 +1253,9 @@ function EmissaoView() {
 // tem um formulário próprio em vez de usar o Field/RecordForm genérico.
 
 const MODALIDADES_FRETE = ["Sem frete", "Por conta do emitente", "Por conta do destinatário", "Por conta de terceiros"];
+const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"];
+const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
+const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, onSave, onCancel }) {
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
@@ -1261,6 +1264,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
   const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
+  const [finalidadeOperacao, setFinalidadeOperacao] = useState(nota?.finalidadeOperacao || "Normal");
+  const [consumidorFinal, setConsumidorFinal] = useState(nota?.consumidorFinal ?? false);
+  const [indicadorPresenca, setIndicadorPresenca] = useState(nota?.indicadorPresenca || "Não se aplica");
+  const [formaPagamento, setFormaPagamento] = useState(nota?.formaPagamento || "Dinheiro");
+  const [valorFrete, setValorFrete] = useState(nota?.valorFrete ?? "");
+  const [valorSeguro, setValorSeguro] = useState(nota?.valorSeguro ?? "");
+  const [valorDesconto, setValorDesconto] = useState(nota?.valorDesconto ?? "");
+  const [quantidadeVolumes, setQuantidadeVolumes] = useState(nota?.quantidadeVolumes ?? "");
+  const [especieVolumes, setEspecieVolumes] = useState(nota?.especieVolumes || "");
+  const [pesoBrutoTotal, setPesoBrutoTotal] = useState(nota?.pesoBrutoTotal ?? "");
+  const [pesoLiquidoTotal, setPesoLiquidoTotal] = useState(nota?.pesoLiquidoTotal ?? "");
   const [itens, setItens] = useState(() =>
     nota?.itens?.length
       ? nota.itens.map(i => ({ produtoId: String(i.produtoId), quantidade: i.quantidade, valorUnitario: i.valorUnitario, cfopUtilizado: i.cfopUtilizado || "" }))
@@ -1287,7 +1301,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const adicionarItem = () => setItens(prev => [...prev, { produtoId: "", quantidade: 1, valorUnitario: "", cfopUtilizado: "" }]);
   const removerItem = (index) => setItens(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
 
-  const valorTotalGeral = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
+  const totalItens = itens.reduce((soma, it) => soma + (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0), 0);
+  const valorTotalGeral = totalItens + (Number(valorFrete) || 0) + (Number(valorSeguro) || 0) - (Number(valorDesconto) || 0);
 
   const salvar = async () => {
     if (!destinatarioId) { setErro("Selecione o cliente."); return; }
@@ -1303,6 +1318,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         modalidadeFrete,
         dataSaida: dataSaida || undefined,
         informacoesComplementares,
+        finalidadeOperacao,
+        consumidorFinal,
+        indicadorPresenca,
+        formaPagamento,
+        valorFrete: valorFrete !== "" ? Number(valorFrete) : undefined,
+        valorSeguro: valorSeguro !== "" ? Number(valorSeguro) : undefined,
+        valorDesconto: valorDesconto !== "" ? Number(valorDesconto) : undefined,
+        quantidadeVolumes: quantidadeVolumes !== "" ? Number(quantidadeVolumes) : undefined,
+        especieVolumes: especieVolumes || undefined,
+        pesoBrutoTotal: pesoBrutoTotal !== "" ? Number(pesoBrutoTotal) : undefined,
+        pesoLiquidoTotal: pesoLiquidoTotal !== "" ? Number(pesoLiquidoTotal) : undefined,
         itens: itensValidos.map(it => ({
           produtoId: Number(it.produtoId),
           quantidade: Number(it.quantidade),
@@ -1342,9 +1368,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             </select>
           </div>
 
-          <div className="field-group">
-            <label className="field-label">Natureza da operação</label>
-            <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Natureza da operação</label>
+              <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Finalidade da operação</label>
+              <select value={finalidadeOperacao} onChange={e => setFinalidadeOperacao(e.target.value)}>
+                {FINALIDADES_OPERACAO.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="endereco-grid">
@@ -1359,6 +1393,26 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               </select>
             </div>
           </div>
+
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Presença do comprador</label>
+              <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
+                {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Forma de pagamento</label>
+              <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
+                {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18, cursor: "pointer", fontSize: 13, color: "#33332f" }}>
+            <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
+            <span>Venda para consumidor final</span>
+          </label>
 
           <div className="field-group">
             <label className="field-label">Itens<span className="req">*</span></label>
@@ -1393,6 +1447,44 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               );
             })}
             <button type="button" className="btn" onClick={adicionarItem}><Plus size={14} /> Adicionar item</button>
+          </div>
+
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Valor do frete (R$)</label>
+              <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Valor do seguro (R$)</label>
+              <input type="number" value={valorSeguro} onChange={e => setValorSeguro(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="field-group">
+            <label className="field-label">Desconto (R$)</label>
+            <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
+          </div>
+
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Volumes (qtd.)</label>
+              <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Espécie dos volumes</label>
+              <input placeholder="Ex: Caixas, Sacos, Fardos" value={especieVolumes} onChange={e => setEspecieVolumes(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="endereco-grid">
+            <div className="field-group">
+              <label className="field-label">Peso bruto total (kg)</label>
+              <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Peso líquido total (kg)</label>
+              <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
+            </div>
           </div>
 
           <div className="field-group">

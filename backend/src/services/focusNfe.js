@@ -44,7 +44,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     cpf_destinatario: destinatario.tipo === "pessoa_fisica" ? destinatario.documento : undefined,
     cnpj_destinatario: destinatario.tipo === "pessoa_juridica" ? destinatario.documento : undefined,
     inscricao_estadual_destinatario: destinatario.ie || undefined,
-    indicador_ie_destinatario: destinatario.indicadorIe === "Contribuinte" ? 1 : destinatario.indicadorIe === "Contribuinte Isento" ? 2 : 9,
+    indicador_inscricao_estadual_destinatario: destinatario.indicadorIe === "Contribuinte" ? 1 : destinatario.indicadorIe === "Contribuinte Isento" ? 2 : 9,
     logradouro_destinatario: destinatario.endereco?.logradouro,
     numero_destinatario: destinatario.endereco?.numero,
     complemento_destinatario: destinatario.endereco?.complemento || undefined,
@@ -78,10 +78,10 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     valor_desconto: documento.valorDesconto || undefined,
     valor_outras_despesas: documento.outrasDespesas || undefined,
     valor_ipi: documento.valorIpi || undefined,
-    valor_bc_icms: documento.baseCalculoIcms || undefined,
-    valor_icms: documento.valorIcms || undefined,
-    valor_bc_icms_st: documento.baseCalculoIcmsSt || undefined,
-    valor_icms_st: documento.valorIcmsSt || undefined,
+    icms_base_calculo: documento.baseCalculoIcms || undefined,
+    icms_valor_total: documento.valorIcms || undefined,
+    icms_base_calculo_st: documento.baseCalculoIcmsSt || undefined,
+    icms_valor_total_st: documento.valorIcmsSt || undefined,
 
     informacoes_adicionais_contribuinte: documento.informacoesComplementares || undefined,
 
@@ -89,7 +89,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       numero_item: indice + 1,
       codigo_produto: item.produto.codigoInterno,
       descricao: item.produto.descricao,
-      ncm: item.ncmUtilizado || item.produto.ncm,
+      codigo_ncm: item.ncmUtilizado || item.produto.ncm,
       cfop: item.cfopUtilizado || item.produto.cfopPadrao,
       unidade_comercial: item.produto.unidade,
       quantidade_comercial: item.quantidade,
@@ -97,6 +97,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       valor_bruto: item.valorTotal,
       icms_origem: item.produto.origemMercadoria || "0",
       icms_situacao_tributaria: item.cstUtilizado || item.produto.cstIcms || item.produto.csosn,
+      cest: item.produto.cest || undefined,
     })),
   };
 }

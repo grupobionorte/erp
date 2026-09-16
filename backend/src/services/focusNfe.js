@@ -219,23 +219,11 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
       ? documento.notasDoCte.map((nota) => ({ chave_nfe: nota.chaveAcesso }))
       : undefined,
 
-    // Veículo/condutor — nomes de campo ainda a confirmar com a Focus NFe
-    // caso a emissão real reclame (assim como fizemos com a NFe).
-    modal_rodoviario: {
-      veiculos: [
-        veiculo && {
-          placa: veiculo.placa,
-          rntrc: undefined,
-          uf: undefined,
-        },
-        veiculoReboque && {
-          placa: veiculoReboque.placa,
-          rntrc: undefined,
-          uf: undefined,
-        },
-      ].filter(Boolean),
-      condutores: documento.nomeMotorista ? [{ nome: documento.nomeMotorista, cpf: (documento.cpfMotorista || "").replace(/\D/g, "") }] : undefined,
-    },
+    // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores
+    // nesse grupo — isso é coisa do MDFe (confirmado com o retorno da
+    // Focus: "Campo 'veiculos' não é válido para o tipo de modal
+    // especificado"). O CTe rodoviário só pede o RNTRC — deixamos de fora
+    // por enquanto porque ainda não coletamos isso no cadastro.
   };
 }
 

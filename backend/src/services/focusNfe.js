@@ -102,6 +102,16 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
         ? (item.produto.csosn || item.cstUtilizado || item.produto.cstIcms)
         : (item.cstUtilizado || item.produto.cstIcms),
       cest: item.produto.cest || undefined,
+      // PIS/COFINS vêm do cadastro do produto agora. "07" (isenta) fica
+      // como plano B só se o produto ainda não tiver isso configurado.
+      pis_situacao_tributaria: item.produto.pisCst || "07",
+      pis_base_calculo: item.produto.pisAliquota ? item.valorTotal : undefined,
+      pis_aliquota_porcentual: item.produto.pisAliquota || undefined,
+      pis_valor: item.produto.pisAliquota ? item.valorTotal * (item.produto.pisAliquota / 100) : undefined,
+      cofins_situacao_tributaria: item.produto.cofinsCst || "07",
+      cofins_base_calculo: item.produto.cofinsAliquota ? item.valorTotal : undefined,
+      cofins_aliquota_porcentual: item.produto.cofinsAliquota || undefined,
+      cofins_valor: item.produto.cofinsAliquota ? item.valorTotal * (item.produto.cofinsAliquota / 100) : undefined,
     })),
   };
 }

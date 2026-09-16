@@ -252,6 +252,10 @@ model Produto {
   cstIcms          String?  @map("cst_icms")
   csosn            String?
   aliquotaIcms     Float?   @map("aliquota_icms")
+  pisCst           String?  @map("pis_cst")
+  pisAliquota      Float?   @map("pis_aliquota")
+  cofinsCst        String?  @map("cofins_cst")
+  cofinsAliquota   Float?   @map("cofins_aliquota")
   valorUnitario    Float?   @map("valor_unitario")
   pesoLiquidoKg    Float?   @map("peso_liquido_kg")
   ativo            Boolean  @default(true)

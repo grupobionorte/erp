@@ -226,6 +226,14 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     valor_total_carga: documento.valorTotal,
     produto_predominante: documento.especieVolumes || documento.naturezaOperacao || "Carga geral",
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
+    // Obrigatório (schema exige pelo menos um) — ainda não temos um campo
+    // de peso bruto no formulário do CTe, então usamos o que tiver
+    // disponível como uma estimativa mínima.
+    quantidade_carga: [{
+      codigo_unidade_medida: documento.pesoBrutoTotal ? "01" : "03",
+      tipo_medida: documento.pesoBrutoTotal ? "PESO BRUTO" : "UNIDADE",
+      quantidade: documento.pesoBrutoTotal || documento.quantidadeVolumes || 1,
+    }],
     valor_carga_averbacao: documento.valorTotal,
 
     informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,

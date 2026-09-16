@@ -543,4 +543,66 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   return res.status(409).json({ erro: `Documento em status "${existente.status}" não pode ser cancelado` });
 }));
 
+// Carta de Correção Eletrônica — só pra NFe já autorizada. A SEFAZ exige
+// entre 15 e 1000 caracteres, e permite até 20 por nota.
+router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const { texto } = req.body;
+
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "NFe") {
+    return res.status(400).json({ erro: "Carta de correção só está disponível para NFe" });
+  }
+  if (documento.status !== "autorizado") {
+    return res.status(409).json({ erro: "Só é possível corrigir uma nota já autorizada" });
+  }
+  if (!texto || texto.trim().length < 15 || texto.trim().length > 1000) {
+    return res.status(400).json({ erro: "O texto da correção precisa ter entre 15 e 1000 caracteres" });
+  }
+
+  const totalExistentes = await prisma.cartaCorrecao.count({ where: { documentoId: id } });
+  if (totalExistentes >= 20) {
+    return res.status(409).json({ erro: "Essa nota já tem 20 cartas de correção, o máximo permitido pela SEFAZ" });
+  }
+
+  const ref = `nfe-${documento.id}`;
+  try {
+    const resultado = await focusNfe.emitirCartaCorrecao({ ref, texto: texto.trim() });
+    const carta = await prisma.cartaCorrecao.create({
+      data: {
+        documentoId: id,
+        texto: texto.trim(),
+        numeroSequencial: resultado.numero_sequencial_evento || totalExistentes + 1,
+        status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
+        motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
+      },
+    });
+    res.status(201).json(carta);
+  } catch (erro) {
+    const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    const carta = await prisma.cartaCorrecao.create({
+      data: { documentoId: id, texto: texto.trim(), numeroSequencial: totalExistentes + 1, status: "erro", motivoErro: detalheProvedor },
+    });
+    res.status(502).json({ erro: "Falha ao enviar a correção para o provedor", detalhe: detalheProvedor, carta });
+  }
+}));
+
+router.get("/:id/carta-correcao", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  const cartas = await prisma.cartaCorrecao.findMany({
+    where: { documentoId: id },
+    orderBy: { numeroSequencial: "asc" },
+  });
+  res.json(cartas);
+}));
+
 module.exports = router;

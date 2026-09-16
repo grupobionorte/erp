@@ -207,6 +207,15 @@ async function cancelar({ tipo, ref, justificativa }) {
   return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
 }
 
+// Carta de Correção Eletrônica — só existe pra NFe. A correção deve ter
+// entre 15 e 1000 caracteres, e não serve pra corrigir valores, impostos,
+// dados cadastrais do emitente/destinatário ou datas — só detalhes como
+// descrição, endereço de entrega, etc.
+async function emitirCartaCorrecao({ ref, texto }) {
+  const { data } = await client.post(`/v2/nfe/${ref}/carta_correcao`, { correcao: texto });
+  return data;
+}
+
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
@@ -223,6 +232,7 @@ module.exports = {
   urlCompleta,
   enviarPorEmail,
   cancelar,
+  emitirCartaCorrecao,
   montarPayloadMdfe,
   emitir,
   consultar,

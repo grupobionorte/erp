@@ -1719,6 +1719,102 @@ const STATUS_DOCUMENTO_LABEL = {
   cancelado: "Cancelado",
 };
 
+function CartaCorrecaoModal({ nota, onClose }) {
+  const [historico, setHistorico] = useState(null);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const carregarHistorico = useCallback(async () => {
+    try {
+      const dados = await apiRequest(`/documentos-fiscais/${nota.id}/carta-correcao`);
+      setHistorico(dados);
+    } catch {
+      setHistorico([]);
+    }
+  }, [nota.id]);
+
+  useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
+
+  const enviar = async () => {
+    const limpo = texto.trim();
+    if (limpo.length < 15 || limpo.length > 1000) {
+      setErro("O texto precisa ter entre 15 e 1000 caracteres.");
+      return;
+    }
+    setErro("");
+    setEnviando(true);
+    try {
+      await apiRequest(`/documentos-fiscais/${nota.id}/carta-correcao`, {
+        method: "POST",
+        body: JSON.stringify({ texto: limpo }),
+      });
+      setTexto("");
+      carregarHistorico();
+    } catch (e) {
+      setErro(`${e.message}${e.detalhe ? ` — ${e.detalhe}` : ""}`);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ width: 560 }}>
+        <div className="modal-header">
+          <h3>Carta de correção — Nota {nota.numero}/{nota.serie ?? "—"}</h3>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginTop: 0 }}>
+            Não serve pra corrigir valores, impostos, dados do cliente/emitente ou datas — só detalhes como descrição,
+            endereço de entrega, etc. Nesses outros casos, a nota precisa ser cancelada.
+          </p>
+
+          <div className="field-group">
+            <label className="field-label">Texto da correção<span className="req">*</span></label>
+            <textarea
+              value={texto}
+              onChange={e => setTexto(e.target.value)}
+              rows={4}
+              maxLength={1000}
+              style={{ width: "100%", boxSizing: "border-box", fontFamily: "inherit", fontSize: 13, padding: 8 }}
+            />
+            <p className="hint">{texto.trim().length}/1000 caracteres (mínimo 15)</p>
+          </div>
+
+          {erro && <p className="error-text">{erro}</p>}
+
+          <button className="btn btn-primary" onClick={enviar} disabled={enviando}>
+            {enviando ? "Enviando…" : "Enviar correção"}
+          </button>
+
+          <div className="nf-section" style={{ marginTop: 20 }}>
+            <h4 className="nf-section-title">Histórico</h4>
+            {historico === null && <p className="hint">Carregando…</p>}
+            {historico?.length === 0 && <p className="hint">Nenhuma correção enviada ainda.</p>}
+            {historico?.map(c => (
+              <div key={c.id} style={{ borderBottom: "1px solid #eeece4", padding: "8px 0", fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#8a887f", fontSize: 11.5 }}>
+                  <span>Nº {c.numeroSequencial} · {new Date(c.criadoEm).toLocaleString("pt-BR")}</span>
+                  <span style={{ fontWeight: 600, color: c.status === "erro" ? "#a32d2d" : "#27500a" }}>
+                    {c.status === "erro" ? "Erro" : c.status === "registrada" ? "Registrada" : "Pendente"}
+                  </span>
+                </div>
+                <p style={{ margin: "4px 0 0" }}>{c.texto}</p>
+                {c.motivoErro && <p style={{ margin: "4px 0 0", color: "#a32d2d", fontSize: 12 }}>{c.motivoErro}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NotasFiscaisView() {
   const { items: clientes } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
@@ -1732,6 +1828,7 @@ function NotasFiscaisView() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [processando, setProcessando] = useState(null);
   const [menuAberto, setMenuAberto] = useState(null);
+  const [notaParaCorrigir, setNotaParaCorrigir] = useState(null);
 
   useEffect(() => {
     const fechar = () => setMenuAberto(null);
@@ -1974,6 +2071,12 @@ Detalhe: ${e.detalhe}` : ""}`);
                             <FileText size={14} /> {processando === nota.id ? "Enviando…" : "Enviar por e-mail"}
                           </button>
                           <button
+                            className="nf-dropdown-item"
+                            onClick={() => { setMenuAberto(null); setNotaParaCorrigir(nota); }}
+                          >
+                            <Pencil size={14} /> Carta de correção
+                          </button>
+                          <button
                             className="nf-dropdown-item nf-dropdown-item-danger"
                             disabled={processando === nota.id}
                             onClick={() => { setMenuAberto(null); cancelarNotaAutorizada(nota.id); }}
@@ -2002,6 +2105,9 @@ Detalhe: ${e.detalhe}` : ""}`);
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />
+      )}
+      {notaParaCorrigir && (
+        <CartaCorrecaoModal nota={notaParaCorrigir} onClose={() => setNotaParaCorrigir(null)} />
       )}
     </div>
   );

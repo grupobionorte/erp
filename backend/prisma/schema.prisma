@@ -290,6 +290,7 @@ model DocumentoFiscal {
   motivoRejeicao       String?                @map("motivo_rejeicao")
   justificativaCancelamento String?           @map("justificativa_cancelamento")
   valorTotal           Float?                 @map("valor_total")
+  cartasCorrecao       CartaCorrecao[]
 
   // Cabeçalho da NFe — os campos que faltavam pra virar um cadastro de
   // verdade, e não só um rascunho com cliente + itens.
@@ -356,6 +357,22 @@ model DocumentoFiscal {
   documentosVinculados DocumentoFiscal[] @relation("DocumentosDoMdfe")
 
   @@map("documentos_fiscais")
+}
+
+// Carta de Correção Eletrônica (CC-e) — histórico de correções feitas
+// numa NFe já autorizada. A SEFAZ permite até 20 por nota, cada uma
+// substituindo o entendimento das anteriores (não apaga, só complementa).
+model CartaCorrecao {
+  id               Int      @id @default(autoincrement())
+  documentoId      Int      @map("documento_id")
+  documento        DocumentoFiscal @relation(fields: [documentoId], references: [id])
+  numeroSequencial Int?     @map("numero_sequencial")
+  texto            String
+  status           String   @default("pendente") // pendente | registrada | erro
+  motivoErro       String?  @map("motivo_erro")
+  criadoEm         DateTime @default(now()) @map("criado_em")
+
+  @@map("cartas_correcao")
 }
 
 model DocumentoItem {

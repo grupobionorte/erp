@@ -842,21 +842,27 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
         <div className="modal-header">
           <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          {camposVisiveis.map(f => (
-            <Field
-              key={f.key}
-              field={f}
-              value={data[f.key]}
-              onChange={v => setField(f.key, v)}
-              disabled={f.readOnlyOnEdit && editando}
-            />
-          ))}
+          <div className="cadastro-fields-grid">
+            {camposVisiveis.map(f => (
+              <div
+                key={f.key}
+                style={["endereco", "empresas-multiselect", "imagem-upload"].includes(f.type) ? { gridColumn: "1 / -1" } : undefined}
+              >
+                <Field
+                  field={f}
+                  value={data[f.key]}
+                  onChange={v => setField(f.key, v)}
+                  disabled={f.readOnlyOnEdit && editando}
+                />
+              </div>
+            ))}
+          </div>
           {error && <p className="error-text">{error}</p>}
         </div>
         <div className="modal-footer">
@@ -2608,6 +2614,8 @@ function ErpBiomassa() {
         .modal-body { padding: 1rem 1.25rem; overflow-y: auto; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border, #e5e3da); }
         .field-group { margin-bottom: 12px; }
+        .cadastro-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        @media (max-width: 640px) { .cadastro-fields-grid { grid-template-columns: 1fr; } }
         .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary, #6b6b68); margin-bottom: 4px; }
         .req { color: #a32d2d; margin-left: 2px; }
         .field-group input, .field-group select {

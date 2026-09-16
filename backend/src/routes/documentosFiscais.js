@@ -507,16 +507,40 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (existente.status !== "rascunho" && existente.status !== "rejeitado") {
-    return res.status(409).json({ erro: "Só é possível cancelar documentos em rascunho ou rejeitados" });
+
+  // Rascunho ou rejeitado: nunca chegou a ser enviado pra SEFAZ, então
+  // cancelar aqui é só marcar como cancelado no nosso banco.
+  if (existente.status === "rascunho" || existente.status === "rejeitado") {
+    await prisma.documentoFiscal.update({ where: { id }, data: { status: "cancelado" } });
+    return res.status(204).send();
   }
 
-  await prisma.documentoFiscal.update({
-    where: { id },
-    data: { status: "cancelado" },
-  });
+  // Autorizado: precisa mandar um evento de cancelamento de verdade pra
+  // SEFAZ, com justificativa (entre 15 e 255 caracteres).
+  if (existente.status === "autorizado") {
+    const { justificativa } = req.body;
+    if (!justificativa || justificativa.trim().length < 15) {
+      return res.status(400).json({ erro: "A justificativa precisa ter pelo menos 15 caracteres" });
+    }
 
-  res.status(204).send();
+    const ref = `${existente.tipo.toLowerCase()}-${existente.id}`;
+    try {
+      const resultado = await focusNfe.cancelar({ tipo: existente.tipo, ref, justificativa: justificativa.trim() });
+      if (resultado.status !== "cancelado") {
+        return res.status(409).json({ erro: `SEFAZ não confirmou o cancelamento (status: ${resultado.status})`, detalhe: resultado });
+      }
+      const atualizado = await prisma.documentoFiscal.update({
+        where: { id },
+        data: { status: "cancelado", justificativaCancelamento: justificativa.trim() },
+      });
+      return res.json(atualizado);
+    } catch (erro) {
+      const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+      return res.status(502).json({ erro: "Falha ao cancelar junto ao provedor", detalhe: detalheProvedor });
+    }
+  }
+
+  return res.status(409).json({ erro: `Documento em status "${existente.status}" não pode ser cancelado` });
 }));
 
 module.exports = router;

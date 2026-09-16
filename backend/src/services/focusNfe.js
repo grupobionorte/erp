@@ -197,6 +197,16 @@ async function enviarPorEmail({ ref, emails }) {
   return data;
 }
 
+// Cancela um documento já autorizado — isso manda um evento real pra
+// SEFAZ, é bem diferente de só apagar um rascunho. A SEFAZ exige uma
+// justificativa entre 15 e 255 caracteres.
+async function cancelar({ tipo, ref, justificativa }) {
+  const { data } = await client.delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
+    params: { justificativa },
+  });
+  return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
+}
+
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
@@ -212,6 +222,7 @@ module.exports = {
   montarPayloadCte,
   urlCompleta,
   enviarPorEmail,
+  cancelar,
   montarPayloadMdfe,
   emitir,
   consultar,

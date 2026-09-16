@@ -288,6 +288,7 @@ model DocumentoFiscal {
   xmlUrl               String?                @map("xml_url")
   pdfUrl               String?                @map("pdf_url")
   motivoRejeicao       String?                @map("motivo_rejeicao")
+  justificativaCancelamento String?           @map("justificativa_cancelamento")
   valorTotal           Float?                 @map("valor_total")
 
   // Cabeçalho da NFe — os campos que faltavam pra virar um cadastro de

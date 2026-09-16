@@ -1769,6 +1769,27 @@ function NotasFiscaisView() {
     }
   };
 
+  // Nota já autorizada — cancelar manda um evento de verdade pra SEFAZ, e
+  // ela exige uma justificativa com pelo menos 15 caracteres.
+  const cancelarNotaAutorizada = async (id) => {
+    const justificativa = window.prompt("Motivo do cancelamento (mínimo 15 caracteres):");
+    if (!justificativa) return;
+    if (justificativa.trim().length < 15) {
+      alert("A justificativa precisa ter pelo menos 15 caracteres.");
+      return;
+    }
+    if (!window.confirm("Confirmar o cancelamento junto à SEFAZ? Essa ação não pode ser desfeita.")) return;
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE", body: JSON.stringify({ justificativa }) });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível cancelar: ${e.message}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
   // Passo 2 do fluxo: envia o rascunho pra Focus NFe. A emissão fiscal de
   // verdade exige um token da Focus NFe configurado no backend — sem isso,
   // essa chamada volta com erro do provedor (a nota fica "Rejeitado" com o
@@ -1873,8 +1894,10 @@ function NotasFiscaisView() {
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
                 <td>{STATUS_DOCUMENTO_LABEL[nota.status] || nota.status}</td>
-                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || ""}>
-                  {nota.chaveAcesso || nota.motivoRejeicao || "—"}
+                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
+                  {nota.status === "cancelado" && nota.justificativaCancelamento
+                    ? `Cancelada: ${nota.justificativaCancelamento}`
+                    : nota.chaveAcesso || nota.motivoRejeicao || "—"}
                 </td>
                 <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
                 <td className="actions-col" style={{ position: "relative" }}>
@@ -1939,6 +1962,13 @@ function NotasFiscaisView() {
                             onClick={() => { setMenuAberto(null); enviarEmailNota(nota); }}
                           >
                             <FileText size={14} /> {processando === nota.id ? "Enviando…" : "Enviar por e-mail"}
+                          </button>
+                          <button
+                            className="nf-dropdown-item nf-dropdown-item-danger"
+                            disabled={processando === nota.id}
+                            onClick={() => { setMenuAberto(null); cancelarNotaAutorizada(nota.id); }}
+                          >
+                            <Trash2 size={14} /> Cancelar nota (SEFAZ)
                           </button>
                         </>
                       )}

@@ -240,7 +240,7 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // NFe(s) que esse CTe está transportando — a chave de acesso de cada
     // uma, já autorizada.
     nfes: documento.notasDoCte?.length
-      ? documento.notasDoCte.map((nota) => ({ chave_nfe: nota.chaveAcesso }))
+      ? documento.notasDoCte.map((nota) => ({ chave_nfe: (nota.chaveAcesso || "").replace(/^NFe/i, "") }))
       : undefined,
 
     // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores

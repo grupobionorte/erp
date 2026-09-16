@@ -606,8 +606,9 @@ router.get("/:id/carta-correcao", asyncHandler(async (req, res) => {
   res.json(cartas);
 }));
 
-// Consulta a carta de correção específica na Focus NFe pra pegar o status
-// atualizado e o link do PDF, uma vez que a SEFAZ já tenha homologado.
+// A Focus NFe não tem uma consulta separada por carta de correção — o
+// link do PDF/XML da carta mais recente vem junto da consulta normal da
+// nota (mesma que já usamos pra buscar o DANFE).
 router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const cartaId = Number(req.params.cartaId);
@@ -623,13 +624,20 @@ router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) 
 
   const ref = `nfe-${documento.id}`;
   try {
-    const resultado = await focusNfe.consultarCartaCorrecao({ ref, numeroSequencial: carta.numeroSequencial });
+    const resultado = await focusNfe.consultar({ tipo: "NFe", ref });
+    // A Focus só expõe o PDF/XML da carta de correção mais recente por
+    // aqui — se essa não for a mais recente, avisa em vez de inventar
+    // um link.
+    if (Number(resultado.numero_carta_correcao) !== carta.numeroSequencial) {
+      return res.status(409).json({
+        erro: "A Focus só disponibiliza o PDF da carta de correção mais recente — essa já foi substituída por outra mais nova.",
+      });
+    }
     const atualizada = await prisma.cartaCorrecao.update({
       where: { id: cartaId },
       data: {
-        status: resultado.status === "erro_autorizacao" ? "erro" : resultado.status === "autorizado" ? "registrada" : "pendente",
-        motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
-        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf),
+        status: "registrada",
+        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao),
       },
     });
     res.json(atualizada);

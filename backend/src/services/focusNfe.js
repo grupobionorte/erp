@@ -216,14 +216,6 @@ async function emitirCartaCorrecao({ ref, texto }) {
   return data;
 }
 
-// Consulta o status de uma carta de correção específica (pelo número
-// sequencial dela) — é assim que a gente pega o link do PDF depois que a
-// SEFAZ homologa.
-async function consultarCartaCorrecao({ ref, numeroSequencial }) {
-  const { data } = await client.get(`/v2/nfe/${ref}/carta_correcao/${numeroSequencial}`);
-  return data;
-}
-
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
@@ -241,7 +233,6 @@ module.exports = {
   enviarPorEmail,
   cancelar,
   emitirCartaCorrecao,
-  consultarCartaCorrecao,
   montarPayloadMdfe,
   emitir,
   consultar,

@@ -14,6 +14,10 @@ router.get("/nfes-autorizadas", asyncHandler(async (req, res) => {
   if (busca.length < 3) return res.json([]);
 
   const somenteDigitos = busca.replace(/\D/g, "");
+  // "número" da NFe tem no máximo 9 dígitos — uma chave de acesso inteira
+  // (44 dígitos) vira um número gigante que quebra o filtro (Prisma espera
+  // um Int de verdade), então só tenta essa comparação quando faz sentido.
+  const numeroBusca = somenteDigitos && somenteDigitos.length <= 9 ? Number(somenteDigitos) : NaN;
 
   const notas = await prisma.documentoFiscal.findMany({
     where: {
@@ -21,7 +25,8 @@ router.get("/nfes-autorizadas", asyncHandler(async (req, res) => {
       status: "autorizado",
       ...(empresaId ? { empresaId } : {}),
       OR: [
-        ...(somenteDigitos ? [{ chaveAcesso: { contains: somenteDigitos } }, { numero: Number(somenteDigitos) || undefined }] : []),
+        ...(somenteDigitos ? [{ chaveAcesso: { contains: somenteDigitos } }] : []),
+        ...(Number.isSafeInteger(numeroBusca) ? [{ numero: numeroBusca }] : []),
       ],
     },
     include: { destinatario: true },

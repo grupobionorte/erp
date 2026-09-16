@@ -190,6 +190,13 @@ async function consultar({ tipo, ref }) {
   return data; // status pode ser: autorizado | erro_autorizacao | cancelado
 }
 
+// Só existe pra NFe na Focus — manda o DANFE/XML por e-mail pro
+// destinatário (ou pra qualquer e-mail que a gente passar).
+async function enviarPorEmail({ ref, emails }) {
+  const { data } = await client.post(`/v2/nfe/${ref}/email`, { emails });
+  return data;
+}
+
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
@@ -204,6 +211,7 @@ module.exports = {
   montarPayloadNfe,
   montarPayloadCte,
   urlCompleta,
+  enviarPorEmail,
   montarPayloadMdfe,
   emitir,
   consultar,

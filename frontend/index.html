@@ -47,6 +47,7 @@ function Eye(props) { return <IconBase {...props}><path d="M1 12s4-8 11-8 11 8 1
 function EyeOff(props) { return <IconBase {...props}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.7 19.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconBase>; }
 function Shield(props) { return <IconBase {...props}><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></IconBase>; }
 function Settings(props) { return <IconBase {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>; }
+function MoreVertical(props) { return <IconBase {...props}><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></IconBase>; }
 
 </script>
 
@@ -1726,6 +1727,13 @@ function NotasFiscaisView() {
   const [editando, setEditando] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
   const [processando, setProcessando] = useState(null);
+  const [menuAberto, setMenuAberto] = useState(null);
+
+  useEffect(() => {
+    const fechar = () => setMenuAberto(null);
+    document.addEventListener("click", fechar);
+    return () => document.removeEventListener("click", fechar);
+  }, []);
 
   const carregar = useCallback(async () => {
     try {
@@ -1791,6 +1799,24 @@ function NotasFiscaisView() {
     }
   };
 
+  const enviarEmailNota = async (nota) => {
+    const emailPadrao = nota.destinatario?.email || "";
+    const digitado = window.prompt("Enviar o DANFE por e-mail para:", emailPadrao);
+    if (!digitado) return;
+    setProcessando(nota.id);
+    try {
+      await apiRequest(`/documentos-fiscais/${nota.id}/enviar-email`, {
+        method: "POST",
+        body: JSON.stringify({ emails: [digitado] }),
+      });
+      alert(`Enviado para ${digitado}.`);
+    } catch (e) {
+      alert(`Não foi possível enviar: ${e.message}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
   if (notas === null) {
     return <div className="loading">Carregando notas fiscais…</div>;
   }
@@ -1851,55 +1877,72 @@ function NotasFiscaisView() {
                   {nota.chaveAcesso || nota.motivoRejeicao || "—"}
                 </td>
                 <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
-                <td className="actions-col">
-                  {(nota.status === "rascunho" || nota.status === "rejeitado") && (
-                    <>
-                      <button className="icon-btn" onClick={() => { setEditando(nota); setMostrarForm(true); }} aria-label="Editar">
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        style={{ padding: "4px 10px", fontSize: 12 }}
-                        disabled={processando === nota.id}
-                        onClick={() => emitirNota(nota.id)}
-                      >
-                        {processando === nota.id ? "Emitindo…" : nota.status === "rejeitado" ? "Tentar de novo" : "Emitir"}
-                      </button>
-                      <button className="icon-btn icon-btn-danger" onClick={() => cancelarNota(nota.id)} aria-label="Cancelar">
-                        <Trash2 size={15} />
-                      </button>
-                    </>
-                  )}
-                  {nota.status === "enviado" && (
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                      disabled={processando === nota.id}
-                      onClick={() => consultarStatusNota(nota.id)}
-                    >
-                      {processando === nota.id ? "Consultando…" : "Consultar status"}
-                    </button>
-                  )}
-                  {nota.status === "autorizado" && nota.pdfUrl?.startsWith("http") && (
-                    <a
-                      className="btn btn-primary"
-                      style={{ padding: "4px 10px", fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-                      href={nota.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Baixar DANFE
-                    </a>
-                  )}
-                  {nota.status === "autorizado" && !nota.pdfUrl?.startsWith("http") && (
-                    <button
-                      className="btn"
-                      style={{ padding: "4px 10px", fontSize: 12 }}
-                      disabled={processando === nota.id}
-                      onClick={() => consultarStatusNota(nota.id)}
-                    >
-                      {processando === nota.id ? "Corrigindo…" : "Corrigir link do DANFE"}
-                    </button>
+                <td className="actions-col" style={{ position: "relative" }}>
+                  <button
+                    className="icon-btn"
+                    aria-label="Ações"
+                    onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === nota.id ? null : nota.id); }}
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                  {menuAberto === nota.id && (
+                    <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
+                      {(nota.status === "rascunho" || nota.status === "rejeitado") && (
+                        <>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setEditando(nota); setMostrarForm(true); }}>
+                            <Pencil size={14} /> Editar
+                          </button>
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === nota.id}
+                            onClick={() => { setMenuAberto(null); emitirNota(nota.id); }}
+                          >
+                            <FileText size={14} /> {processando === nota.id ? "Emitindo…" : nota.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir nota"}
+                          </button>
+                          <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarNota(nota.id); }}>
+                            <Trash2 size={14} /> Cancelar
+                          </button>
+                        </>
+                      )}
+                      {nota.status === "enviado" && (
+                        <button
+                          className="nf-dropdown-item"
+                          disabled={processando === nota.id}
+                          onClick={() => { setMenuAberto(null); consultarStatusNota(nota.id); }}
+                        >
+                          <Search size={14} /> {processando === nota.id ? "Consultando…" : "Consultar status"}
+                        </button>
+                      )}
+                      {nota.status === "autorizado" && (
+                        <>
+                          {nota.pdfUrl?.startsWith("http") ? (
+                            <a className="nf-dropdown-item" href={nota.pdfUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar DANFE
+                            </a>
+                          ) : (
+                            <button
+                              className="nf-dropdown-item"
+                              disabled={processando === nota.id}
+                              onClick={() => { setMenuAberto(null); consultarStatusNota(nota.id); }}
+                            >
+                              <FileText size={14} /> {processando === nota.id ? "Corrigindo…" : "Corrigir link do DANFE"}
+                            </button>
+                          )}
+                          {nota.xmlUrl?.startsWith("http") && (
+                            <a className="nf-dropdown-item" href={nota.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar XML
+                            </a>
+                          )}
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === nota.id}
+                            onClick={() => { setMenuAberto(null); enviarEmailNota(nota); }}
+                          >
+                            <FileText size={14} /> {processando === nota.id ? "Enviando…" : "Enviar por e-mail"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -2397,6 +2440,22 @@ function ErpBiomassa() {
         }
         .nf-toggle input { width: 16px; height: 16px; accent-color: #00923F; cursor: pointer; }
         .nf-toggle-ativo { background: #eaf3de; border-color: #97c459; color: #27500a; font-weight: 500; }
+        .nf-dropdown {
+          position: absolute; right: 0; top: 100%; margin-top: 4px; z-index: 20;
+          background: #fff; border: 1px solid #e5e3da; border-radius: 8px;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.12); min-width: 200px; overflow: hidden;
+          display: flex; flex-direction: column; padding: 4px;
+        }
+        .nf-dropdown-item {
+          display: flex; align-items: center; gap: 8px;
+          padding: 8px 10px; border: none; background: none; border-radius: 6px;
+          font-size: 13px; color: #33332f; text-align: left; text-decoration: none;
+          cursor: pointer; width: 100%; box-sizing: border-box;
+        }
+        .nf-dropdown-item:hover { background: #f1efe8; }
+        .nf-dropdown-item:disabled { opacity: 0.5; cursor: not-allowed; }
+        .nf-dropdown-item-danger { color: #a32d2d; }
+        .nf-dropdown-item-danger:hover { background: #fcebeb; }
         .endereco-grid .col-span-2 { grid-column: span 2; }
         .error-text { color: #a32d2d; font-size: 13px; margin: 8px 0 0; }
         .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }

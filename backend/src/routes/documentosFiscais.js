@@ -305,6 +305,37 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   }
 }));
 
+// Manda o DANFE por e-mail — só funciona depois de autorizada (a Focus
+// exige a nota já emitida). Sem e-mail no corpo, usa o e-mail cadastrado
+// no destinatário.
+router.post("/:id/enviar-email", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({
+    where: { id },
+    include: { destinatario: true },
+  });
+
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "NFe") {
+    return res.status(400).json({ erro: "Envio por e-mail só está disponível para NFe" });
+  }
+  if (documento.status !== "autorizado") {
+    return res.status(409).json({ erro: "Só é possível enviar por e-mail uma nota já autorizada" });
+  }
+
+  const emails = req.body.emails?.length ? req.body.emails : [documento.destinatario?.email].filter(Boolean);
+  if (!emails.length) {
+    return res.status(400).json({ erro: "Nenhum e-mail informado e o cliente não tem e-mail cadastrado" });
+  }
+
+  const ref = `nfe-${documento.id}`;
+  await focusNfe.enviarPorEmail({ ref, emails });
+  res.json({ enviado: true, emails });
+}));
+
 // Passo 3: consulta o status na Focus NFe e atualiza o registro local —
 // chame periodicamente (ou via webhook do provedor) até sair de "enviado".
 router.get("/:id/status", asyncHandler(async (req, res) => {

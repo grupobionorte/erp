@@ -9,6 +9,7 @@ const veiculosRouter = require("./routes/veiculos");
 const produtosRouter = require("./routes/produtos");
 const documentosFiscaisRouter = require("./routes/documentosFiscais");
 const ncmsRouter = require("./routes/ncms");
+const cfopsRouter = require("./routes/cfops");
 const authRouter = require("./routes/auth");
 const usuariosRouter = require("./routes/usuarios");
 const empresasRouter = require("./routes/empresas");
@@ -51,6 +52,7 @@ app.use("/veiculos", veiculosRouter);
 app.use("/produtos", produtosRouter);
 app.use("/documentos-fiscais", documentosFiscaisRouter);
 app.use("/ncms", ncmsRouter);
+app.use("/cfops", cfopsRouter);
 app.use("/usuarios", usuariosRouter);
 app.use("/empresas", empresasRouter);
 

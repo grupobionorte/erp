@@ -67,6 +67,14 @@ model Ncm {
   @@map("ncms")
 }
 
+model Cfop {
+  id        Int    @id @default(autoincrement())
+  codigo    String @unique
+  descricao String
+
+  @@map("cfops")
+}
+
 model Endereco {
   id                Int      @id @default(autoincrement())
   cep               String?

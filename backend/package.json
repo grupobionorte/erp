@@ -9,6 +9,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed:ncm": "node scripts/seed-ncm.js",
+    "seed:cfop": "node scripts/seed-cfop.js",
     "limpar:cadastros": "node scripts/limpar-cadastros.js"
   },
   "dependencies": {

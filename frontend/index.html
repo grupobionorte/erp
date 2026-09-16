@@ -60,8 +60,31 @@ const API_BASE_URL = "https://erp-biomassa-backend.onrender.com";
 
 const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
 
-const CST_ICMS = ["00","10","20","30","40","41","50","51","60","70","90"];
-const CSOSN = ["101","102","103","201","202","203","300","400","500","900"];
+const CST_ICMS = [
+  { value: "00", label: "00 - Tributada integralmente" },
+  { value: "10", label: "10 - Tributada e com cobrança do ICMS por substituição tributária" },
+  { value: "20", label: "20 - Com redução de base de cálculo" },
+  { value: "30", label: "30 - Isenta/não tributada e com cobrança do ICMS por substituição tributária" },
+  { value: "40", label: "40 - Isenta" },
+  { value: "41", label: "41 - Não tributada" },
+  { value: "50", label: "50 - Suspensão" },
+  { value: "51", label: "51 - Diferimento" },
+  { value: "60", label: "60 - ICMS cobrado anteriormente por substituição tributária" },
+  { value: "70", label: "70 - Com redução de base de cálculo e cobrança do ICMS por substituição tributária" },
+  { value: "90", label: "90 - Outras" },
+];
+const CSOSN = [
+  { value: "101", label: "101 - Tributada pelo Simples Nacional com permissão de crédito" },
+  { value: "102", label: "102 - Tributada pelo Simples Nacional sem permissão de crédito" },
+  { value: "103", label: "103 - Isenção do ICMS para faixa de receita bruta" },
+  { value: "201", label: "201 - Tributada pelo Simples Nacional com permissão de crédito e com ICMS ST" },
+  { value: "202", label: "202 - Tributada pelo Simples Nacional sem permissão de crédito e com ICMS ST" },
+  { value: "203", label: "203 - Isenção do ICMS para faixa de receita bruta e com ICMS ST" },
+  { value: "300", label: "300 - Imune" },
+  { value: "400", label: "400 - Não tributada pelo Simples Nacional" },
+  { value: "500", label: "500 - ICMS cobrado anteriormente por substituição tributária ou por antecipação" },
+  { value: "900", label: "900 - Outros" },
+];
 const CST_PIS_COFINS = ["01","02","03","04","05","06","07","08","09","49","50","51","52","53","54","55","56","60","61","62","63","64","65","66","67","70","71","72","73","74","75","98","99"];
 
 const emptyEndereco = { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "MT" };
@@ -305,7 +328,7 @@ const MODULES = {
       { key: "codigo", label: "Código interno", type: "text", required: true },
       { key: "descricao", label: "Descrição", type: "text", required: true },
       { key: "ncm", label: "NCM", type: "ncm-busca", required: true },
-      { key: "cfop", label: "CFOP padrão", type: "text" },
+      { key: "cfop", label: "CFOP padrão", type: "cfop-busca" },
       { key: "unidade", label: "Unidade", type: "select", options: ["TON", "KG", "M3", "SC", "UN"] },
       { key: "origem", label: "Origem da mercadoria", type: "select", options: ["0 - Nacional", "1 - Estrangeira - Importação direta", "2 - Estrangeira - Adquirida no mercado interno"] },
       { key: "cst", label: "CST ICMS", type: "select", options: CST_ICMS },
@@ -618,6 +641,56 @@ function NcmField({ value, onChange }) {
   );
 }
 
+function CfopField({ value, onChange }) {
+  const [sugestoes, setSugestoes] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    if (!value || value.length < 2) { setSugestoes([]); return; }
+    const espera = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const resultado = await apiRequest(`/cfops?busca=${encodeURIComponent(value)}`);
+        setSugestoes(resultado);
+      } catch {
+        setSugestoes([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 350);
+    return () => clearTimeout(espera);
+  }, [value]);
+
+  return (
+    <div className="ncm-field">
+      <input
+        value={value ?? ""}
+        onChange={e => { onChange(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder="Digite o código ou parte da descrição"
+      />
+      {aberto && (buscando || sugestoes.length > 0) && (
+        <div className="ncm-suggestions">
+          {buscando && <div className="ncm-suggestion-loading">Buscando…</div>}
+          {sugestoes.map(s => (
+            <button
+              key={s.codigo}
+              type="button"
+              className="ncm-suggestion"
+              onMouseDown={() => { onChange(s.codigo); setAberto(false); }}
+            >
+              <span className="ncm-codigo">{s.codigo}</span>
+              <span className="ncm-descricao">{s.descricao}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ field, value, onChange, disabled }) {
   if (field.type === "endereco") {
     const v = value || emptyEndereco;
@@ -783,13 +856,26 @@ function Field({ field, value, onChange, disabled }) {
     );
   }
 
+  if (field.type === "cfop-busca") {
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
+        <CfopField value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
   return (
     <div className="field-group">
       <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
       {field.type === "select" ? (
         <select value={value ?? field.default ?? ""} onChange={e => onChange(e.target.value)} disabled={disabled}>
           <option value="">Selecione…</option>
-          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          {field.options.map(opt => {
+            const valorOpcao = typeof opt === "object" ? opt.value : opt;
+            const rotuloOpcao = typeof opt === "object" ? opt.label : opt;
+            return <option key={valorOpcao} value={valorOpcao}>{rotuloOpcao}</option>;
+          })}
         </select>
       ) : (
         <input

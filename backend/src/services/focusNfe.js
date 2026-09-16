@@ -6,7 +6,11 @@ const axios = require("axios");
 const client = axios.create({
   baseURL: process.env.FOCUS_NFE_BASE_URL,
   auth: { username: process.env.FOCUS_NFE_TOKEN, password: "" },
-  headers: { "Content-Type": "application/json" },
+  // O charset explícito evita que acentos (ç, ã, í...) se percam — sem
+  // isso, alguns servidores presumem Latin-1 em vez de UTF-8 e os
+  // caracteres acentuados saem corrompidos do outro lado (por exemplo, no
+  // PDF da carta de correção).
+  headers: { "Content-Type": "application/json; charset=utf-8" },
 });
 
 // Tabelas de código da SEFAZ — convertidas a partir dos rótulos em

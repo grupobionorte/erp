@@ -112,6 +112,11 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       cofins_base_calculo: item.produto.cofinsAliquota ? item.valorTotal : undefined,
       cofins_aliquota_porcentual: item.produto.cofinsAliquota || undefined,
       cofins_valor: item.produto.cofinsAliquota ? item.valorTotal * (item.produto.cofinsAliquota / 100) : undefined,
+      // IBS/CBS (Reforma Tributária) — só manda se o produto já tiver isso
+      // configurado (depende do contador confirmar o código certo pra
+      // cada produto; não temos como advinhar isso com segurança aqui).
+      ibs_cbs_situacao_tributaria: item.produto.cstIbsCbs || undefined,
+      ibs_cbs_classificacao_tributaria: item.produto.classificacaoTributariaIbsCbs || undefined,
     })),
   };
 }

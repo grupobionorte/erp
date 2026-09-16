@@ -256,6 +256,12 @@ model Produto {
   pisAliquota      Float?   @map("pis_aliquota")
   cofinsCst        String?  @map("cofins_cst")
   cofinsAliquota   Float?   @map("cofins_aliquota")
+  // Reforma Tributária (IBS/CBS) — código de 6 dígitos da tabela oficial
+  // (cClassTrib) e o CST correspondente (3 primeiros dígitos dele).
+  // Confirme com seu contador antes de preencher: o valor certo depende
+  // do produto e da operação, não é o mesmo pra todo mundo.
+  cstIbsCbs        String?  @map("cst_ibs_cbs")
+  classificacaoTributariaIbsCbs String? @map("classificacao_tributaria_ibs_cbs")
   valorUnitario    Float?   @map("valor_unitario")
   pesoLiquidoKg    Float?   @map("peso_liquido_kg")
   ativo            Boolean  @default(true)

@@ -179,7 +179,7 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
     remetenteId, expedidorId, recebedorId, definicaoTomador, formaPagamento,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
     percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
-    dataEmissao, colaboradorResponsavelId, notasFiscaisIds,
+    dataEmissao, colaboradorResponsavelId, notasFiscaisIds, cstIbsCbsPrestacao, classificacaoTributariaIbsCbsPrestacao,
   } = req.body;
 
   if (!empresaId) {
@@ -219,6 +219,8 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       distanciaKm: distanciaKm || undefined,
       ufInicio: ufInicio || undefined,
       ufFim: ufFim || undefined,
+      cstIbsCbsPrestacao: cstIbsCbsPrestacao || undefined,
+      classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
       naturezaOperacao: naturezaOperacao || undefined,
       informacoesComplementares: informacoesComplementares || undefined,
       formaPagamento: formaPagamento || undefined,
@@ -478,6 +480,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
     dataEmissao, colaboradorResponsavelId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
     veiculoReboqueId, distanciaKm, ufInicio, ufFim, remetenteId, expedidorId, recebedorId, definicaoTomador,
+    cstIbsCbsPrestacao, classificacaoTributariaIbsCbsPrestacao,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
     percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
     notasFiscaisIds,
@@ -543,6 +546,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       distanciaKm: distanciaKm ?? undefined,
       ufInicio: ufInicio ?? undefined,
       ufFim: ufFim ?? undefined,
+      cstIbsCbsPrestacao: cstIbsCbsPrestacao ?? undefined,
+      classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao ?? undefined,
       cfopPrestacao: cfopPrestacao ?? undefined,
       cstIcmsPrestacao: cstIcmsPrestacao ?? undefined,
       baseCalculoIcmsPrestacao: baseCalculoIcmsPrestacao ?? undefined,

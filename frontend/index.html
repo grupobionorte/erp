@@ -2409,6 +2409,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
   const [valorIcms, setValorIcms] = useState(cte?.valorIcms ?? "");
   const [percentualReducaoBaseIcms, setPercentualReducaoBaseIcms] = useState(cte?.percentualReducaoBaseIcms ?? "");
   const [valorCreditoPresumidoIcms, setValorCreditoPresumidoIcms] = useState(cte?.valorCreditoPresumidoIcms ?? "");
+  const [cstIbsCbsPrestacao, setCstIbsCbsPrestacao] = useState(cte?.cstIbsCbsPrestacao || "");
+  const [classificacaoTributariaIbsCbsPrestacao, setClassificacaoTributariaIbsCbsPrestacao] = useState(cte?.classificacaoTributariaIbsCbsPrestacao || "");
 
   const [informacoesComplementares, setInformacoesComplementares] = useState(cte?.informacoesComplementares || "");
   const [erro, setErro] = useState("");
@@ -2449,6 +2451,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
         valorIcms: valorIcms !== "" ? Number(valorIcms) : undefined,
         percentualReducaoBaseIcms: percentualReducaoBaseIcms !== "" ? Number(percentualReducaoBaseIcms) : undefined,
         valorCreditoPresumidoIcms: valorCreditoPresumidoIcms !== "" ? Number(valorCreditoPresumidoIcms) : undefined,
+        cstIbsCbsPrestacao: cstIbsCbsPrestacao || undefined,
+        classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
         valorTotal: Number(valorTotal),
       });
     } catch (e) {
@@ -2683,6 +2687,16 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
             <div className="field-group">
               <label className="field-label">Valor de crédito presumido (R$)</label>
               <input type="number" value={valorCreditoPresumidoIcms} onChange={e => setValorCreditoPresumidoIcms(e.target.value)} style={{ maxWidth: 220 }} />
+            </div>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">IBS/CBS — CST (Reforma Tributária)</label>
+                <input value={cstIbsCbsPrestacao} onChange={e => setCstIbsCbsPrestacao(e.target.value)} placeholder="Confirme com o contador" />
+              </div>
+              <div className="field-group">
+                <label className="field-label">IBS/CBS — Classificação (cClassTrib)</label>
+                <input value={classificacaoTributariaIbsCbsPrestacao} onChange={e => setClassificacaoTributariaIbsCbsPrestacao(e.target.value)} placeholder="Confirme com o contador" />
+              </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>
               <label className="field-label">Informações complementares</label>

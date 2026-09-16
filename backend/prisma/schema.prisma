@@ -394,6 +394,11 @@ model DocumentoFiscal {
   valorIcmsOutras           Float? @map("valor_icms_outras")
   valorCreditoPresumidoIcms Float? @map("valor_credito_presumido_icms")
   valorFcp                  Float? @map("valor_fcp")
+  // Reforma Tributária (IBS/CBS) do CTe — é no nível do documento (não
+  // por item, já que CTe não tem lista de produtos). Confirme com o
+  // contador antes de preencher.
+  cstIbsCbsPrestacao        String? @map("cst_ibs_cbs_prestacao")
+  classificacaoTributariaIbsCbsPrestacao String? @map("classificacao_tributaria_ibs_cbs_prestacao")
 
   transportadoraId Int?            @map("transportadora_id")
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])

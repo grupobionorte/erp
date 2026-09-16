@@ -250,6 +250,21 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     modal_rodoviario: {
       rntrc: empresa.rntrc || undefined,
     },
+
+    // IBS/CBS (Reforma Tributária) — no nível do documento, já que o CTe
+    // não tem itens. Só manda se o CTe já tiver isso configurado, pelo
+    // mesmo motivo da NFe: o código certo depende do contador confirmar,
+    // não tem como advinhar aqui. As alíquotas usadas são as de TESTE da
+    // fase de transição de 2026 (confirmadas com o suporte da Focus NFe).
+    ibs_cbs_situacao_tributaria: documento.cstIbsCbsPrestacao || undefined,
+    ibs_cbs_classificacao_tributaria: documento.classificacaoTributariaIbsCbsPrestacao || undefined,
+    ibs_cbs_base_calculo: documento.cstIbsCbsPrestacao ? documento.valorTotal : undefined,
+    ibs_uf_aliquota: documento.cstIbsCbsPrestacao ? 0.10 : undefined,
+    ibs_uf_valor: documento.cstIbsCbsPrestacao ? documento.valorTotal * (0.10 / 100) : undefined,
+    ibs_mun_aliquota: documento.cstIbsCbsPrestacao ? 0 : undefined,
+    ibs_mun_valor: documento.cstIbsCbsPrestacao ? 0 : undefined,
+    cbs_aliquota: documento.cstIbsCbsPrestacao ? 0.90 : undefined,
+    cbs_valor: documento.cstIbsCbsPrestacao ? documento.valorTotal * (0.90 / 100) : undefined,
   };
 }
 

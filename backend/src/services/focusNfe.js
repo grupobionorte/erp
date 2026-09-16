@@ -277,8 +277,8 @@ async function consultar({ tipo, ref }) {
 
 // Só existe pra NFe na Focus — manda o DANFE/XML por e-mail pro
 // destinatário (ou pra qualquer e-mail que a gente passar).
-async function enviarPorEmail({ ref, emails }) {
-  const { data } = await client.post(`/v2/nfe/${ref}/email`, { emails });
+async function enviarPorEmail({ tipo, ref, emails }) {
+  const { data } = await client.post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/email`, { emails });
   return data;
 }
 
@@ -296,8 +296,8 @@ async function cancelar({ tipo, ref, justificativa }) {
 // entre 15 e 1000 caracteres, e não serve pra corrigir valores, impostos,
 // dados cadastrais do emitente/destinatário ou datas — só detalhes como
 // descrição, endereço de entrega, etc.
-async function emitirCartaCorrecao({ ref, texto }) {
-  const { data } = await client.post(`/v2/nfe/${ref}/carta_correcao`, { correcao: texto });
+async function emitirCartaCorrecao({ tipo, ref, texto }) {
+  const { data } = await client.post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
   return data;
 }
 

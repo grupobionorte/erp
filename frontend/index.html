@@ -1867,7 +1867,7 @@ function CartaCorrecaoModal({ nota, onClose }) {
     <div className="modal-backdrop">
       <div className="modal" style={{ width: 560 }}>
         <div className="modal-header">
-          <h3>Carta de correção — Nota {nota.numero}/{nota.serie ?? "—"}</h3>
+          <h3>Carta de correção — {nota.tipo} {nota.numero}/{nota.serie ?? "—"}</h3>
           <button className="icon-btn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
@@ -2640,6 +2640,15 @@ function CteView() {
   const [erro, setErro] = useState(null);
   const [editando, setEditando] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [processando, setProcessando] = useState(null);
+  const [menuAberto, setMenuAberto] = useState(null);
+  const [cteParaCorrigir, setCteParaCorrigir] = useState(null);
+
+  useEffect(() => {
+    const fechar = () => setMenuAberto(null);
+    document.addEventListener("click", fechar);
+    return () => document.removeEventListener("click", fechar);
+  }, []);
 
   const carregar = useCallback(async () => {
     try {
@@ -2671,7 +2680,92 @@ function CteView() {
       await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE" });
       carregar();
     } catch (e) {
-      alert(`Não foi possível cancelar: ${e.message}`);
+      alert(`Não foi possível cancelar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
+
+  // Igual à NFe: depois de emitir, o CTe fica "enviado" enquanto a SEFAZ
+  // processa — consulta sozinho de tempos em tempos até resolver.
+  const consultarAteResolver = async (id, tentativa = 0) => {
+    if (tentativa >= 15) { setProcessando(null); return; }
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const atualizado = await apiRequest(`/documentos-fiscais/${id}/status`);
+      await carregar();
+      if (atualizado.status === "enviado") {
+        consultarAteResolver(id, tentativa + 1);
+      } else {
+        setProcessando(null);
+      }
+    } catch {
+      setProcessando(null);
+    }
+  };
+
+  const emitirCte = async (id) => {
+    if (!window.confirm("Emitir esse CTe? Depois de emitido ele não pode mais ser editado.")) return;
+    setProcessando(id);
+    try {
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
+      await carregar();
+      if (resultado.status === "enviado") {
+        consultarAteResolver(id);
+      } else {
+        setProcessando(null);
+      }
+    } catch (e) {
+      alert(`Não foi possível emitir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+      carregar();
+      setProcessando(null);
+    }
+  };
+
+  const consultarStatusCte = async (id) => {
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}/status`);
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const cancelarCteAutorizado = async (id) => {
+    const justificativa = window.prompt("Motivo do cancelamento (mínimo 15 caracteres):");
+    if (!justificativa) return;
+    if (justificativa.trim().length < 15) {
+      alert("A justificativa precisa ter pelo menos 15 caracteres.");
+      return;
+    }
+    if (!window.confirm("Confirmar o cancelamento junto à SEFAZ? Essa ação não pode ser desfeita.")) return;
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE", body: JSON.stringify({ justificativa }) });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível cancelar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const enviarEmailCte = async (cte) => {
+    const emailPadrao = cte.destinatario?.email || "";
+    const digitado = window.prompt("Enviar o DACTE por e-mail para:", emailPadrao);
+    if (!digitado) return;
+    setProcessando(cte.id);
+    try {
+      await apiRequest(`/documentos-fiscais/${cte.id}/enviar-email`, {
+        method: "POST",
+        body: JSON.stringify({ emails: [digitado] }),
+      });
+      alert(`Enviado para ${digitado}.`);
+    } catch (e) {
+      alert(`Não foi possível enviar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
     }
   };
 
@@ -2720,6 +2814,8 @@ function CteView() {
               <th>Trajeto</th>
               <th>Valor</th>
               <th>Status</th>
+              <th>Chave / Motivo</th>
+              <th>Emissão</th>
               <th className="actions-col"></th>
             </tr>
           </thead>
@@ -2730,17 +2826,94 @@ function CteView() {
                 <td>{cte.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{cte.origemPercurso || "—"} → {cte.destinoPercurso || "—"}</td>
                 <td>{cte.valorTotal != null ? `R$ ${Number(cte.valorTotal).toFixed(2)}` : "—"}</td>
-                <td>{STATUS_DOCUMENTO_LABEL[cte.status] || cte.status}</td>
-                <td className="actions-col">
-                  {cte.status === "rascunho" && (
-                    <>
-                      <button className="icon-btn" onClick={() => { setEditando(cte); setMostrarForm(true); }} aria-label="Editar">
-                        <Pencil size={15} />
-                      </button>
-                      <button className="icon-btn icon-btn-danger" onClick={() => cancelarCte(cte.id)} aria-label="Cancelar">
-                        <Trash2 size={15} />
-                      </button>
-                    </>
+                <td>
+                  {STATUS_DOCUMENTO_LABEL[cte.status] || cte.status}
+                  {processando === cte.id && cte.status === "enviado" && (
+                    <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
+                  )}
+                </td>
+                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
+                  {cte.status === "cancelado" && cte.justificativaCancelamento
+                    ? `Cancelado: ${cte.justificativaCancelamento}`
+                    : cte.chaveAcesso || cte.motivoRejeicao || "—"}
+                </td>
+                <td>{new Date(cte.dataEmissao).toLocaleDateString("pt-BR")}</td>
+                <td className="actions-col" style={{ position: "relative" }}>
+                  <button
+                    className="icon-btn nf-menu-trigger"
+                    aria-label="Ações"
+                    onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === cte.id ? null : cte.id); }}
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                  {menuAberto === cte.id && (
+                    <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
+                      {(cte.status === "rascunho" || cte.status === "rejeitado") && (
+                        <>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setEditando(cte); setMostrarForm(true); }}>
+                            <Pencil size={14} /> Editar
+                          </button>
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === cte.id}
+                            onClick={() => { setMenuAberto(null); emitirCte(cte.id); }}
+                          >
+                            <FileText size={14} /> {processando === cte.id ? "Aguardando SEFAZ…" : cte.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir CTe"}
+                          </button>
+                          <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarCte(cte.id); }}>
+                            <Trash2 size={14} /> Cancelar
+                          </button>
+                        </>
+                      )}
+                      {cte.status === "enviado" && (
+                        <button
+                          className="nf-dropdown-item"
+                          disabled={processando === cte.id}
+                          onClick={() => { setMenuAberto(null); consultarStatusCte(cte.id); }}
+                        >
+                          <Search size={14} /> {processando === cte.id ? "Consultando…" : "Consultar status"}
+                        </button>
+                      )}
+                      {cte.status === "autorizado" && (
+                        <>
+                          {cte.pdfUrl?.startsWith("http") ? (
+                            <a className="nf-dropdown-item" href={cte.pdfUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar DACTE
+                            </a>
+                          ) : (
+                            <button
+                              className="nf-dropdown-item"
+                              disabled={processando === cte.id}
+                              onClick={() => { setMenuAberto(null); consultarStatusCte(cte.id); }}
+                            >
+                              <FileText size={14} /> {processando === cte.id ? "Corrigindo…" : "Corrigir link do DACTE"}
+                            </button>
+                          )}
+                          {cte.xmlUrl?.startsWith("http") && (
+                            <a className="nf-dropdown-item" href={cte.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar XML
+                            </a>
+                          )}
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === cte.id}
+                            onClick={() => { setMenuAberto(null); enviarEmailCte(cte); }}
+                          >
+                            <FileText size={14} /> {processando === cte.id ? "Enviando…" : "Enviar por e-mail"}
+                          </button>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteParaCorrigir(cte); }}>
+                            <Pencil size={14} /> Carta de correção
+                          </button>
+                          <button
+                            className="nf-dropdown-item nf-dropdown-item-danger"
+                            disabled={processando === cte.id}
+                            onClick={() => { setMenuAberto(null); cancelarCteAutorizado(cte.id); }}
+                          >
+                            <Trash2 size={14} /> Cancelar CTe (SEFAZ)
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>
@@ -2759,6 +2932,9 @@ function CteView() {
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />
+      )}
+      {cteParaCorrigir && (
+        <CartaCorrecaoModal nota={cteParaCorrigir} onClose={() => setCteParaCorrigir(null)} />
       )}
     </div>
   );

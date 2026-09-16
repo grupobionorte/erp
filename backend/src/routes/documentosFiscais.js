@@ -383,20 +383,20 @@ router.post("/:id/enviar-email", asyncHandler(async (req, res) => {
   if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (documento.tipo !== "NFe") {
-    return res.status(400).json({ erro: "Envio por e-mail só está disponível para NFe" });
+  if (documento.tipo === "MDFe") {
+    return res.status(400).json({ erro: "Envio por e-mail não está disponível para MDFe" });
   }
   if (documento.status !== "autorizado") {
-    return res.status(409).json({ erro: "Só é possível enviar por e-mail uma nota já autorizada" });
+    return res.status(409).json({ erro: "Só é possível enviar por e-mail um documento já autorizado" });
   }
 
   const emails = req.body.emails?.length ? req.body.emails : [documento.destinatario?.email].filter(Boolean);
   if (!emails.length) {
-    return res.status(400).json({ erro: "Nenhum e-mail informado e o cliente não tem e-mail cadastrado" });
+    return res.status(400).json({ erro: "Nenhum e-mail informado e o destinatário não tem e-mail cadastrado" });
   }
 
-  const ref = `nfe-${documento.id}`;
-  await focusNfe.enviarPorEmail({ ref, emails });
+  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  await focusNfe.enviarPorEmail({ tipo: documento.tipo, ref, emails });
   res.json({ enviado: true, emails });
 }));
 
@@ -638,11 +638,11 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
   if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (documento.tipo !== "NFe") {
-    return res.status(400).json({ erro: "Carta de correção só está disponível para NFe" });
+  if (documento.tipo === "MDFe") {
+    return res.status(400).json({ erro: "Carta de correção não está disponível para MDFe" });
   }
   if (documento.status !== "autorizado") {
-    return res.status(409).json({ erro: "Só é possível corrigir uma nota já autorizada" });
+    return res.status(409).json({ erro: "Só é possível corrigir um documento já autorizado" });
   }
   if (!texto || texto.trim().length < 15 || texto.trim().length > 1000) {
     return res.status(400).json({ erro: "O texto da correção precisa ter entre 15 e 1000 caracteres" });
@@ -653,9 +653,9 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
     return res.status(409).json({ erro: "Essa nota já tem 20 cartas de correção, o máximo permitido pela SEFAZ" });
   }
 
-  const ref = `nfe-${documento.id}`;
+  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
   try {
-    const resultado = await focusNfe.emitirCartaCorrecao({ ref, texto: texto.trim() });
+    const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto: texto.trim() });
     const carta = await prisma.cartaCorrecao.create({
       data: {
         documentoId: id,
@@ -706,9 +706,9 @@ router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) 
   const carta = await prisma.cartaCorrecao.findUnique({ where: { id: cartaId } });
   if (!carta || carta.documentoId !== id) return res.status(404).json({ erro: "Carta de correção não encontrada" });
 
-  const ref = `nfe-${documento.id}`;
+  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
   try {
-    const resultado = await focusNfe.consultar({ tipo: "NFe", ref });
+    const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });
     // A Focus só expõe o PDF/XML da carta de correção mais recente por
     // aqui — se essa não for a mais recente, avisa em vez de inventar
     // um link.

@@ -149,7 +149,11 @@ const CODIGO_TOMADOR = { "Remetente": 0, "Expedidor": 1, "Recebedor": 2, "Destin
 function blocoPessoaCte(pessoa, prefixo) {
   if (!pessoa) return {};
   const doc = (pessoa.documento || "").replace(/\D/g, "");
-  const temEndereco = !!pessoa.endereco?.logradouro;
+  // Telefone e endereço completo são obrigatórios pra remetente, expedidor,
+  // recebedor e destinatário sempre que o bloco existe — se faltar algo no
+  // cadastro dessa pessoa, é melhor a Focus apontar exatamente o campo que
+  // falta do que a gente esconder o bloco inteiro e gerar um erro confuso
+  // de sequência no XML.
   return {
     [`cnpj_${prefixo}`]: pessoa.tipo === "pessoa_juridica" ? doc : undefined,
     [`cpf_${prefixo}`]: pessoa.tipo === "pessoa_fisica" ? doc : undefined,
@@ -158,22 +162,15 @@ function blocoPessoaCte(pessoa, prefixo) {
     [`nome_fantasia_${prefixo}`]: pessoa.nomeFantasia || pessoa.nomeRazaoSocial,
     [`telefone_${prefixo}`]: (pessoa.telefone || "").replace(/\D/g, "") || undefined,
     [`email_${prefixo}`]: pessoa.email || undefined,
-    // Só manda o bloco de endereço inteiro (e o país junto) quando
-    // realmente tem logradouro — um endereço incompleto (só CEP/UF, por
-    // exemplo) quebra a ordem exigida pelo schema do CT-e.
-    ...(temEndereco
-      ? {
-          [`logradouro_${prefixo}`]: pessoa.endereco.logradouro,
-          [`numero_${prefixo}`]: pessoa.endereco.numero,
-          [`complemento_${prefixo}`]: pessoa.endereco.complemento || undefined,
-          [`bairro_${prefixo}`]: pessoa.endereco.bairro,
-          [`municipio_${prefixo}`]: pessoa.endereco.cidade,
-          [`uf_${prefixo}`]: pessoa.endereco.uf,
-          [`cep_${prefixo}`]: (pessoa.endereco.cep || "").replace(/\D/g, "") || undefined,
-          [`codigo_pais_${prefixo}`]: 1058,
-          [`pais_${prefixo}`]: "Brasil",
-        }
-      : {}),
+    [`logradouro_${prefixo}`]: pessoa.endereco?.logradouro,
+    [`numero_${prefixo}`]: pessoa.endereco?.numero,
+    [`complemento_${prefixo}`]: pessoa.endereco?.complemento || undefined,
+    [`bairro_${prefixo}`]: pessoa.endereco?.bairro,
+    [`municipio_${prefixo}`]: pessoa.endereco?.cidade,
+    [`uf_${prefixo}`]: pessoa.endereco?.uf,
+    [`cep_${prefixo}`]: (pessoa.endereco?.cep || "").replace(/\D/g, "") || undefined,
+    [`codigo_pais_${prefixo}`]: 1058,
+    [`pais_${prefixo}`]: "Brasil",
   };
 }
 
@@ -201,9 +198,11 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     uf_fim: documento.ufFim,
 
     // Indicador se o recebedor retira a mercadoria no local (aeroporto,
-    // filial, porto, estação) em vez de receber entrega — 0 = Não retira
-    // (padrão, entrega normal), 1 = Retira.
-    retira: 0,
+    // filial, porto, estação) em vez de receber entrega — 0 = Sim,
+    // 1 = Não (padrão, entrega normal). "detalhes_retirar" é obrigatório
+    // sempre que esse grupo aparece.
+    retirar_mercadoria: 1,
+    detalhes_retirar: "Não se aplica",
 
     indicador_inscricao_estadual_tomador: 9,
     tomador: codigoTomador,
@@ -229,7 +228,7 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // Obrigatório (schema exige pelo menos um) — ainda não temos um campo
     // de peso bruto no formulário do CTe, então usamos o que tiver
     // disponível como uma estimativa mínima.
-    quantidade_carga: [{
+    quantidades: [{
       codigo_unidade_medida: documento.pesoBrutoTotal ? "01" : "03",
       tipo_medida: documento.pesoBrutoTotal ? "PESO BRUTO" : "UNIDADE",
       quantidade: documento.pesoBrutoTotal || documento.quantidadeVolumes || 1,

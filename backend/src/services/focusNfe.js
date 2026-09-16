@@ -98,7 +98,9 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       // O cadastro de produto guarda a opção inteira ("0 - Nacional"), mas
       // a Focus NFe só aceita o dígito do código.
       icms_origem: (item.produto.origemMercadoria || "0").charAt(0),
-      icms_situacao_tributaria: item.cstUtilizado || item.produto.cstIcms || item.produto.csosn,
+      icms_situacao_tributaria: empresa.regimeTributario === "simples_nacional"
+        ? (item.produto.csosn || item.cstUtilizado || item.produto.cstIcms)
+        : (item.cstUtilizado || item.produto.cstIcms),
       cest: item.produto.cest || undefined,
     })),
   };

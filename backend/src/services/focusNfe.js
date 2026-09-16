@@ -115,8 +115,19 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       // IBS/CBS (Reforma Tributária) — só manda se o produto já tiver isso
       // configurado (depende do contador confirmar o código certo pra
       // cada produto; não temos como advinhar isso com segurança aqui).
+      // As alíquotas abaixo são as de TESTE definidas pra fase de
+      // transição de 2026 (confirmado com o suporte da Focus NFe) — não
+      // são as alíquotas reais de produção, que sobem gradualmente até
+      // 2033.
       ibs_cbs_situacao_tributaria: item.produto.cstIbsCbs || undefined,
       ibs_cbs_classificacao_tributaria: item.produto.classificacaoTributariaIbsCbs || undefined,
+      ibs_cbs_base_calculo: item.produto.cstIbsCbs ? item.valorTotal : undefined,
+      ibs_uf_aliquota: item.produto.cstIbsCbs ? 0.10 : undefined,
+      ibs_uf_valor: item.produto.cstIbsCbs ? item.valorTotal * (0.10 / 100) : undefined,
+      ibs_mun_aliquota: item.produto.cstIbsCbs ? 0 : undefined,
+      ibs_mun_valor: item.produto.cstIbsCbs ? 0 : undefined,
+      cbs_aliquota: item.produto.cstIbsCbs ? 0.90 : undefined,
+      cbs_valor: item.produto.cstIbsCbs ? item.valorTotal * (0.90 / 100) : undefined,
     })),
   };
 }

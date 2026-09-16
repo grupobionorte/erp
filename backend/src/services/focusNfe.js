@@ -202,7 +202,7 @@ async function enviarPorEmail({ ref, emails }) {
 // justificativa entre 15 e 255 caracteres.
 async function cancelar({ tipo, ref, justificativa }) {
   const { data } = await client.delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
-    params: { justificativa },
+    data: { justificativa },
   });
   return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
 }

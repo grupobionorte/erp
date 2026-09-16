@@ -482,13 +482,17 @@ async function apiRequest(path, options = {}) {
   }
   if (!res.ok) {
     let detalhe = res.statusText;
+    let detalheProvedor;
     try {
       const corpo = await res.json();
       detalhe = corpo.erro || detalhe;
+      detalheProvedor = corpo.detalhe;
     } catch {
       // resposta sem corpo JSON
     }
-    throw new Error(detalhe);
+    const erro = new Error(detalhe);
+    erro.detalhe = detalheProvedor;
+    throw erro;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -1784,7 +1788,7 @@ function NotasFiscaisView() {
       await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE", body: JSON.stringify({ justificativa }) });
       carregar();
     } catch (e) {
-      alert(`Não foi possível cancelar: ${e.message}`);
+      alert(`Não foi possível cancelar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
     } finally {
       setProcessando(null);
     }
@@ -1801,7 +1805,9 @@ function NotasFiscaisView() {
       await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
       carregar();
     } catch (e) {
-      alert(`Não foi possível emitir: ${e.message}`);
+      alert(`Não foi possível emitir: ${e.message}${e.detalhe ? `
+
+Detalhe: ${e.detalhe}` : ""}`);
       carregar();
     } finally {
       setProcessando(null);
@@ -1814,7 +1820,9 @@ function NotasFiscaisView() {
       await apiRequest(`/documentos-fiscais/${id}/status`);
       carregar();
     } catch (e) {
-      alert(`Não foi possível consultar: ${e.message}`);
+      alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `
+
+Detalhe: ${e.detalhe}` : ""}`);
     } finally {
       setProcessando(null);
     }
@@ -1832,7 +1840,9 @@ function NotasFiscaisView() {
       });
       alert(`Enviado para ${digitado}.`);
     } catch (e) {
-      alert(`Não foi possível enviar: ${e.message}`);
+      alert(`Não foi possível enviar: ${e.message}${e.detalhe ? `
+
+Detalhe: ${e.detalhe}` : ""}`);
     } finally {
       setProcessando(null);
     }

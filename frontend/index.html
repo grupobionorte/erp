@@ -2271,12 +2271,64 @@ Detalhe: ${e.detalhe}` : ""}`);
 
 const DEFINICAO_TOMADOR = ["Remetente", "Expedidor", "Recebedor", "Destinatário", "Outros"];
 
+function NfeCteField({ onSelecionar }) {
+  const [busca, setBusca] = useState("");
+  const [sugestoes, setSugestoes] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    if (!busca || busca.length < 3) { setSugestoes([]); return; }
+    const espera = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const resultado = await apiRequest(`/documentos-fiscais/nfes-autorizadas?busca=${encodeURIComponent(busca)}`);
+        setSugestoes(resultado);
+      } catch {
+        setSugestoes([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 350);
+    return () => clearTimeout(espera);
+  }, [busca]);
+
+  return (
+    <div className="ncm-field">
+      <input
+        value={busca}
+        onChange={e => { setBusca(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder="Busque pela chave de acesso ou número da nota"
+      />
+      {aberto && (buscando || sugestoes.length > 0) && (
+        <div className="ncm-suggestions">
+          {buscando && <div className="ncm-suggestion-loading">Buscando…</div>}
+          {sugestoes.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              className="ncm-suggestion"
+              onMouseDown={() => { onSelecionar(s); setBusca(""); setAberto(false); }}
+            >
+              <span className="ncm-codigo">Nº {s.numero}</span>
+              <span className="ncm-descricao">{s.destinatario?.nomeRazaoSocial} — R$ {Number(s.valorTotal || 0).toFixed(2)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
   const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "Prestação de serviço de transporte");
   const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || "");
+  const [notasVinculadas, setNotasVinculadas] = useState(cte?.notasDoCte || []);
 
   const [remetenteId, setRemetenteId] = useState(cte?.remetenteId ? String(cte.remetenteId) : "");
   const [expedidorId, setExpedidorId] = useState(cte?.expedidorId ? String(cte.expedidorId) : "");
@@ -2318,6 +2370,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
         remetenteId: remetenteId ? Number(remetenteId) : undefined,
         expedidorId: expedidorId ? Number(expedidorId) : undefined,
         recebedorId: recebedorId ? Number(recebedorId) : undefined,
+        notasFiscaisIds: notasVinculadas.map(n => n.id),
         definicaoTomador,
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
         veiculoId: veiculoId ? Number(veiculoId) : undefined,
@@ -2358,6 +2411,37 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
+          <div className="nf-section">
+            <h4 className="nf-section-title">Notas fiscais transportadas</h4>
+            <NfeCteField onSelecionar={(nota) => {
+              if (notasVinculadas.some(n => n.id === nota.id)) return;
+              setNotasVinculadas(prev => [...prev, nota]);
+            }} />
+            {notasVinculadas.length > 0 && (
+              <div className="nf-itens-table" style={{ marginTop: 10 }}>
+                <div className="nf-itens-header" style={{ gridTemplateColumns: "0.6fr 2fr 2fr 1fr 28px" }}>
+                  <span>Número</span>
+                  <span>Destinatário</span>
+                  <span>Chave de acesso</span>
+                  <span style={{ textAlign: "right" }}>Valor</span>
+                  <span></span>
+                </div>
+                {notasVinculadas.map(nota => (
+                  <div key={nota.id} className="nf-item-row" style={{ gridTemplateColumns: "0.6fr 2fr 2fr 1fr 28px" }}>
+                    <span>{nota.numero}</span>
+                    <span>{nota.destinatario?.nomeRazaoSocial}</span>
+                    <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nota.chaveAcesso}</span>
+                    <span className="nf-item-total">R$ {Number(nota.valorTotal || 0).toFixed(2)}</span>
+                    <button type="button" className="icon-btn icon-btn-danger" onClick={() => setNotasVinculadas(prev => prev.filter(n => n.id !== nota.id))} aria-label="Remover">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="hint">Só aparecem notas já autorizadas pela SEFAZ.</p>
+          </div>
+
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
             <div className="nf-grid-4">

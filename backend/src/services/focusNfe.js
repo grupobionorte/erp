@@ -213,6 +213,12 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
     informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,
 
+    // NFe(s) que esse CTe está transportando — a chave de acesso de cada
+    // uma, já autorizada.
+    nfes: documento.notasDoCte?.length
+      ? documento.notasDoCte.map((nota) => ({ chave_nfe: nota.chaveAcesso }))
+      : undefined,
+
     // Veículo/condutor — nomes de campo ainda a confirmar com a Focus NFe
     // caso a emissão real reclame (assim como fizemos com a NFe).
     modal_rodoviario: {

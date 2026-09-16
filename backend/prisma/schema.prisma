@@ -395,6 +395,13 @@ model DocumentoFiscal {
   mdfe              DocumentoFiscal?  @relation("DocumentosDoMdfe", fields: [mdfeId], references: [id])
   documentosVinculados DocumentoFiscal[] @relation("DocumentosDoMdfe")
 
+  // Um CTe transporta uma ou mais NFe — mesma ideia do vínculo com o MDFe,
+  // mas numa coluna separada (uma NFe pode estar amarrada a um CTe e,
+  // depois, esse CTe a um MDFe, ao mesmo tempo).
+  cteId      Int?              @map("cte_id")
+  cte        DocumentoFiscal?  @relation("NotasDoCte", fields: [cteId], references: [id])
+  notasDoCte DocumentoFiscal[] @relation("NotasDoCte")
+
   @@map("documentos_fiscais")
 }
 

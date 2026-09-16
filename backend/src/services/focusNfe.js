@@ -149,6 +149,7 @@ const CODIGO_TOMADOR = { "Remetente": 0, "Expedidor": 1, "Recebedor": 2, "Destin
 function blocoPessoaCte(pessoa, prefixo) {
   if (!pessoa) return {};
   const doc = (pessoa.documento || "").replace(/\D/g, "");
+  const temEndereco = !!pessoa.endereco?.logradouro;
   return {
     [`cnpj_${prefixo}`]: pessoa.tipo === "pessoa_juridica" ? doc : undefined,
     [`cpf_${prefixo}`]: pessoa.tipo === "pessoa_fisica" ? doc : undefined,
@@ -157,15 +158,22 @@ function blocoPessoaCte(pessoa, prefixo) {
     [`nome_fantasia_${prefixo}`]: pessoa.nomeFantasia || pessoa.nomeRazaoSocial,
     [`telefone_${prefixo}`]: (pessoa.telefone || "").replace(/\D/g, "") || undefined,
     [`email_${prefixo}`]: pessoa.email || undefined,
-    [`logradouro_${prefixo}`]: pessoa.endereco?.logradouro,
-    [`numero_${prefixo}`]: pessoa.endereco?.numero,
-    [`complemento_${prefixo}`]: pessoa.endereco?.complemento || undefined,
-    [`bairro_${prefixo}`]: pessoa.endereco?.bairro,
-    [`municipio_${prefixo}`]: pessoa.endereco?.cidade,
-    [`uf_${prefixo}`]: pessoa.endereco?.uf,
-    [`cep_${prefixo}`]: (pessoa.endereco?.cep || "").replace(/\D/g, ""),
-    [`codigo_pais_${prefixo}`]: 1058,
-    [`pais_${prefixo}`]: "Brasil",
+    // Só manda o bloco de endereço inteiro (e o país junto) quando
+    // realmente tem logradouro — um endereço incompleto (só CEP/UF, por
+    // exemplo) quebra a ordem exigida pelo schema do CT-e.
+    ...(temEndereco
+      ? {
+          [`logradouro_${prefixo}`]: pessoa.endereco.logradouro,
+          [`numero_${prefixo}`]: pessoa.endereco.numero,
+          [`complemento_${prefixo}`]: pessoa.endereco.complemento || undefined,
+          [`bairro_${prefixo}`]: pessoa.endereco.bairro,
+          [`municipio_${prefixo}`]: pessoa.endereco.cidade,
+          [`uf_${prefixo}`]: pessoa.endereco.uf,
+          [`cep_${prefixo}`]: (pessoa.endereco.cep || "").replace(/\D/g, "") || undefined,
+          [`codigo_pais_${prefixo}`]: 1058,
+          [`pais_${prefixo}`]: "Brasil",
+        }
+      : {}),
   };
 }
 
@@ -192,6 +200,11 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     municipio_fim: documento.destinoPercurso,
     uf_fim: documento.ufFim,
 
+    // Indicador se o recebedor retira a mercadoria no local (aeroporto,
+    // filial, porto, estação) em vez de receber entrega — 0 = Não retira
+    // (padrão, entrega normal), 1 = Retira.
+    retira: 0,
+
     indicador_inscricao_estadual_tomador: 9,
     tomador: codigoTomador,
 
@@ -211,6 +224,7 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     icms_valor_credito_presumido: documento.valorCreditoPresumidoIcms || undefined,
 
     valor_total_carga: documento.valorTotal,
+    produto_predominante: documento.especieVolumes || documento.naturezaOperacao || "Carga geral",
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
     valor_carga_averbacao: documento.valorTotal,
 

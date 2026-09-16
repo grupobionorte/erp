@@ -551,7 +551,9 @@ function useApiCollection(moduleKey) {
       method: "POST",
       body: JSON.stringify(config.toApi(data)),
     });
-    setItems((atual) => [...(atual || []), config.fromApi(registro)]);
+    const criado = config.fromApi(registro);
+    setItems((atual) => [...(atual || []), criado]);
+    return criado;
   }, [moduleKey]);
 
   const editar = useCallback(async (id, data) => {
@@ -1497,13 +1499,20 @@ const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"]
 const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
 const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
-function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, onSave, onCancel }) {
+function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : "");
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
+  const [quickAdd, setQuickAdd] = useState(null); // { tipo: 'clientes'|'transportadoras'|'veiculos'|'colaboradores', setter }
+  const CRIAR_POR_TIPO = { clientes: criarCliente, transportadoras: criarTransportadora, veiculos: criarVeiculo, colaboradores: criarColaborador };
+  const salvarQuickAdd = async (dados) => {
+    const criado = await CRIAR_POR_TIPO[quickAdd.tipo](dados);
+    quickAdd.setter(String(criado.id));
+    setQuickAdd(null);
+  };
   const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
@@ -1627,10 +1636,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               </div>
               <div className="field-group">
                 <label className="field-label">Colaborador responsável</label>
-                <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Finalidade da operação</label>
@@ -1656,10 +1668,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Cliente<span className="req">*</span></label>
-                <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Selecione…</option>
+                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setDestinatarioId })}><Plus size={14} /></button>
+                </div>
                 {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
               </div>
               <div className="field-group">
@@ -1710,17 +1725,23 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Transportadora</label>
-                <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-                  <option value="">Nenhuma</option>
-                  {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhuma</option>
+                    {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar transportadora nova" onClick={() => setQuickAdd({ tipo: "transportadoras", setter: setTransportadoraId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Veículo (placa)</label>
-                <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
+                </div>
               </div>
             </div>
             <div className="nf-grid-4">
@@ -1852,6 +1873,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
         </div>
       </div>
+      {quickAdd && (
+        <RecordForm
+          moduleKey={quickAdd.tipo}
+          record={null}
+          onSave={salvarQuickAdd}
+          onCancel={() => setQuickAdd(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1990,11 +2019,11 @@ function CartaCorrecaoModal({ nota, onClose }) {
 }
 
 function NotasFiscaisView() {
-  const { items: clientes } = useApiCollection("clientes");
+  const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
-  const { items: transportadoras } = useApiCollection("transportadoras");
-  const { items: colaboradores } = useApiCollection("colaboradores");
-  const { items: veiculos } = useApiCollection("veiculos");
+  const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
+  const { items: colaboradores, criar: criarColaborador } = useApiCollection("colaboradores");
+  const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
 
   const [notas, setNotas] = useState(null);
   const [erro, setErro] = useState(null);
@@ -2307,6 +2336,10 @@ Detalhe: ${e.detalhe}` : ""}`);
           transportadoras={transportadoras}
           colaboradores={colaboradores}
           veiculos={veiculos}
+          criarCliente={criarCliente}
+          criarTransportadora={criarTransportadora}
+          criarVeiculo={criarVeiculo}
+          criarColaborador={criarColaborador}
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />
@@ -2375,13 +2408,20 @@ function NfeCteField({ onSelecionar }) {
   );
 }
 
-function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSave, onCancel }) {
+function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
   const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "Prestação de serviço de transporte");
   const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || "");
+  const [tipoServico, setTipoServico] = useState(cte?.tipoServico || "Normal");
+  const [dataTransporte, setDataTransporte] = useState(cte?.dataTransporte ? cte.dataTransporte.slice(0, 10) : hoje);
+  const [horaTransporte, setHoraTransporte] = useState(cte?.horaTransporte || "");
+  const [cteGlobalizado, setCteGlobalizado] = useState(cte?.cteGlobalizado ?? false);
+  const [tipoCte, setTipoCte] = useState(cte?.tipoCte || "CT-e normal");
   const [notasVinculadas, setNotasVinculadas] = useState(cte?.notasDoCte || []);
+  const [tipoDocumentoTransportado, setTipoDocumentoTransportado] = useState("Fiscal");
+  const [quickAdd, setQuickAdd] = useState(null); // { tipo: 'clientes'|'transportadoras'|'veiculos', setter }
 
   const [remetenteId, setRemetenteId] = useState(cte?.remetenteId ? String(cte.remetenteId) : "");
   const [expedidorId, setExpedidorId] = useState(cte?.expedidorId ? String(cte.expedidorId) : "");
@@ -2398,6 +2438,15 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
   const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
   const [veiculoId, setVeiculoId] = useState(cte?.veiculoId ? String(cte.veiculoId) : "");
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(cte?.veiculoReboqueId ? String(cte.veiculoReboqueId) : "");
+
+  // Cadastra cliente/transportadora/veículo sem sair do CTe, e já
+  // seleciona o registro novo no campo certo assim que salvar.
+  const CRIAR_POR_TIPO = { clientes: criarCliente, transportadoras: criarTransportadora, veiculos: criarVeiculo };
+  const salvarQuickAdd = async (dados) => {
+    const criado = await CRIAR_POR_TIPO[quickAdd.tipo](dados);
+    quickAdd.setter(String(criado.id));
+    setQuickAdd(null);
+  };
   const [nomeMotorista, setNomeMotorista] = useState(cte?.nomeMotorista || "");
   const [cpfMotorista, setCpfMotorista] = useState(cte?.cpfMotorista || "");
 
@@ -2441,6 +2490,11 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
         distanciaKm: distanciaKm !== "" ? Number(distanciaKm) : undefined,
         naturezaOperacao,
         cfopPrestacao: cfopPrestacao || undefined,
+        tipoServico,
+        dataTransporte: dataTransporte || undefined,
+        horaTransporte: horaTransporte || undefined,
+        cteGlobalizado,
+        tipoCte,
         formaPagamento,
         informacoesComplementares,
         dataEmissao: dataEmissao || undefined,
@@ -2474,12 +2528,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
         <div className="modal-body">
           <div className="nf-section">
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
-            <NfeCteField onSelecionar={(nota) => {
-              if (notasVinculadas.some(n => n.id === nota.id)) return;
-              setNotasVinculadas(prev => [...prev, nota]);
-            }} />
-            {notasVinculadas.length > 0 && (
-              <div className="nf-itens-table" style={{ marginTop: 10 }}>
+            {notasVinculadas.length > 0 ? (
+              <div className="nf-itens-table" style={{ marginBottom: 14 }}>
                 <div className="nf-itens-header" style={{ gridTemplateColumns: "0.6fr 2fr 2fr 1fr 28px" }}>
                   <span>Número</span>
                   <span>Destinatário</span>
@@ -2499,6 +2549,32 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
                   </div>
                 ))}
               </div>
+            ) : (
+              <p className="hint" style={{ marginTop: 0 }}>Nenhum documento adicionado ainda.</p>
+            )}
+
+            <div className="nf-grid-3">
+              <div className="field-group" style={{ marginBottom: 8 }}>
+                <label className="field-label">Tipo do documento</label>
+                <select value={tipoDocumentoTransportado} onChange={e => setTipoDocumentoTransportado(e.target.value)}>
+                  <option value="Fiscal">Fiscal</option>
+                  <option value="Declaração">Declaração</option>
+                  <option value="Dutoviário">Dutoviário</option>
+                  <option value="CF-e SAT">CF-e SAT</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+            </div>
+            {tipoDocumentoTransportado === "Fiscal" ? (
+              <NfeCteField onSelecionar={(nota) => {
+                if (notasVinculadas.some(n => n.id === nota.id)) return;
+                setNotasVinculadas(prev => [...prev, nota]);
+              }} />
+            ) : (
+              <p className="hint" style={{ marginTop: 0 }}>
+                Vínculo de documentos do tipo "{tipoDocumentoTransportado}" ainda não está disponível — por enquanto,
+                só dá pra vincular notas fiscais (Fiscal) já emitidas no sistema.
+              </p>
             )}
             <p className="hint">Só aparecem notas já autorizadas pela SEFAZ.</p>
           </div>
@@ -2511,20 +2587,58 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Colaborador responsável</label>
-                <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                <label className="field-label">Tipo de serviço</label>
+                <select value={tipoServico} onChange={e => setTipoServico(e.target.value)}>
+                  <option value="Normal">Normal</option>
+                  <option value="Subcontratação">Subcontratação</option>
+                  <option value="Redespacho">Redespacho</option>
+                  <option value="Redespacho Intermediário">Redespacho Intermediário</option>
+                  <option value="Multimodal">Multimodal</option>
                 </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Data do transporte</label>
+                <input type="date" value={dataTransporte} onChange={e => setDataTransporte(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Hora do transporte</label>
+                <input type="time" value={horaTransporte} onChange={e => setHoraTransporte(e.target.value)} />
+              </div>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Tipo do CT-e</label>
+                <select value={tipoCte} onChange={e => setTipoCte(e.target.value)}>
+                  <option value="CT-e normal">CT-e normal</option>
+                  <option value="Complemento de Valores">Complemento de Valores</option>
+                  <option value="Anulação">Anulação</option>
+                  <option value="Substituto">Substituto</option>
+                </select>
+              </div>
+              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                <label className={`nf-toggle ${cteGlobalizado ? "nf-toggle-ativo" : ""}`}>
+                  <input type="checkbox" checked={cteGlobalizado} onChange={e => setCteGlobalizado(e.target.checked)} />
+                  <span>CT-e globalizado</span>
+                </label>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Colaborador responsável</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">CFOP da prestação</label>
                 <CfopField value={cfopPrestacao} onChange={setCfopPrestacao} />
               </div>
-              <div className="field-group">
-                <label className="field-label">Natureza da operação</label>
-                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
-              </div>
+            </div>
+            <div className="field-group" style={{ marginBottom: 0, maxWidth: 400 }}>
+              <label className="field-label">Natureza da operação</label>
+              <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
             </div>
           </div>
 
@@ -2533,31 +2647,43 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Remetente</label>
-                <select value={remetenteId} onChange={e => setRemetenteId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {opcoesPessoas}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={remetenteId} onChange={e => setRemetenteId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {opcoesPessoas}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setRemetenteId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Expedidor</label>
-                <select value={expedidorId} onChange={e => setExpedidorId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {opcoesPessoas}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={expedidorId} onChange={e => setExpedidorId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {opcoesPessoas}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setExpedidorId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Destinatário<span className="req">*</span></label>
-                <select value={tomadorId} onChange={e => setTomadorId(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {opcoesPessoas}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={tomadorId} onChange={e => setTomadorId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Selecione…</option>
+                    {opcoesPessoas}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setTomadorId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Recebedor</label>
-                <select value={recebedorId} onChange={e => setRecebedorId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {opcoesPessoas}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={recebedorId} onChange={e => setRecebedorId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {opcoesPessoas}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setRecebedorId })}><Plus size={14} /></button>
+                </div>
               </div>
             </div>
             {clientes?.length === 0 && <p className="hint" style={{ marginTop: -8 }}>Nenhum cliente cadastrado ainda.</p>}
@@ -2603,25 +2729,34 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
             <h4 className="nf-section-title">Transporte</h4>
             <div className="field-group">
               <label className="field-label">Transportadora subcontratada</label>
-              <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-                <option value="">Nenhuma (frete próprio)</option>
-                {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-              </select>
+              <div style={{ display: "flex", gap: 6 }}>
+                <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)} style={{ flex: 1 }}>
+                  <option value="">Nenhuma (frete próprio)</option>
+                  {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+                </select>
+                <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar transportadora nova" onClick={() => setQuickAdd({ tipo: "transportadoras", setter: setTransportadoraId })}><Plus size={14} /></button>
+              </div>
             </div>
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Veículo transportador</label>
-                <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Veículo reboque</label>
-                <select value={veiculoReboqueId} onChange={e => setVeiculoReboqueId(e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={veiculoReboqueId} onChange={e => setVeiculoReboqueId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                  </select>
+                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoReboqueId })}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Nome do motorista</label>
@@ -2711,14 +2846,22 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
           <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
         </div>
       </div>
+      {quickAdd && (
+        <RecordForm
+          moduleKey={quickAdd.tipo}
+          record={null}
+          onSave={salvarQuickAdd}
+          onCancel={() => setQuickAdd(null)}
+        />
+      )}
     </div>
   );
 }
 
 function CteView() {
-  const { items: clientes } = useApiCollection("clientes");
-  const { items: transportadoras } = useApiCollection("transportadoras");
-  const { items: veiculos } = useApiCollection("veiculos");
+  const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
+  const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
+  const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
   const { items: colaboradores } = useApiCollection("colaboradores");
 
   const [ctes, setCtes] = useState(null);
@@ -3014,6 +3157,9 @@ function CteView() {
           transportadoras={transportadoras}
           veiculos={veiculos}
           colaboradores={colaboradores}
+          criarCliente={criarCliente}
+          criarTransportadora={criarTransportadora}
+          criarVeiculo={criarVeiculo}
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />

@@ -400,6 +400,13 @@ model DocumentoFiscal {
   cstIbsCbsPrestacao        String? @map("cst_ibs_cbs_prestacao")
   classificacaoTributariaIbsCbsPrestacao String? @map("classificacao_tributaria_ibs_cbs_prestacao")
 
+  // CT-e — dados de identificação (aba "CT-e" da tela).
+  tipoServico      String?   @map("tipo_servico") // Normal, Subcontratação, Redespacho, Redespacho Intermediário, Multimodal
+  dataTransporte   DateTime? @map("data_transporte")
+  horaTransporte   String?   @map("hora_transporte") // "HH:MM"
+  cteGlobalizado   Boolean?  @default(false) @map("cte_globalizado")
+  tipoCte          String?   @map("tipo_cte") // CT-e normal, Complemento de Valores, Anulação, Substituto
+
   transportadoraId Int?            @map("transportadora_id")
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
 

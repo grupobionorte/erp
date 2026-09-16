@@ -174,6 +174,11 @@ function blocoPessoaCte(pessoa, prefixo) {
   };
 }
 
+// Códigos que a SEFAZ usa pra tipo do CT-e e tipo de serviço — convertidos
+// a partir dos rótulos em português que aparecem no formulário.
+const CODIGO_TIPO_CTE = { "CT-e normal": 0, "Complemento de Valores": 1, "Anulação": 2, "Substituto": 3 };
+const CODIGO_TIPO_SERVICO = { "Normal": 0, "Subcontratação": 1, "Redespacho": 2, "Redespacho Intermediário": 3, "Multimodal": 4 };
+
 function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
   const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador] ?? 3; // padrão: Destinatário
 
@@ -181,8 +186,9 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     cfop: documento.cfopPrestacao || undefined,
     natureza_operacao: documento.naturezaOperacao || "Prestação de serviço de transporte",
     data_emissao: (documento.dataEmissao || new Date()).toISOString(),
-    tipo_documento: 0, // 0 = CT-e normal
-    tipo_servico: 0, // 0 = Normal
+    tipo_documento: CODIGO_TIPO_CTE[documento.tipoCte] ?? 0,
+    tipo_servico: CODIGO_TIPO_SERVICO[documento.tipoServico] ?? 0,
+    indicador_globalizado: documento.cteGlobalizado ? 1 : 0,
     cnpj_emitente: empresa.cnpj,
 
     // Município/UF de envio — quando não temos um cadastro à parte pra

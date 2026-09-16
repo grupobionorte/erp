@@ -1880,7 +1880,7 @@ function NotasFiscaisView() {
                       {processando === nota.id ? "Consultando…" : "Consultar status"}
                     </button>
                   )}
-                  {nota.status === "autorizado" && nota.pdfUrl && (
+                  {nota.status === "autorizado" && nota.pdfUrl?.startsWith("http") && (
                     <a
                       className="btn btn-primary"
                       style={{ padding: "4px 10px", fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
@@ -1890,6 +1890,16 @@ function NotasFiscaisView() {
                     >
                       Baixar DANFE
                     </a>
+                  )}
+                  {nota.status === "autorizado" && !nota.pdfUrl?.startsWith("http") && (
+                    <button
+                      className="btn"
+                      style={{ padding: "4px 10px", fontSize: 12 }}
+                      disabled={processando === nota.id}
+                      onClick={() => consultarStatusNota(nota.id)}
+                    >
+                      {processando === nota.id ? "Corrigindo…" : "Corrigir link do DANFE"}
+                    </button>
                   )}
                 </td>
               </tr>

@@ -190,9 +190,20 @@ async function consultar({ tipo, ref }) {
   return data; // status pode ser: autorizado | erro_autorizacao | cancelado
 }
 
+// A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
+// relativo (ex: "/arquivos_development/..."), não a URL completa — sem
+// isso o link abriria dentro do nosso próprio site em vez do da Focus.
+function urlCompleta(caminho) {
+  if (!caminho) return caminho;
+  if (caminho.startsWith("http://") || caminho.startsWith("https://")) return caminho;
+  const base = (process.env.FOCUS_NFE_BASE_URL || "").replace(/\/$/, "");
+  return `${base}${caminho.startsWith("/") ? "" : "/"}${caminho}`;
+}
+
 module.exports = {
   montarPayloadNfe,
   montarPayloadCte,
+  urlCompleta,
   montarPayloadMdfe,
   emitir,
   consultar,

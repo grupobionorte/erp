@@ -336,8 +336,8 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
         chaveAcesso: resultado[campos.chave],
         protocoloAutorizacao: resultado.numero_protocolo,
         dataAutorizacao: new Date(),
-        xmlUrl: resultado[campos.xml],
-        pdfUrl: resultado[campos.pdf],
+        xmlUrl: focusNfe.urlCompleta(resultado[campos.xml]),
+        pdfUrl: focusNfe.urlCompleta(resultado[campos.pdf]),
       },
     });
     return res.json(atualizado);

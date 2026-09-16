@@ -140,21 +140,96 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
 // ela mesma fizer o frete) é quem emite; o destinatário do cadastro de
 // pessoas entra como tomador do serviço — o mais comum é o próprio
 // destinatário da mercadoria pagar o frete.
-function montarPayloadCte({ empresa, tomador, valorTotal }) {
+// Código do "tomador" (quem paga o frete) que a Focus NFe usa: quando é um
+// dos 4 papéis já informados no CTe, ela reaproveita os dados desse bloco
+// (remetente/expedidor/recebedor/destinatário) — só quando for "Outros" é
+// que precisaria de um bloco de endereço à parte (ainda não implementado).
+const CODIGO_TOMADOR = { "Remetente": 0, "Expedidor": 1, "Recebedor": 2, "Destinatário": 3, "Outros": 4 };
+
+function blocoPessoaCte(pessoa, prefixo) {
+  if (!pessoa) return {};
+  const doc = (pessoa.documento || "").replace(/\D/g, "");
   return {
-    natureza_operacao: "Prestação de serviço de transporte",
-    data_emissao: new Date().toISOString(),
+    [`cnpj_${prefixo}`]: pessoa.tipo === "pessoa_juridica" ? doc : undefined,
+    [`cpf_${prefixo}`]: pessoa.tipo === "pessoa_fisica" ? doc : undefined,
+    [`inscricao_estadual_${prefixo}`]: pessoa.ie || undefined,
+    [`nome_${prefixo}`]: pessoa.nomeRazaoSocial,
+    [`nome_fantasia_${prefixo}`]: pessoa.nomeFantasia || pessoa.nomeRazaoSocial,
+    [`telefone_${prefixo}`]: (pessoa.telefone || "").replace(/\D/g, "") || undefined,
+    [`email_${prefixo}`]: pessoa.email || undefined,
+    [`logradouro_${prefixo}`]: pessoa.endereco?.logradouro,
+    [`numero_${prefixo}`]: pessoa.endereco?.numero,
+    [`complemento_${prefixo}`]: pessoa.endereco?.complemento || undefined,
+    [`bairro_${prefixo}`]: pessoa.endereco?.bairro,
+    [`municipio_${prefixo}`]: pessoa.endereco?.cidade,
+    [`uf_${prefixo}`]: pessoa.endereco?.uf,
+    [`cep_${prefixo}`]: (pessoa.endereco?.cep || "").replace(/\D/g, ""),
+    [`codigo_pais_${prefixo}`]: 1058,
+    [`pais_${prefixo}`]: "Brasil",
+  };
+}
+
+function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
+  const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador] ?? 3; // padrão: Destinatário
+
+  return {
+    cfop: documento.cfopPrestacao || undefined,
+    natureza_operacao: documento.naturezaOperacao || "Prestação de serviço de transporte",
+    data_emissao: (documento.dataEmissao || new Date()).toISOString(),
+    tipo_documento: 0, // 0 = CT-e normal
+    tipo_servico: 0, // 0 = Normal
     cnpj_emitente: empresa.cnpj,
-    tomador_tipo: 0, // 0 = CNPJ/CPF do próprio tomador informado abaixo
-    tomador_cnpj: tomador.tipo === "pessoa_juridica" ? tomador.documento : undefined,
-    tomador_cpf: tomador.tipo === "pessoa_fisica" ? tomador.documento : undefined,
-    tomador_nome: tomador.nomeRazaoSocial,
-    municipio_inicio: tomador.endereco?.cidade,
-    uf_inicio: tomador.endereco?.uf,
-    municipio_fim: tomador.endereco?.cidade,
-    uf_fim: tomador.endereco?.uf,
-    valor_total_servico: valorTotal,
-    valor_recebido: valorTotal,
+
+    // Município/UF de envio — quando não temos um cadastro à parte pra
+    // isso, usamos o mesmo do início da prestação (é o caso mais comum).
+    municipio_envio: documento.origemPercurso,
+    uf_envio: documento.origemPercurso?.split("/")[1]?.trim(),
+    municipio_inicio: documento.origemPercurso,
+    uf_inicio: documento.origemPercurso?.split("/")[1]?.trim(),
+    municipio_fim: documento.destinoPercurso,
+    uf_fim: documento.destinoPercurso?.split("/")[1]?.trim(),
+
+    indicador_inscricao_estadual_tomador: 9,
+    tomador: codigoTomador,
+
+    ...blocoPessoaCte(remetente, "remetente"),
+    ...blocoPessoaCte(expedidor, "expedidor"),
+    ...blocoPessoaCte(recebedor, "recebedor"),
+    ...blocoPessoaCte(destinatario, "destinatario"),
+
+    valor_total: documento.valorTotal,
+    valor_receber: documento.valorTotal,
+
+    icms_situacao_tributaria: documento.cstIcmsPrestacao || "90",
+    icms_base_calculo: documento.baseCalculoIcmsPrestacao || undefined,
+    icms_aliquota: documento.aliquotaIcmsPrestacao || undefined,
+    icms_valor: documento.valorIcms || undefined,
+    icms_reducao_base_calculo: documento.percentualReducaoBaseIcms || undefined,
+    icms_valor_credito_presumido: documento.valorCreditoPresumidoIcms || undefined,
+
+    valor_total_carga: documento.valorTotal,
+    outras_caracteristicas_carga: documento.especieVolumes || undefined,
+    valor_carga_averbacao: documento.valorTotal,
+
+    informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,
+
+    // Veículo/condutor — nomes de campo ainda a confirmar com a Focus NFe
+    // caso a emissão real reclame (assim como fizemos com a NFe).
+    modal_rodoviario: {
+      veiculos: [
+        veiculo && {
+          placa: veiculo.placa,
+          rntrc: undefined,
+          uf: undefined,
+        },
+        veiculoReboque && {
+          placa: veiculoReboque.placa,
+          rntrc: undefined,
+          uf: undefined,
+        },
+      ].filter(Boolean),
+      condutores: documento.nomeMotorista ? [{ nome: documento.nomeMotorista, cpf: (documento.cpfMotorista || "").replace(/\D/g, "") }] : undefined,
+    },
   };
 }
 

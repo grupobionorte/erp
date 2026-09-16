@@ -17,7 +17,7 @@ router.get("/", asyncHandler(async (req, res) => {
       // sem empresa" pra tratar aqui.
       ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
@@ -26,7 +26,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } } },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);
@@ -127,7 +127,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       valorTotal,
       itens: { create: itensCalculados },
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true },
   });
 
   res.status(201).json(documento);
@@ -142,8 +142,12 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
 router.post("/cte/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    tomadorId, transportadoraId, veiculoId, nomeMotorista, cpfMotorista,
-    origemPercurso, destinoPercurso, naturezaOperacao, informacoesComplementares, valorTotal,
+    tomadorId, transportadoraId, veiculoId, veiculoReboqueId, nomeMotorista, cpfMotorista,
+    origemPercurso, destinoPercurso, distanciaKm, naturezaOperacao, informacoesComplementares, valorTotal,
+    remetenteId, expedidorId, recebedorId, definicaoTomador, formaPagamento,
+    cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
+    percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
+    dataEmissao, colaboradorResponsavelId,
   } = req.body;
 
   if (!empresaId) {
@@ -169,19 +173,40 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       status: "rascunho",
       empresaId,
       destinatarioId: tomadorId,
+      remetenteId: remetenteId || undefined,
+      expedidorId: expedidorId || undefined,
+      recebedorId: recebedorId || undefined,
+      definicaoTomador: definicaoTomador || undefined,
       transportadoraId: transportadoraId || undefined,
       veiculoId: veiculoId || undefined,
+      veiculoReboqueId: veiculoReboqueId || undefined,
       nomeMotorista: nomeMotorista || undefined,
       cpfMotorista: cpfMotorista || undefined,
       origemPercurso: origemPercurso || undefined,
       destinoPercurso: destinoPercurso || undefined,
+      distanciaKm: distanciaKm || undefined,
       naturezaOperacao: naturezaOperacao || undefined,
       informacoesComplementares: informacoesComplementares || undefined,
+      formaPagamento: formaPagamento || undefined,
+      cfopPrestacao: cfopPrestacao || undefined,
+      cstIcmsPrestacao: cstIcmsPrestacao || undefined,
+      baseCalculoIcmsPrestacao: baseCalculoIcmsPrestacao || undefined,
+      aliquotaIcmsPrestacao: aliquotaIcmsPrestacao || undefined,
+      percentualReducaoBaseIcms: percentualReducaoBaseIcms || undefined,
+      valorIcmsNaoTributado: valorIcmsNaoTributado || undefined,
+      valorIcmsOutras: valorIcmsOutras || undefined,
+      valorCreditoPresumidoIcms: valorCreditoPresumidoIcms || undefined,
+      valorFcp: valorFcp || undefined,
+      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
+      colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
       valorTotal,
     },
-    include: { destinatario: true, transportadora: true, veiculo: true },
+    include: {
+      destinatario: true, remetente: true, expedidor: true, recebedor: true,
+      transportadora: true, veiculo: true, veiculoReboque: true,
+    },
   });
 
   res.status(201).json(documento);
@@ -237,9 +262,13 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     include: {
       empresa: true,
       destinatario: { include: { endereco: true } },
+      remetente: { include: { endereco: true } },
+      expedidor: { include: { endereco: true } },
+      recebedor: { include: { endereco: true } },
       itens: { include: { produto: true } },
       transportadora: true,
       veiculo: true,
+      veiculoReboque: true,
       documentosVinculados: true,
     },
   });
@@ -268,8 +297,13 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       : documento.tipo === "CTe"
       ? focusNfe.montarPayloadCte({
           empresa: documento.empresa,
-          tomador: documento.destinatario,
-          valorTotal: documento.valorTotal,
+          destinatario: documento.destinatario,
+          remetente: documento.remetente,
+          expedidor: documento.expedidor,
+          recebedor: documento.recebedor,
+          veiculo: documento.veiculo,
+          veiculoReboque: documento.veiculoReboque,
+          documento,
         })
       : focusNfe.montarPayloadMdfe({
           empresa: documento.empresa,
@@ -406,6 +440,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
     dataEmissao, colaboradorResponsavelId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
+    veiculoReboqueId, distanciaKm, remetenteId, expedidorId, recebedorId, definicaoTomador,
+    cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
+    percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
   } = req.body;
 
   let dadosItens = {};
@@ -460,6 +497,21 @@ router.put("/:id", asyncHandler(async (req, res) => {
       destinatarioId: destinatarioId || undefined,
       transportadoraId: transportadoraId === null ? null : transportadoraId || undefined,
       veiculoId: veiculoId === null ? null : veiculoId || undefined,
+      veiculoReboqueId: veiculoReboqueId === null ? null : veiculoReboqueId || undefined,
+      remetenteId: remetenteId === null ? null : remetenteId || undefined,
+      expedidorId: expedidorId === null ? null : expedidorId || undefined,
+      recebedorId: recebedorId === null ? null : recebedorId || undefined,
+      definicaoTomador: definicaoTomador ?? undefined,
+      distanciaKm: distanciaKm ?? undefined,
+      cfopPrestacao: cfopPrestacao ?? undefined,
+      cstIcmsPrestacao: cstIcmsPrestacao ?? undefined,
+      baseCalculoIcmsPrestacao: baseCalculoIcmsPrestacao ?? undefined,
+      aliquotaIcmsPrestacao: aliquotaIcmsPrestacao ?? undefined,
+      percentualReducaoBaseIcms: percentualReducaoBaseIcms ?? undefined,
+      valorIcmsNaoTributado: valorIcmsNaoTributado ?? undefined,
+      valorIcmsOutras: valorIcmsOutras ?? undefined,
+      valorCreditoPresumidoIcms: valorCreditoPresumidoIcms ?? undefined,
+      valorFcp: valorFcp ?? undefined,
       nomeMotorista: nomeMotorista ?? undefined,
       cpfMotorista: cpfMotorista ?? undefined,
       origemPercurso: origemPercurso ?? undefined,
@@ -490,7 +542,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorTotal,
       ...dadosItens,
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, transportadora: true, veiculo: true, colaboradorResponsavel: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true },
   });
 
   res.json(documento);

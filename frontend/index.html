@@ -2269,36 +2269,76 @@ Detalhe: ${e.detalhe}` : ""}`);
 // Mesma ideia da Nota Fiscal, mas sem itens de produto — em vez disso tem
 // origem/destino do trajeto, veículo e motorista.
 
-function CteForm({ cte, clientes, transportadoras, veiculos, onSave, onCancel }) {
+const DEFINICAO_TOMADOR = ["Remetente", "Expedidor", "Recebedor", "Destinatário", "Outros"];
+
+function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSave, onCancel }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
+  const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "Prestação de serviço de transporte");
+  const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || "");
+
+  const [remetenteId, setRemetenteId] = useState(cte?.remetenteId ? String(cte.remetenteId) : "");
+  const [expedidorId, setExpedidorId] = useState(cte?.expedidorId ? String(cte.expedidorId) : "");
   const [tomadorId, setTomadorId] = useState(cte?.destinatarioId ? String(cte.destinatarioId) : "");
-  const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
-  const [veiculoId, setVeiculoId] = useState(cte?.veiculoId ? String(cte.veiculoId) : "");
-  const [nomeMotorista, setNomeMotorista] = useState(cte?.nomeMotorista || "");
-  const [cpfMotorista, setCpfMotorista] = useState(cte?.cpfMotorista || "");
+  const [recebedorId, setRecebedorId] = useState(cte?.recebedorId ? String(cte.recebedorId) : "");
+  const [definicaoTomador, setDefinicaoTomador] = useState(cte?.definicaoTomador || "Destinatário");
+
   const [origemPercurso, setOrigemPercurso] = useState(cte?.origemPercurso || "");
   const [destinoPercurso, setDestinoPercurso] = useState(cte?.destinoPercurso || "");
-  const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "Prestação de serviço de transporte");
+  const [distanciaKm, setDistanciaKm] = useState(cte?.distanciaKm ?? "");
+
+  const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
+  const [veiculoId, setVeiculoId] = useState(cte?.veiculoId ? String(cte.veiculoId) : "");
+  const [veiculoReboqueId, setVeiculoReboqueId] = useState(cte?.veiculoReboqueId ? String(cte.veiculoReboqueId) : "");
+  const [nomeMotorista, setNomeMotorista] = useState(cte?.nomeMotorista || "");
+  const [cpfMotorista, setCpfMotorista] = useState(cte?.cpfMotorista || "");
+
+  const [formaPagamento, setFormaPagamento] = useState(cte?.formaPagamento || "A pagar (FOB)");
   const [valorTotal, setValorTotal] = useState(cte?.valorTotal ?? "");
+  const [cstIcmsPrestacao, setCstIcmsPrestacao] = useState(cte?.cstIcmsPrestacao || "");
+  const [baseCalculoIcmsPrestacao, setBaseCalculoIcmsPrestacao] = useState(cte?.baseCalculoIcmsPrestacao ?? "");
+  const [aliquotaIcmsPrestacao, setAliquotaIcmsPrestacao] = useState(cte?.aliquotaIcmsPrestacao ?? "");
+  const [valorIcms, setValorIcms] = useState(cte?.valorIcms ?? "");
+  const [percentualReducaoBaseIcms, setPercentualReducaoBaseIcms] = useState(cte?.percentualReducaoBaseIcms ?? "");
+  const [valorCreditoPresumidoIcms, setValorCreditoPresumidoIcms] = useState(cte?.valorCreditoPresumidoIcms ?? "");
+
   const [informacoesComplementares, setInformacoesComplementares] = useState(cte?.informacoesComplementares || "");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   const salvar = async () => {
-    if (!tomadorId) { setErro("Selecione o tomador do serviço."); return; }
+    if (!tomadorId) { setErro("Selecione o destinatário."); return; }
     if (!valorTotal || Number(valorTotal) <= 0) { setErro("Informe o valor da prestação de serviço."); return; }
     setErro("");
     setSalvando(true);
     try {
       await onSave({
         tomadorId: Number(tomadorId),
+        remetenteId: remetenteId ? Number(remetenteId) : undefined,
+        expedidorId: expedidorId ? Number(expedidorId) : undefined,
+        recebedorId: recebedorId ? Number(recebedorId) : undefined,
+        definicaoTomador,
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
         veiculoId: veiculoId ? Number(veiculoId) : undefined,
+        veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : undefined,
         nomeMotorista: nomeMotorista || undefined,
         cpfMotorista: cpfMotorista || undefined,
         origemPercurso: origemPercurso || undefined,
         destinoPercurso: destinoPercurso || undefined,
+        distanciaKm: distanciaKm !== "" ? Number(distanciaKm) : undefined,
         naturezaOperacao,
+        cfopPrestacao: cfopPrestacao || undefined,
+        formaPagamento,
         informacoesComplementares,
+        dataEmissao: dataEmissao || undefined,
+        colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
+        cstIcmsPrestacao: cstIcmsPrestacao || undefined,
+        baseCalculoIcmsPrestacao: baseCalculoIcmsPrestacao !== "" ? Number(baseCalculoIcmsPrestacao) : undefined,
+        aliquotaIcmsPrestacao: aliquotaIcmsPrestacao !== "" ? Number(aliquotaIcmsPrestacao) : undefined,
+        valorIcms: valorIcms !== "" ? Number(valorIcms) : undefined,
+        percentualReducaoBaseIcms: percentualReducaoBaseIcms !== "" ? Number(percentualReducaoBaseIcms) : undefined,
+        valorCreditoPresumidoIcms: valorCreditoPresumidoIcms !== "" ? Number(valorCreditoPresumidoIcms) : undefined,
         valorTotal: Number(valorTotal),
       });
     } catch (e) {
@@ -2308,74 +2348,191 @@ function CteForm({ cte, clientes, transportadoras, veiculos, onSave, onCancel })
     }
   };
 
+  const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
+
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 560 }}>
+      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
         <div className="modal-header">
           <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <div className="field-group">
-            <label className="field-label">Tomador do serviço<span className="req">*</span></label>
-            <select value={tomadorId} onChange={e => setTomadorId(e.target.value)}>
-              <option value="">Selecione…</option>
-              {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-            {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
-          </div>
-
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Origem</label>
-              <input placeholder="Cidade/UF" value={origemPercurso} onChange={e => setOrigemPercurso(e.target.value)} />
+          <div className="nf-section">
+            <h4 className="nf-section-title">Dados gerais</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Colaborador responsável</label>
+                <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">CFOP da prestação</label>
+                <CfopField value={cfopPrestacao} onChange={setCfopPrestacao} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Natureza da operação</label>
+                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+              </div>
             </div>
-            <div className="field-group">
-              <label className="field-label">Destino</label>
-              <input placeholder="Cidade/UF" value={destinoPercurso} onChange={e => setDestinoPercurso(e.target.value)} />
+          </div>
+
+          <div className="nf-section">
+            <h4 className="nf-section-title">Pessoas</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Remetente</label>
+                <select value={remetenteId} onChange={e => setRemetenteId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {opcoesPessoas}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Expedidor</label>
+                <select value={expedidorId} onChange={e => setExpedidorId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {opcoesPessoas}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Destinatário<span className="req">*</span></label>
+                <select value={tomadorId} onChange={e => setTomadorId(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {opcoesPessoas}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Recebedor</label>
+                <select value={recebedorId} onChange={e => setRecebedorId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {opcoesPessoas}
+                </select>
+              </div>
             </div>
-          </div>
+            {clientes?.length === 0 && <p className="hint" style={{ marginTop: -8 }}>Nenhum cliente cadastrado ainda.</p>}
 
-          <div className="field-group">
-            <label className="field-label">Transportadora subcontratada</label>
-            <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-              <option value="">Nenhuma (frete próprio)</option>
-              {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Município início<span className="req">*</span></label>
+                <input placeholder="Cidade/UF" value={origemPercurso} onChange={e => setOrigemPercurso(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Município fim<span className="req">*</span></label>
+                <input placeholder="Cidade/UF" value={destinoPercurso} onChange={e => setDestinoPercurso(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Distância (km)</label>
+                <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
+              </div>
+            </div>
 
-          <div className="endereco-grid">
-            <div className="field-group">
-              <label className="field-label">Veículo</label>
-              <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)}>
-                <option value="">Nenhum</option>
-                {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+            <div className="field-group" style={{ marginBottom: 0, maxWidth: 300 }}>
+              <label className="field-label">Definição do tomador</label>
+              <select value={definicaoTomador} onChange={e => setDefinicaoTomador(e.target.value)}>
+                {DEFINICAO_TOMADOR.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
+          </div>
+
+          <div className="nf-section">
+            <h4 className="nf-section-title">Transporte</h4>
             <div className="field-group">
-              <label className="field-label">CPF do motorista</label>
-              <input value={cpfMotorista} onChange={e => setCpfMotorista(formatCPF(e.target.value))} maxLength={14} />
+              <label className="field-label">Transportadora subcontratada</label>
+              <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
+                <option value="">Nenhuma (frete próprio)</option>
+                {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Veículo transportador</label>
+                <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Veículo reboque</label>
+                <select value={veiculoReboqueId} onChange={e => setVeiculoReboqueId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Nome do motorista</label>
+                <input value={nomeMotorista} onChange={e => setNomeMotorista(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">CPF do motorista</label>
+                <input value={cpfMotorista} onChange={e => setCpfMotorista(formatCPF(e.target.value))} maxLength={14} />
+              </div>
             </div>
           </div>
 
-          <div className="field-group">
-            <label className="field-label">Nome do motorista</label>
-            <input value={nomeMotorista} onChange={e => setNomeMotorista(e.target.value)} />
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Natureza da operação</label>
-            <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Valor da prestação (R$)<span className="req">*</span></label>
-            <input type="number" value={valorTotal} onChange={e => setValorTotal(e.target.value)} />
-          </div>
-
-          <div className="field-group">
-            <label className="field-label">Informações complementares</label>
-            <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
+          <div className="nf-section">
+            <h4 className="nf-section-title">Totais</h4>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Forma de pagamento</label>
+                <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
+                  <option value="A pagar (FOB)">A pagar (FOB)</option>
+                  <option value="Pago (CIF)">Pago (CIF)</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor da prestação (R$)<span className="req">*</span></label>
+                <input type="number" value={valorTotal} onChange={e => setValorTotal(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Situação tributária (CST)</label>
+                <select value={cstIcmsPrestacao} onChange={e => setCstIcmsPrestacao(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  <option value="00">00 - Tributada integralmente</option>
+                  <option value="20">20 - Tributada com redução de base de cálculo</option>
+                  <option value="30">30 - Isenta/não tributada com ICMS ST</option>
+                  <option value="40">40 - Isenta</option>
+                  <option value="41">41 - Não tributada</option>
+                  <option value="51">51 - Diferimento</option>
+                  <option value="60">60 - Cobrado anteriormente por substituição tributária</option>
+                  <option value="70">70 - Tributada com redução de base e ICMS ST</option>
+                  <option value="90">90 - Outras (Regime Normal)</option>
+                  <option value="90_simples_nacional">90 - Outras (Simples Nacional)</option>
+                </select>
+              </div>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Base de cálculo do ICMS (R$)</label>
+                <input type="number" value={baseCalculoIcmsPrestacao} onChange={e => setBaseCalculoIcmsPrestacao(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Alíquota do ICMS (%)</label>
+                <input type="number" value={aliquotaIcmsPrestacao} onChange={e => setAliquotaIcmsPrestacao(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS (R$)</label>
+                <input type="number" value={valorIcms} onChange={e => setValorIcms(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">% Redução da base</label>
+                <input type="number" value={percentualReducaoBaseIcms} onChange={e => setPercentualReducaoBaseIcms(e.target.value)} />
+              </div>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Valor de crédito presumido (R$)</label>
+              <input type="number" value={valorCreditoPresumidoIcms} onChange={e => setValorCreditoPresumidoIcms(e.target.value)} style={{ maxWidth: 220 }} />
+            </div>
+            <div className="field-group" style={{ marginBottom: 0 }}>
+              <label className="field-label">Informações complementares</label>
+              <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
+            </div>
           </div>
 
           {erro && <p className="error-text">{erro}</p>}
@@ -2393,6 +2550,7 @@ function CteView() {
   const { items: clientes } = useApiCollection("clientes");
   const { items: transportadoras } = useApiCollection("transportadoras");
   const { items: veiculos } = useApiCollection("veiculos");
+  const { items: colaboradores } = useApiCollection("colaboradores");
 
   const [ctes, setCtes] = useState(null);
   const [erro, setErro] = useState(null);
@@ -2513,6 +2671,7 @@ function CteView() {
           clientes={clientes}
           transportadoras={transportadoras}
           veiculos={veiculos}
+          colaboradores={colaboradores}
           onSave={salvar}
           onCancel={() => { setMostrarForm(false); setEditando(null); }}
         />

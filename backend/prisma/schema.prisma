@@ -176,6 +176,9 @@ model Pessoa {
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   documentosComoDestinatario DocumentoFiscal[]
+  documentosComoRemetente    DocumentoFiscal[] @relation("CteRemetente")
+  documentosComoExpedidor    DocumentoFiscal[] @relation("CteExpedidor")
+  documentosComoRecebedor    DocumentoFiscal[] @relation("CteRecebedor")
 
   // CPF/CNPJ único por empresa, não mais pro sistema inteiro — assim duas
   // empresas do grupo podem ter o mesmo cliente/fornecedor cadastrado cada
@@ -244,6 +247,7 @@ model Veiculo {
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   documentosFiscais DocumentoFiscal[]
+  documentosFiscaisReboque DocumentoFiscal[] @relation("CteVeiculoReboque")
 
   @@map("veiculos")
 }
@@ -348,6 +352,33 @@ model DocumentoFiscal {
 
   destinatarioId Int?    @map("destinatario_id")
   destinatario   Pessoa? @relation(fields: [destinatarioId], references: [id])
+
+  // CTe — Remetente, Expedidor e Recebedor são pessoas distintas do
+  // Destinatário (que aqui funciona como o "Tomador do serviço" quando a
+  // definição do tomador é "Outros"/o próprio destinatário).
+  remetenteId Int?    @map("remetente_id")
+  remetente   Pessoa? @relation("CteRemetente", fields: [remetenteId], references: [id])
+  expedidorId Int?    @map("expedidor_id")
+  expedidor   Pessoa? @relation("CteExpedidor", fields: [expedidorId], references: [id])
+  recebedorId Int?    @map("recebedor_id")
+  recebedor   Pessoa? @relation("CteRecebedor", fields: [recebedorId], references: [id])
+  definicaoTomador String? @map("definicao_tomador") // Remetente, Destinatário, Expedidor, Recebedor, Outros
+  distanciaKm      Float?  @map("distancia_km")
+
+  veiculoReboqueId Int?     @map("veiculo_reboque_id")
+  veiculoReboque   Veiculo? @relation("CteVeiculoReboque", fields: [veiculoReboqueId], references: [id])
+
+  // Tributação da prestação de serviço (CTe) — nível documento, não por
+  // item, já que o CTe não tem lista de produtos.
+  cfopPrestacao      String? @map("cfop_prestacao")
+  cstIcmsPrestacao   String? @map("cst_icms_prestacao")
+  baseCalculoIcmsPrestacao Float? @map("base_calculo_icms_prestacao")
+  aliquotaIcmsPrestacao    Float? @map("aliquota_icms_prestacao")
+  percentualReducaoBaseIcms Float? @map("percentual_reducao_base_icms")
+  valorIcmsNaoTributado     Float? @map("valor_icms_nao_tributado")
+  valorIcmsOutras           Float? @map("valor_icms_outras")
+  valorCreditoPresumidoIcms Float? @map("valor_credito_presumido_icms")
+  valorFcp                  Float? @map("valor_fcp")
 
   transportadoraId Int?            @map("transportadora_id")
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])

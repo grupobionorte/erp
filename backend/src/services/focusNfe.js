@@ -182,12 +182,15 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
     // Município/UF de envio — quando não temos um cadastro à parte pra
     // isso, usamos o mesmo do início da prestação (é o caso mais comum).
+    // Não mandamos o código IBGE — a Focus resolve sozinha a partir do
+    // nome + UF, que agora vêm de um cadastro de verdade (não mais de um
+    // texto livre tipo "Cidade/UF").
     municipio_envio: documento.origemPercurso,
-    uf_envio: documento.origemPercurso?.split("/")[1]?.trim(),
+    uf_envio: documento.ufInicio,
     municipio_inicio: documento.origemPercurso,
-    uf_inicio: documento.origemPercurso?.split("/")[1]?.trim(),
+    uf_inicio: documento.ufInicio,
     municipio_fim: documento.destinoPercurso,
-    uf_fim: documento.destinoPercurso?.split("/")[1]?.trim(),
+    uf_fim: documento.ufFim,
 
     indicador_inscricao_estadual_tomador: 9,
     tomador: codigoTomador,

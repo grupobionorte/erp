@@ -644,6 +644,56 @@ function NcmField({ value, onChange }) {
   );
 }
 
+function MunicipioField({ uf, value, onChange }) {
+  const [sugestoes, setSugestoes] = useState([]);
+  const [aberto, setAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+
+  useEffect(() => {
+    if (!uf || !value || value.length < 1) { setSugestoes([]); return; }
+    const espera = setTimeout(async () => {
+      setBuscando(true);
+      try {
+        const resultado = await apiRequest(`/municipios?uf=${uf}&busca=${encodeURIComponent(value)}`);
+        setSugestoes(resultado);
+      } catch {
+        setSugestoes([]);
+      } finally {
+        setBuscando(false);
+      }
+    }, 300);
+    return () => clearTimeout(espera);
+  }, [uf, value]);
+
+  return (
+    <div className="ncm-field">
+      <input
+        value={value ?? ""}
+        onChange={e => { onChange(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        placeholder={uf ? "Digite o nome do município" : "Escolha a UF primeiro"}
+        disabled={!uf}
+      />
+      {aberto && (buscando || sugestoes.length > 0) && (
+        <div className="ncm-suggestions">
+          {buscando && <div className="ncm-suggestion-loading">Buscando…</div>}
+          {sugestoes.map(s => (
+            <button
+              key={s.codigoIbge}
+              type="button"
+              className="ncm-suggestion"
+              onMouseDown={() => { onChange(s.nome); setAberto(false); }}
+            >
+              <span className="ncm-descricao">{s.nome}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CfopField({ value, onChange }) {
   const [sugestoes, setSugestoes] = useState([]);
   const [aberto, setAberto] = useState(false);
@@ -2339,7 +2389,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
   const [recebedorId, setRecebedorId] = useState(cte?.recebedorId ? String(cte.recebedorId) : "");
   const [definicaoTomador, setDefinicaoTomador] = useState(cte?.definicaoTomador || "Destinatário");
 
+  const [ufInicio, setUfInicio] = useState(cte?.ufInicio || "");
   const [origemPercurso, setOrigemPercurso] = useState(cte?.origemPercurso || "");
+  const [ufFim, setUfFim] = useState(cte?.ufFim || "");
   const [destinoPercurso, setDestinoPercurso] = useState(cte?.destinoPercurso || "");
   const [distanciaKm, setDistanciaKm] = useState(cte?.distanciaKm ?? "");
 
@@ -2382,6 +2434,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
         cpfMotorista: cpfMotorista || undefined,
         origemPercurso: origemPercurso || undefined,
         destinoPercurso: destinoPercurso || undefined,
+        ufInicio: ufInicio || undefined,
+        ufFim: ufFim || undefined,
         distanciaKm: distanciaKm !== "" ? Number(distanciaKm) : undefined,
         naturezaOperacao,
         cfopPrestacao: cfopPrestacao || undefined,
@@ -2504,19 +2558,33 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, onSa
             </div>
             {clientes?.length === 0 && <p className="hint" style={{ marginTop: -8 }}>Nenhum cliente cadastrado ainda.</p>}
 
-            <div className="nf-grid-3">
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">UF início<span className="req">*</span></label>
+                <select value={ufInicio} onChange={e => { setUfInicio(e.target.value); setOrigemPercurso(""); }}>
+                  <option value="">Selecione…</option>
+                  {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+              </div>
               <div className="field-group">
                 <label className="field-label">Município início<span className="req">*</span></label>
-                <input placeholder="Cidade/UF" value={origemPercurso} onChange={e => setOrigemPercurso(e.target.value)} />
+                <MunicipioField uf={ufInicio} value={origemPercurso} onChange={setOrigemPercurso} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">UF fim<span className="req">*</span></label>
+                <select value={ufFim} onChange={e => { setUfFim(e.target.value); setDestinoPercurso(""); }}>
+                  <option value="">Selecione…</option>
+                  {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
               </div>
               <div className="field-group">
                 <label className="field-label">Município fim<span className="req">*</span></label>
-                <input placeholder="Cidade/UF" value={destinoPercurso} onChange={e => setDestinoPercurso(e.target.value)} />
+                <MunicipioField uf={ufFim} value={destinoPercurso} onChange={setDestinoPercurso} />
               </div>
-              <div className="field-group">
-                <label className="field-label">Distância (km)</label>
-                <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
-              </div>
+            </div>
+            <div className="field-group" style={{ maxWidth: 200 }}>
+              <label className="field-label">Distância (km)</label>
+              <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
             </div>
 
             <div className="field-group" style={{ marginBottom: 0, maxWidth: 300 }}>
@@ -2827,7 +2895,7 @@ function CteView() {
               <tr key={cte.id}>
                 <td>{cte.numero ? `${cte.numero}/${cte.serie ?? "—"}` : "—"}</td>
                 <td>{cte.destinatario?.nomeRazaoSocial || "—"}</td>
-                <td>{cte.origemPercurso || "—"} → {cte.destinoPercurso || "—"}</td>
+                <td>{cte.origemPercurso ? `${cte.origemPercurso}/${cte.ufInicio || "—"}` : "—"} → {cte.destinoPercurso ? `${cte.destinoPercurso}/${cte.ufFim || "—"}` : "—"}</td>
                 <td>{cte.valorTotal != null ? `R$ ${Number(cte.valorTotal).toFixed(2)}` : "—"}</td>
                 <td>
                   {STATUS_DOCUMENTO_LABEL[cte.status] || cte.status}

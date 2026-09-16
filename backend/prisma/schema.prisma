@@ -75,6 +75,16 @@ model Cfop {
   @@map("cfops")
 }
 
+model Municipio {
+  id         Int    @id @default(autoincrement())
+  codigoIbge String @unique @map("codigo_ibge")
+  nome       String
+  uf         String
+
+  @@index([uf, nome])
+  @@map("municipios")
+}
+
 model Endereco {
   id                Int      @id @default(autoincrement())
   cep               String?
@@ -367,6 +377,8 @@ model DocumentoFiscal {
   recebedor   Pessoa? @relation("CteRecebedor", fields: [recebedorId], references: [id])
   definicaoTomador String? @map("definicao_tomador") // Remetente, Destinatário, Expedidor, Recebedor, Outros
   distanciaKm      Float?  @map("distancia_km")
+  ufInicio         String? @map("uf_inicio")
+  ufFim            String? @map("uf_fim")
 
   veiculoReboqueId Int?     @map("veiculo_reboque_id")
   veiculoReboque   Veiculo? @relation("CteVeiculoReboque", fields: [veiculoReboqueId], references: [id])

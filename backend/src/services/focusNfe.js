@@ -222,8 +222,10 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores
     // nesse grupo — isso é coisa do MDFe (confirmado com o retorno da
     // Focus: "Campo 'veiculos' não é válido para o tipo de modal
-    // especificado"). O CTe rodoviário só pede o RNTRC — deixamos de fora
-    // por enquanto porque ainda não coletamos isso no cadastro.
+    // especificado"). O CTe rodoviário só pede o RNTRC.
+    modal_rodoviario: {
+      rntrc: empresa.rntrc || undefined,
+    },
   };
 }
 

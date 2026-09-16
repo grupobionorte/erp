@@ -112,6 +112,9 @@ model Empresa {
   cnpj              String            @unique
   ie                String?
   im                String?
+  // RNTRC — obrigatório pra emitir CTe (modal rodoviário) quando a
+  // própria empresa é a transportadora.
+  rntrc             String?
   regimeTributario  RegimeTributario  @map("regime_tributario")
   ativo             Boolean           @default(true)
 

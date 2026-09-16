@@ -579,6 +579,7 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
         numeroSequencial: resultado.numero_sequencial_evento || totalExistentes + 1,
         status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
         motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
+        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf),
       },
     });
     res.status(201).json(carta);
@@ -603,6 +604,39 @@ router.get("/:id/carta-correcao", asyncHandler(async (req, res) => {
     orderBy: { numeroSequencial: "asc" },
   });
   res.json(cartas);
+}));
+
+// Consulta a carta de correção específica na Focus NFe pra pegar o status
+// atualizado e o link do PDF, uma vez que a SEFAZ já tenha homologado.
+router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const cartaId = Number(req.params.cartaId);
+
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+
+  const carta = await prisma.cartaCorrecao.findUnique({ where: { id: cartaId } });
+  if (!carta || carta.documentoId !== id) return res.status(404).json({ erro: "Carta de correção não encontrada" });
+
+  const ref = `nfe-${documento.id}`;
+  try {
+    const resultado = await focusNfe.consultarCartaCorrecao({ ref, numeroSequencial: carta.numeroSequencial });
+    const atualizada = await prisma.cartaCorrecao.update({
+      where: { id: cartaId },
+      data: {
+        status: resultado.status === "erro_autorizacao" ? "erro" : resultado.status === "autorizado" ? "registrada" : "pendente",
+        motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
+        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf),
+      },
+    });
+    res.json(atualizada);
+  } catch (erro) {
+    const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    res.status(502).json({ erro: "Falha ao consultar junto ao provedor", detalhe: detalheProvedor });
+  }
 }));
 
 module.exports = router;

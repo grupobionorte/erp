@@ -1724,6 +1724,7 @@ function CartaCorrecaoModal({ nota, onClose }) {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const [atualizandoCartaId, setAtualizandoCartaId] = useState(null);
 
   const carregarHistorico = useCallback(async () => {
     try {
@@ -1735,6 +1736,18 @@ function CartaCorrecaoModal({ nota, onClose }) {
   }, [nota.id]);
 
   useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
+
+  const atualizarStatusCarta = async (cartaId) => {
+    setAtualizandoCartaId(cartaId);
+    try {
+      await apiRequest(`/documentos-fiscais/${nota.id}/carta-correcao/${cartaId}/status`);
+      carregarHistorico();
+    } catch (e) {
+      alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setAtualizandoCartaId(null);
+    }
+  };
 
   const enviar = async () => {
     const limpo = texto.trim();
@@ -1795,7 +1808,7 @@ function CartaCorrecaoModal({ nota, onClose }) {
             {historico?.length === 0 && <p className="hint">Nenhuma correção enviada ainda.</p>}
             {historico?.map(c => (
               <div key={c.id} style={{ borderBottom: "1px solid #eeece4", padding: "8px 0", fontSize: 13 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#8a887f", fontSize: 11.5 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "#8a887f", fontSize: 11.5 }}>
                   <span>Nº {c.numeroSequencial} · {new Date(c.criadoEm).toLocaleString("pt-BR")}</span>
                   <span style={{ fontWeight: 600, color: c.status === "erro" ? "#a32d2d" : "#27500a" }}>
                     {c.status === "erro" ? "Erro" : c.status === "registrada" ? "Registrada" : "Pendente"}
@@ -1803,6 +1816,22 @@ function CartaCorrecaoModal({ nota, onClose }) {
                 </div>
                 <p style={{ margin: "4px 0 0" }}>{c.texto}</p>
                 {c.motivoErro && <p style={{ margin: "4px 0 0", color: "#a32d2d", fontSize: 12 }}>{c.motivoErro}</p>}
+                {c.status !== "erro" && (
+                  c.pdfUrl?.startsWith("http") ? (
+                    <a href={c.pdfUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 12, fontWeight: 500, color: "#00732F" }}>
+                      Baixar PDF da carta
+                    </a>
+                  ) : (
+                    <button
+                      className="btn"
+                      style={{ marginTop: 6, padding: "4px 10px", fontSize: 12 }}
+                      disabled={atualizandoCartaId === c.id}
+                      onClick={() => atualizarStatusCarta(c.id)}
+                    >
+                      {atualizandoCartaId === c.id ? "Consultando…" : "Emitir / atualizar status"}
+                    </button>
+                  )
+                )}
               </div>
             ))}
           </div>
@@ -1895,18 +1924,44 @@ function NotasFiscaisView() {
   // verdade exige um token da Focus NFe configurado no backend — sem isso,
   // essa chamada volta com erro do provedor (a nota fica "Rejeitado" com o
   // motivo explicando o que faltou).
+  // Depois de mandar pra Focus NFe a nota fica "enviado" por um tempinho
+  // enquanto a SEFAZ processa — aqui a gente consulta sozinho de tempos em
+  // tempos, sem o usuário precisar ficar clicando, até sair desse status
+  // (virar autorizado ou rejeitado) ou desistir depois de um tempo.
+  const consultarAteResolver = async (id, tentativa = 0) => {
+    if (tentativa >= 15) { setProcessando(null); return; } // ~45s, desiste e deixa o botão manual
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const atualizado = await apiRequest(`/documentos-fiscais/${id}/status`);
+      await carregar();
+      if (atualizado.status === "enviado") {
+        consultarAteResolver(id, tentativa + 1);
+      } else {
+        setProcessando(null);
+      }
+    } catch {
+      // Se der erro na consulta automática, só para quieto — o botão
+      // "Consultar status" continua disponível pra tentar na mão.
+      setProcessando(null);
+    }
+  };
+
   const emitirNota = async (id) => {
     if (!window.confirm("Emitir essa nota fiscal? Depois de emitida ela não pode mais ser editada.")) return;
     setProcessando(id);
     try {
-      await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
-      carregar();
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
+      await carregar();
+      if (resultado.status === "enviado") {
+        consultarAteResolver(id);
+      } else {
+        setProcessando(null);
+      }
     } catch (e) {
       alert(`Não foi possível emitir: ${e.message}${e.detalhe ? `
 
 Detalhe: ${e.detalhe}` : ""}`);
       carregar();
-    } finally {
       setProcessando(null);
     }
   };
@@ -2000,7 +2055,12 @@ Detalhe: ${e.detalhe}` : ""}`);
                 <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
-                <td>{STATUS_DOCUMENTO_LABEL[nota.status] || nota.status}</td>
+                <td>
+                  {STATUS_DOCUMENTO_LABEL[nota.status] || nota.status}
+                  {processando === nota.id && nota.status === "enviado" && (
+                    <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
+                  )}
+                </td>
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
                     ? `Cancelada: ${nota.justificativaCancelamento}`
@@ -2027,7 +2087,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                             disabled={processando === nota.id}
                             onClick={() => { setMenuAberto(null); emitirNota(nota.id); }}
                           >
-                            <FileText size={14} /> {processando === nota.id ? "Emitindo…" : nota.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir nota"}
+                            <FileText size={14} /> {processando === nota.id ? "Aguardando SEFAZ…" : nota.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir nota"}
                           </button>
                           <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarNota(nota.id); }}>
                             <Trash2 size={14} /> Cancelar

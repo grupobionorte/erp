@@ -2419,8 +2419,56 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   const [horaTransporte, setHoraTransporte] = useState(cte?.horaTransporte || "");
   const [cteGlobalizado, setCteGlobalizado] = useState(cte?.cteGlobalizado ?? false);
   const [tipoCte, setTipoCte] = useState(cte?.tipoCte || "CT-e normal");
-  const [notasVinculadas, setNotasVinculadas] = useState(cte?.notasDoCte || []);
-  const [tipoDocumentoTransportado, setTipoDocumentoTransportado] = useState("Fiscal");
+  const DOCUMENTO_VAZIO = {
+    tipo: "Fiscal", notaFiscalId: null, chaveAcesso: "", numeroDocumento: "", modelo: "55", serie: "1",
+    cfopPredominante: "", dataEmissao: "", naturezaMercadoria: "", outrasCaracteristicasCarga: "",
+    baseCalculoIcms: "", valorIcms: "", baseCalculoIcmsSt: "", valorIcmsSt: "", valorTotalProdutos: "", valorTotalNota: "",
+    pesoBruto: "", m3: "", quantidadeVolumes: "", pesoLiquido: "",
+    pinSuframa: "", numeroPedido: "", numeroRomaneio: "", valorCargaAverbacao: "",
+  };
+  const [documentosTransportados, setDocumentosTransportados] = useState(
+    (cte?.documentosTransportados || []).map(d => ({ ...d, dataEmissao: d.dataEmissao ? d.dataEmissao.slice(0, 10) : "", _key: d.id }))
+  );
+  const [docEmEdicao, setDocEmEdicao] = useState({ ...DOCUMENTO_VAZIO });
+  const setDocCampo = (campo, valor) => setDocEmEdicao(prev => ({ ...prev, [campo]: valor }));
+
+  const selecionarNfeParaDocumento = (nota) => {
+    const primeiroItem = nota.itens?.[0];
+    setDocEmEdicao({
+      tipo: "Fiscal",
+      notaFiscalId: nota.id,
+      chaveAcesso: nota.chaveAcesso || "",
+      numeroDocumento: String(nota.numero || ""),
+      modelo: "55",
+      serie: String(nota.serie || "1"),
+      cfopPredominante: primeiroItem?.cfopUtilizado || primeiroItem?.produto?.cfopPadrao || "",
+      dataEmissao: nota.dataEmissao ? nota.dataEmissao.slice(0, 10) : "",
+      naturezaMercadoria: nota.naturezaOperacao || "",
+      outrasCaracteristicasCarga: "",
+      baseCalculoIcms: nota.baseCalculoIcms ?? "",
+      valorIcms: nota.valorIcms ?? "",
+      baseCalculoIcmsSt: nota.baseCalculoIcmsSt ?? "",
+      valorIcmsSt: nota.valorIcmsSt ?? "",
+      valorTotalProdutos: nota.valorTotal ?? "",
+      valorTotalNota: nota.valorTotal ?? "",
+      pesoBruto: nota.pesoBrutoTotal ?? "",
+      m3: "",
+      quantidadeVolumes: nota.quantidadeVolumes ?? "",
+      pesoLiquido: nota.pesoLiquidoTotal ?? "",
+      pinSuframa: "",
+      numeroPedido: "",
+      numeroRomaneio: "",
+      valorCargaAverbacao: nota.valorTotal ?? "",
+    });
+  };
+
+  const novoDocumento = () => setDocEmEdicao({ ...DOCUMENTO_VAZIO });
+  const adicionarDocumento = () => {
+    if (!docEmEdicao.numeroDocumento && !docEmEdicao.chaveAcesso) return;
+    setDocumentosTransportados(prev => [...prev, { ...docEmEdicao, _key: `novo-${Date.now()}-${Math.random()}` }]);
+    novoDocumento();
+  };
+  const removerDocumento = (key) => setDocumentosTransportados(prev => prev.filter(d => d._key !== key));
   const [quickAdd, setQuickAdd] = useState(null); // { tipo: 'clientes'|'transportadoras'|'veiculos', setter }
 
   const [remetenteId, setRemetenteId] = useState(cte?.remetenteId ? String(cte.remetenteId) : "");
@@ -2476,7 +2524,32 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
         remetenteId: remetenteId ? Number(remetenteId) : undefined,
         expedidorId: expedidorId ? Number(expedidorId) : undefined,
         recebedorId: recebedorId ? Number(recebedorId) : undefined,
-        notasFiscaisIds: notasVinculadas.map(n => n.id),
+        documentosTransportados: documentosTransportados.map(d => ({
+          notaFiscalId: d.notaFiscalId || undefined,
+          tipo: d.tipo,
+          chaveAcesso: d.chaveAcesso || undefined,
+          numeroDocumento: d.numeroDocumento || undefined,
+          modelo: d.modelo || undefined,
+          serie: d.serie || undefined,
+          cfopPredominante: d.cfopPredominante || undefined,
+          dataEmissao: d.dataEmissao || undefined,
+          naturezaMercadoria: d.naturezaMercadoria || undefined,
+          outrasCaracteristicasCarga: d.outrasCaracteristicasCarga || undefined,
+          baseCalculoIcms: d.baseCalculoIcms !== "" ? Number(d.baseCalculoIcms) : undefined,
+          valorIcms: d.valorIcms !== "" ? Number(d.valorIcms) : undefined,
+          baseCalculoIcmsSt: d.baseCalculoIcmsSt !== "" ? Number(d.baseCalculoIcmsSt) : undefined,
+          valorIcmsSt: d.valorIcmsSt !== "" ? Number(d.valorIcmsSt) : undefined,
+          valorTotalProdutos: d.valorTotalProdutos !== "" ? Number(d.valorTotalProdutos) : undefined,
+          valorTotalNota: d.valorTotalNota !== "" ? Number(d.valorTotalNota) : undefined,
+          pesoBruto: d.pesoBruto !== "" ? Number(d.pesoBruto) : undefined,
+          m3: d.m3 !== "" ? Number(d.m3) : undefined,
+          quantidadeVolumes: d.quantidadeVolumes !== "" ? Number(d.quantidadeVolumes) : undefined,
+          pesoLiquido: d.pesoLiquido !== "" ? Number(d.pesoLiquido) : undefined,
+          pinSuframa: d.pinSuframa || undefined,
+          numeroPedido: d.numeroPedido || undefined,
+          numeroRomaneio: d.numeroRomaneio || undefined,
+          valorCargaAverbacao: d.valorCargaAverbacao !== "" ? Number(d.valorCargaAverbacao) : undefined,
+        })),
         definicaoTomador,
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
         veiculoId: veiculoId ? Number(veiculoId) : undefined,
@@ -2527,36 +2600,53 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
         </div>
         <div className="modal-body">
           <div className="nf-section">
-            <h4 className="nf-section-title">Notas fiscais transportadas</h4>
-            {notasVinculadas.length > 0 ? (
+            <h4 className="nf-section-title">Dados das mercadorias</h4>
+            {documentosTransportados.length > 0 ? (
               <div className="nf-itens-table" style={{ marginBottom: 14 }}>
-                <div className="nf-itens-header" style={{ gridTemplateColumns: "0.6fr 2fr 2fr 1fr 28px" }}>
+                <div className="nf-itens-header" style={{ gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px" }}>
                   <span>Número</span>
-                  <span>Destinatário</span>
-                  <span>Chave de acesso</span>
+                  <span>Modelo</span>
+                  <span>Série</span>
+                  <span>CFOP</span>
+                  <span>Emissão</span>
+                  <span>Peso bruto</span>
+                  <span>Peso líq.</span>
                   <span style={{ textAlign: "right" }}>Valor</span>
                   <span></span>
                 </div>
-                {notasVinculadas.map(nota => (
-                  <div key={nota.id} className="nf-item-row" style={{ gridTemplateColumns: "0.6fr 2fr 2fr 1fr 28px" }}>
-                    <span>{nota.numero}</span>
-                    <span>{nota.destinatario?.nomeRazaoSocial}</span>
-                    <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nota.chaveAcesso}</span>
-                    <span className="nf-item-total">R$ {Number(nota.valorTotal || 0).toFixed(2)}</span>
-                    <button type="button" className="icon-btn icon-btn-danger" onClick={() => setNotasVinculadas(prev => prev.filter(n => n.id !== nota.id))} aria-label="Remover">
+                {documentosTransportados.map(d => (
+                  <div key={d._key} className="nf-item-row" style={{ gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px" }}>
+                    <span>{d.numeroDocumento || "—"}</span>
+                    <span>{d.modelo || "—"}</span>
+                    <span>{d.serie || "—"}</span>
+                    <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.cfopPredominante || "—"}</span>
+                    <span>{d.dataEmissao ? new Date(d.dataEmissao).toLocaleDateString("pt-BR") : "—"}</span>
+                    <span>{d.pesoBruto || "0"}</span>
+                    <span>{d.pesoLiquido || "0"}</span>
+                    <span className="nf-item-total">R$ {Number(d.valorTotalNota || 0).toFixed(2)}</span>
+                    <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerDocumento(d._key)} aria-label="Remover">
                       <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
+                <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px", padding: "8px 10px", borderTop: "1px solid #e5e3da", fontSize: 12, fontWeight: 600, color: "#55534c" }}>
+                  <span style={{ gridColumn: "1 / 5" }}>Total ({documentosTransportados.length})</span>
+                  <span></span>
+                  <span>{documentosTransportados.reduce((s, d) => s + (Number(d.pesoBruto) || 0), 0).toFixed(3)}</span>
+                  <span>{documentosTransportados.reduce((s, d) => s + (Number(d.pesoLiquido) || 0), 0).toFixed(3)}</span>
+                  <span style={{ textAlign: "right" }}>R$ {documentosTransportados.reduce((s, d) => s + (Number(d.valorTotalNota) || 0), 0).toFixed(2)}</span>
+                  <span></span>
+                </div>
               </div>
             ) : (
               <p className="hint" style={{ marginTop: 0 }}>Nenhum documento adicionado ainda.</p>
             )}
 
+            <p className="nf-section-title" style={{ marginTop: 4 }}>Identificação do documento</p>
             <div className="nf-grid-3">
-              <div className="field-group" style={{ marginBottom: 8 }}>
+              <div className="field-group">
                 <label className="field-label">Tipo do documento</label>
-                <select value={tipoDocumentoTransportado} onChange={e => setTipoDocumentoTransportado(e.target.value)}>
+                <select value={docEmEdicao.tipo} onChange={e => setDocCampo("tipo", e.target.value)}>
                   <option value="Fiscal">Fiscal</option>
                   <option value="Declaração">Declaração</option>
                   <option value="Dutoviário">Dutoviário</option>
@@ -2564,19 +2654,131 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                   <option value="Outros">Outros</option>
                 </select>
               </div>
+              {docEmEdicao.tipo === "Fiscal" && (
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Buscar nota fiscal (chave ou número)</label>
+                  <NfeCteField onSelecionar={selecionarNfeParaDocumento} />
+                </div>
+              )}
             </div>
-            {tipoDocumentoTransportado === "Fiscal" ? (
-              <NfeCteField onSelecionar={(nota) => {
-                if (notasVinculadas.some(n => n.id === nota.id)) return;
-                setNotasVinculadas(prev => [...prev, nota]);
-              }} />
-            ) : (
-              <p className="hint" style={{ marginTop: 0 }}>
-                Vínculo de documentos do tipo "{tipoDocumentoTransportado}" ainda não está disponível — por enquanto,
-                só dá pra vincular notas fiscais (Fiscal) já emitidas no sistema.
-              </p>
-            )}
-            <p className="hint">Só aparecem notas já autorizadas pela SEFAZ.</p>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Chave de acesso</label>
+                <input value={docEmEdicao.chaveAcesso} onChange={e => setDocCampo("chaveAcesso", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Número do documento</label>
+                <input value={docEmEdicao.numeroDocumento} onChange={e => setDocCampo("numeroDocumento", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Modelo</label>
+                <select value={docEmEdicao.modelo} onChange={e => setDocCampo("modelo", e.target.value)}>
+                  <option value="55">55 - NF-e</option>
+                  <option value="57">57 - CT-e</option>
+                  <option value="65">65 - NFC-e</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+            </div>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Série</label>
+                <input value={docEmEdicao.serie} onChange={e => setDocCampo("serie", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">CFOP predominante</label>
+                <CfopField value={docEmEdicao.cfopPredominante} onChange={v => setDocCampo("cfopPredominante", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={docEmEdicao.dataEmissao} onChange={e => setDocCampo("dataEmissao", e.target.value)} />
+              </div>
+            </div>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Natureza da mercadoria</label>
+                <input value={docEmEdicao.naturezaMercadoria} onChange={e => setDocCampo("naturezaMercadoria", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Outras características da carga</label>
+                <input value={docEmEdicao.outrasCaracteristicasCarga} onChange={e => setDocCampo("outrasCaracteristicasCarga", e.target.value)} />
+              </div>
+            </div>
+
+            <p className="nf-section-title" style={{ marginTop: 14 }}>Valores do documento fiscal</p>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Base de cálc. do ICMS</label>
+                <input type="number" value={docEmEdicao.baseCalculoIcms} onChange={e => setDocCampo("baseCalculoIcms", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS</label>
+                <input type="number" value={docEmEdicao.valorIcms} onChange={e => setDocCampo("valorIcms", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Base de cálc. ICMS S.T.</label>
+                <input type="number" value={docEmEdicao.baseCalculoIcmsSt} onChange={e => setDocCampo("baseCalculoIcmsSt", e.target.value)} />
+              </div>
+            </div>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS S.T.</label>
+                <input type="number" value={docEmEdicao.valorIcmsSt} onChange={e => setDocCampo("valorIcmsSt", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor total dos produtos</label>
+                <input type="number" value={docEmEdicao.valorTotalProdutos} onChange={e => setDocCampo("valorTotalProdutos", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor total da nota fiscal</label>
+                <input type="number" value={docEmEdicao.valorTotalNota} onChange={e => setDocCampo("valorTotalNota", e.target.value)} />
+              </div>
+            </div>
+
+            <p className="nf-section-title" style={{ marginTop: 14 }}>Outros valores</p>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Peso bruto (kg)</label>
+                <input type="number" value={docEmEdicao.pesoBruto} onChange={e => setDocCampo("pesoBruto", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">M3</label>
+                <input type="number" value={docEmEdicao.m3} onChange={e => setDocCampo("m3", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Quantidade de volumes</label>
+                <input type="number" value={docEmEdicao.quantidadeVolumes} onChange={e => setDocCampo("quantidadeVolumes", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Peso líquido (kg)</label>
+                <input type="number" value={docEmEdicao.pesoLiquido} onChange={e => setDocCampo("pesoLiquido", e.target.value)} />
+              </div>
+            </div>
+
+            <p className="nf-section-title" style={{ marginTop: 14 }}>Outras informações</p>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">PIN Suframa</label>
+                <input value={docEmEdicao.pinSuframa} onChange={e => setDocCampo("pinSuframa", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Número do pedido</label>
+                <input value={docEmEdicao.numeroPedido} onChange={e => setDocCampo("numeroPedido", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Número do romaneio</label>
+                <input value={docEmEdicao.numeroRomaneio} onChange={e => setDocCampo("numeroRomaneio", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor da carga p/ averbação</label>
+                <input type="number" value={docEmEdicao.valorCargaAverbacao} onChange={e => setDocCampo("valorCargaAverbacao", e.target.value)} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <button type="button" className="btn" onClick={novoDocumento}>Novo</button>
+              <button type="button" className="btn btn-primary" onClick={adicionarDocumento}>Adicionar à lista</button>
+            </div>
           </div>
 
           <div className="nf-section">

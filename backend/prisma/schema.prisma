@@ -422,14 +422,58 @@ model DocumentoFiscal {
   mdfe              DocumentoFiscal?  @relation("DocumentosDoMdfe", fields: [mdfeId], references: [id])
   documentosVinculados DocumentoFiscal[] @relation("DocumentosDoMdfe")
 
-  // Um CTe transporta uma ou mais NFe — mesma ideia do vínculo com o MDFe,
-  // mas numa coluna separada (uma NFe pode estar amarrada a um CTe e,
-  // depois, esse CTe a um MDFe, ao mesmo tempo).
-  cteId      Int?              @map("cte_id")
-  cte        DocumentoFiscal?  @relation("NotasDoCte", fields: [cteId], references: [id])
-  notasDoCte DocumentoFiscal[] @relation("NotasDoCte")
+  // Um CTe transporta uma ou mais NFe/outros documentos — cada linha na
+  // tela "Dados das mercadorias" vira um registro aqui, com todos os
+  // campos daquela tela (não é só a chave, tem peso, valores, etc.).
+  documentosTransportados CteDocumento[] @relation("DocumentosDoCte")
+  cteDocumentosComoNota   CteDocumento[] @relation("CteDocumentoNota")
 
   @@map("documentos_fiscais")
+}
+
+// Um documento (NFe, declaração, etc.) transportado por um CTe — a linha
+// da tabela "Dados das mercadorias" na tela do CTe. Quando o tipo é
+// "Fiscal" e a nota já existe no sistema, guarda o vínculo com ela
+// (notaFiscalId) além de uma cópia dos campos, porque alguns (peso, M3,
+// características da carga) são específicos dessa viagem, não da nota em
+// si.
+model CteDocumento {
+  id          Int             @id @default(autoincrement())
+  cteId       Int             @map("cte_id")
+  cte         DocumentoFiscal @relation("DocumentosDoCte", fields: [cteId], references: [id], onDelete: Cascade)
+  notaFiscalId Int?           @map("nota_fiscal_id")
+  notaFiscal  DocumentoFiscal? @relation("CteDocumentoNota", fields: [notaFiscalId], references: [id])
+
+  tipo                String  @default("Fiscal") // Fiscal, Declaração, Dutoviário, CF-e SAT, Outros
+  chaveAcesso         String? @map("chave_acesso")
+  numeroDocumento     String? @map("numero_documento")
+  modelo              String?
+  serie               String?
+  cfopPredominante    String? @map("cfop_predominante")
+  dataEmissao         DateTime? @map("data_emissao")
+  naturezaMercadoria  String? @map("natureza_mercadoria")
+  outrasCaracteristicasCarga String? @map("outras_caracteristicas_carga")
+
+  baseCalculoIcms     Float?  @map("base_calculo_icms")
+  valorIcms           Float?  @map("valor_icms")
+  baseCalculoIcmsSt   Float?  @map("base_calculo_icms_st")
+  valorIcmsSt         Float?  @map("valor_icms_st")
+  valorTotalProdutos  Float?  @map("valor_total_produtos")
+  valorTotalNota      Float?  @map("valor_total_nota")
+
+  pesoBruto           Float?  @map("peso_bruto")
+  m3                  Float?
+  quantidadeVolumes   Float?  @map("quantidade_volumes")
+  pesoLiquido         Float?  @map("peso_liquido")
+
+  pinSuframa          String? @map("pin_suframa")
+  numeroPedido        String? @map("numero_pedido")
+  numeroRomaneio      String? @map("numero_romaneio")
+  valorCargaAverbacao Float?  @map("valor_carga_averbacao")
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@map("cte_documentos")
 }
 
 // Carta de Correção Eletrônica (CC-e) — histórico de correções feitas

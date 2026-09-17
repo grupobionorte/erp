@@ -245,8 +245,13 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
     // NFe(s) que esse CTe está transportando — a chave de acesso de cada
     // uma, já autorizada.
-    nfes: documento.notasDoCte?.length
-      ? documento.notasDoCte.map((nota) => ({ chave_nfe: (nota.chaveAcesso || "").replace(/^NFe/i, "") }))
+    // Só manda pra Focus os documentos do tipo "Fiscal" com chave de
+    // acesso — os outros tipos (Declaração, Dutoviário, etc.) ainda não
+    // têm um formato de payload confirmado.
+    nfes: documento.documentosTransportados?.some((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
+      ? documento.documentosTransportados
+          .filter((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
+          .map((doc) => ({ chave_nfe: (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso || "").replace(/^NFe/i, "") }))
       : undefined,
 
     // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores

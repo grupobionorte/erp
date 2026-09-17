@@ -5,6 +5,37 @@ const focusNfe = require("../services/focusNfe");
 const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
+// Converte um item de "documentosTransportados" (vindo do formulário do
+// CTe) no formato que o Prisma espera pra criar um CteDocumento.
+function mapCteDocumento(doc) {
+  return {
+    notaFiscalId: doc.notaFiscalId || undefined,
+    tipo: doc.tipo || "Fiscal",
+    chaveAcesso: doc.chaveAcesso || undefined,
+    numeroDocumento: doc.numeroDocumento || undefined,
+    modelo: doc.modelo || undefined,
+    serie: doc.serie || undefined,
+    cfopPredominante: doc.cfopPredominante || undefined,
+    dataEmissao: doc.dataEmissao ? new Date(doc.dataEmissao) : undefined,
+    naturezaMercadoria: doc.naturezaMercadoria || undefined,
+    outrasCaracteristicasCarga: doc.outrasCaracteristicasCarga || undefined,
+    baseCalculoIcms: doc.baseCalculoIcms ?? undefined,
+    valorIcms: doc.valorIcms ?? undefined,
+    baseCalculoIcmsSt: doc.baseCalculoIcmsSt ?? undefined,
+    valorIcmsSt: doc.valorIcmsSt ?? undefined,
+    valorTotalProdutos: doc.valorTotalProdutos ?? undefined,
+    valorTotalNota: doc.valorTotalNota ?? undefined,
+    pesoBruto: doc.pesoBruto ?? undefined,
+    m3: doc.m3 ?? undefined,
+    quantidadeVolumes: doc.quantidadeVolumes ?? undefined,
+    pesoLiquido: doc.pesoLiquido ?? undefined,
+    pinSuframa: doc.pinSuframa || undefined,
+    numeroPedido: doc.numeroPedido || undefined,
+    numeroRomaneio: doc.numeroRomaneio || undefined,
+    valorCargaAverbacao: doc.valorCargaAverbacao ?? undefined,
+  };
+}
+
 // Busca NFe já autorizadas — usado no CTe pra achar a nota pela chave de
 // acesso ou pelo número, sem precisar rolar a lista inteira. Exige pelo
 // menos 3 caracteres pra não devolver tudo a cada tecla.
@@ -29,7 +60,7 @@ router.get("/nfes-autorizadas", asyncHandler(async (req, res) => {
         ...(Number.isSafeInteger(numeroBusca) ? [{ numero: numeroBusca }] : []),
       ],
     },
-    include: { destinatario: true },
+    include: { destinatario: true, itens: { include: { produto: true } } },
     orderBy: { dataEmissao: "desc" },
     take: 20,
   });
@@ -49,7 +80,7 @@ router.get("/", asyncHandler(async (req, res) => {
       // sem empresa" pra tratar aqui.
       ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, notasDoCte: true },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
@@ -58,7 +89,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, notasDoCte: true },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);
@@ -179,7 +210,7 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
     remetenteId, expedidorId, recebedorId, definicaoTomador, formaPagamento,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
     percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
-    dataEmissao, colaboradorResponsavelId, notasFiscaisIds, cstIbsCbsPrestacao, classificacaoTributariaIbsCbsPrestacao,
+    dataEmissao, colaboradorResponsavelId, documentosTransportados, cstIbsCbsPrestacao, classificacaoTributariaIbsCbsPrestacao,
     tipoServico, dataTransporte, horaTransporte, cteGlobalizado, tipoCte,
   } = req.body;
 
@@ -244,12 +275,14 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
       valorTotal,
-      notasDoCte: notasFiscaisIds?.length ? { connect: notasFiscaisIds.map((id) => ({ id })) } : undefined,
+      documentosTransportados: documentosTransportados?.length
+        ? { create: documentosTransportados.map(mapCteDocumento) }
+        : undefined,
     },
     include: {
       destinatario: true, remetente: true, expedidor: true, recebedor: true,
       transportadora: true, veiculo: true, veiculoReboque: true,
-      notasDoCte: true,
+      documentosTransportados: { include: { notaFiscal: true } },
     },
   });
 
@@ -313,7 +346,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       transportadora: true,
       veiculo: true,
       veiculoReboque: true,
-      notasDoCte: true,
+      documentosTransportados: { include: { notaFiscal: true } },
       documentosVinculados: true,
     },
   });
@@ -490,7 +523,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
     tipoServico, dataTransporte, horaTransporte, cteGlobalizado, tipoCte,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
     percentualReducaoBaseIcms, valorIcmsNaoTributado, valorIcmsOutras, valorCreditoPresumidoIcms, valorFcp,
-    notasFiscaisIds,
+    documentosTransportados,
   } = req.body;
 
   let dadosItens = {};
@@ -569,7 +602,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorIcmsOutras: valorIcmsOutras ?? undefined,
       valorCreditoPresumidoIcms: valorCreditoPresumidoIcms ?? undefined,
       valorFcp: valorFcp ?? undefined,
-      notasDoCte: notasFiscaisIds ? { set: notasFiscaisIds.map((nid) => ({ id: nid })) } : undefined,
+      documentosTransportados: documentosTransportados
+        ? { deleteMany: {}, create: documentosTransportados.map(mapCteDocumento) }
+        : undefined,
       nomeMotorista: nomeMotorista ?? undefined,
       cpfMotorista: cpfMotorista ?? undefined,
       origemPercurso: origemPercurso ?? undefined,
@@ -600,7 +635,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorTotal,
       ...dadosItens,
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, notasDoCte: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, documentosTransportados: { include: { notaFiscal: true } } },
   });
 
   res.json(documento);

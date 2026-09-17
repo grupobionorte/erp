@@ -60,10 +60,50 @@ router.post("/", asyncHandler(async (req, res) => {
     return res.status(400).json({ erro: "marque eCliente e/ou eFornecedor" });
   }
 
+  const empresaDaSessao = req.usuario.empresaId || null;
+
+  // Cliente e fornecedor moram na mesma tabela, e o CPF/CNPJ é único por
+  // empresa. Então cadastrar como cliente alguém que já está lá como
+  // fornecedor (ou que foi excluído antes, já que a exclusão é lógica)
+  // estourava o índice único e virava "Erro interno" na tela. Nesses casos
+  // o certo é reaproveitar o cadastro e só marcar o novo papel.
+  const existente = await prisma.pessoa.findFirst({
+    where: { documento: dados.documento, empresaId: empresaDaSessao },
+    include: { endereco: true },
+  });
+
+  if (existente) {
+    const pessoa = await prisma.pessoa.update({
+      where: { id: existente.id },
+      data: {
+        ...dados,
+        // Papéis são acumulativos: quem já era fornecedor continua sendo.
+        eCliente: existente.eCliente || Boolean(dados.eCliente),
+        eFornecedor: existente.eFornecedor || Boolean(dados.eFornecedor),
+        ativo: true,
+        endereco: endereco
+          ? existente.enderecoId
+            ? { update: endereco }
+            : { create: endereco }
+          : undefined,
+      },
+      include: { endereco: true },
+    });
+
+    return res.status(200).json({
+      ...pessoa,
+      avisoCadastroExistente:
+        `Esse CPF/CNPJ já estava cadastrado como ${existente.eCliente ? "cliente" : ""}` +
+        `${existente.eCliente && existente.eFornecedor ? " e " : ""}` +
+        `${existente.eFornecedor ? "fornecedor" : ""}` +
+        `${existente.ativo ? "" : " (inativo)"}. O cadastro foi atualizado.`,
+    });
+  }
+
   const pessoa = await prisma.pessoa.create({
     data: {
       ...dados,
-      empresaId: req.usuario.empresaId || undefined,
+      empresaId: empresaDaSessao || undefined,
       endereco: endereco ? { create: endereco } : undefined,
     },
     include: { endereco: true },

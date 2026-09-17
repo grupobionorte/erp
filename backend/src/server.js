@@ -58,8 +58,39 @@ app.use("/municipios", municipiosRouter);
 app.use("/usuarios", usuariosRouter);
 app.use("/empresas", empresasRouter);
 
+// Handler de erro. Antes tudo virava 500 "Erro interno" e o motivo real só
+// aparecia no log do Render — quem estava na tela não tinha como saber o que
+// fazer. Agora os erros conhecidos do Prisma viram mensagem legível.
 app.use((erro, req, res, next) => {
   console.error(erro);
+
+  // Violação de índice único (ex.: CPF/CNPJ já cadastrado nessa empresa).
+  if (erro.code === "P2002") {
+    const campos = Array.isArray(erro.meta?.target) ? erro.meta.target.join(", ") : erro.meta?.target;
+    return res.status(409).json({
+      erro: `Já existe um registro com esse valor${campos ? ` (${campos})` : ""}.`,
+      detalhe: erro.message,
+    });
+  }
+  // Relação apontando para um registro que não existe.
+  if (erro.code === "P2003") {
+    return res.status(400).json({
+      erro: "Registro relacionado não encontrado. Confira os campos vinculados.",
+      detalhe: erro.message,
+    });
+  }
+  // Registro não encontrado em update/delete.
+  if (erro.code === "P2025") {
+    return res.status(404).json({ erro: "Registro não encontrado.", detalhe: erro.message });
+  }
+  // Campo desconhecido ou tipo errado no payload.
+  if (erro.name === "PrismaClientValidationError") {
+    return res.status(400).json({
+      erro: "Dados inválidos para esse cadastro. Confira os campos preenchidos.",
+      detalhe: erro.message,
+    });
+  }
+
   res.status(500).json({ erro: "Erro interno", detalhe: erro.message });
 });
 

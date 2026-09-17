@@ -975,7 +975,9 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
     try {
       await onSave(data);
     } catch (e) {
-      setError(e.message || "Erro ao salvar no servidor");
+      // O backend manda a explicação real em "detalhe" — sem isso a tela
+      // mostrava só "Erro interno" e não dava pra saber o que corrigir.
+      setError([e.message || "Erro ao salvar no servidor", e.detalhe].filter(Boolean).join(" — "));
     } finally {
       setSalvando(false);
     }

@@ -103,7 +103,10 @@ router.post("/", asyncHandler(async (req, res) => {
   const pessoa = await prisma.pessoa.create({
     data: {
       ...dados,
-      empresaId: empresaDaSessao || undefined,
+      // O Prisma não aceita a chave estrangeira crua (empresaId) na mesma
+      // chamada que tem escrita aninhada de relação (endereco: { create }).
+      // Nesse caso a empresa precisa vir por connect.
+      empresa: empresaDaSessao ? { connect: { id: empresaDaSessao } } : undefined,
       endereco: endereco ? { create: endereco } : undefined,
     },
     include: { endereco: true },

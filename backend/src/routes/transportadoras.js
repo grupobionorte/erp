@@ -28,7 +28,9 @@ router.post("/", asyncHandler(async (req, res) => {
   const transportadora = await prisma.transportadora.create({
     data: {
       ...dados,
-      empresaId: req.usuario.empresaId || undefined,
+      // Mesma regra do cadastro de pessoas: com endereco/veiculos aninhados,
+      // a empresa tem que entrar por connect, não como empresaId.
+      empresa: req.usuario.empresaId ? { connect: { id: req.usuario.empresaId } } : undefined,
       endereco: endereco ? { create: endereco } : undefined,
       veiculos: veiculos?.length ? { create: veiculos } : undefined,
     },

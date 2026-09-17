@@ -234,9 +234,22 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
 // que precisaria de um bloco de endereço à parte (ainda não implementado).
 const CODIGO_TOMADOR = { "Remetente": 0, "Expedidor": 1, "Recebedor": 2, "Destinatário": 3, "Outros": 4 };
 
-function blocoPessoaCte(pessoa, prefixo) {
+function blocoPessoaCte(pessoa, prefixo, empresa) {
   if (!pessoa) return {};
   const doc = (pessoa.documento || "").replace(/\D/g, "");
+
+  // A IE é obrigatória pra contribuinte (rejeição 716 "IE do Remetente não
+  // informada"). Dois casos que o cadastro de pessoas costuma deixar em
+  // branco:
+  //  - o papel é a própria empresa emitente (ela mesma transportando a
+  //    carga dela): usa a IE de Configurações;
+  //  - o contribuinte é isento: a tag vai com o texto ISENTO.
+  const ehAEmpresa = empresa?.cnpj && doc === String(empresa.cnpj).replace(/\D/g, "");
+  const inscricaoEstadual =
+    pessoa.ieIsento || pessoa.indicadorIe === "Contribuinte Isento"
+      ? "ISENTO"
+      : pessoa.ie || (ehAEmpresa ? empresa.ie : undefined) || undefined;
+
   // Telefone e endereço completo são obrigatórios pra remetente, expedidor,
   // recebedor e destinatário sempre que o bloco existe — se faltar algo no
   // cadastro dessa pessoa, é melhor a Focus apontar exatamente o campo que
@@ -245,7 +258,7 @@ function blocoPessoaCte(pessoa, prefixo) {
   return {
     [`cnpj_${prefixo}`]: pessoa.tipo === "pessoa_juridica" ? doc : undefined,
     [`cpf_${prefixo}`]: pessoa.tipo === "pessoa_fisica" ? doc : undefined,
-    [`inscricao_estadual_${prefixo}`]: pessoa.ie || undefined,
+    [`inscricao_estadual_${prefixo}`]: inscricaoEstadual,
     [`nome_${prefixo}`]: pessoa.nomeRazaoSocial,
     [`nome_fantasia_${prefixo}`]: pessoa.nomeFantasia || pessoa.nomeRazaoSocial,
     [`telefone_${prefixo}`]: (pessoa.telefone || "").replace(/\D/g, "") || undefined,
@@ -315,10 +328,10 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     indicador_inscricao_estadual_tomador: indicadorIeTomador,
     tomador: codigoTomador,
 
-    ...blocoPessoaCte(remetente, "remetente"),
-    ...blocoPessoaCte(expedidor, "expedidor"),
-    ...blocoPessoaCte(recebedor, "recebedor"),
-    ...blocoPessoaCte(destinatario, "destinatario"),
+    ...blocoPessoaCte(remetente, "remetente", empresa),
+    ...blocoPessoaCte(expedidor, "expedidor", empresa),
+    ...blocoPessoaCte(recebedor, "recebedor", empresa),
+    ...blocoPessoaCte(destinatario, "destinatario", empresa),
 
     valor_total: dec(documento.valorTotal),
     valor_receber: dec(documento.valorTotal),
@@ -383,6 +396,80 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     cbs_aliquota: temIbsCbs ? 0.90 : undefined,
     cbs_valor: temIbsCbs ? dec(documento.valorTotal * (0.90 / 100)) : undefined,
   };
+}
+
+// Confere o payload do CT-e antes de gastar uma ida à SEFAZ. Cada item da
+// lista corresponde a uma rejeição conhecida — é mais rápido (e mais claro
+// pra quem está na tela) descobrir aqui do que esperar o retorno.
+function validarPayloadCte(payload) {
+  const problemas = [];
+
+  // Rejeição 693: o grupo de documentos transportados é obrigatório, exceto
+  // em redespacho intermediário (3) e serviço vinculado a multimodal (4).
+  const tipoServico = Number(payload.tipo_servico ?? 0);
+  const temDocumentos =
+    Boolean(payload.nfes?.length) ||
+    Boolean(payload.nfs?.length) ||
+    Boolean(payload.outros_documentos?.length);
+  if (!temDocumentos && tipoServico !== 3 && tipoServico !== 4) {
+    problemas.push(
+      "Nenhuma NF-e vinculada: o CT-e precisa de pelo menos um documento transportado " +
+        "(informe a chave de acesso da nota que está sendo transportada)."
+    );
+  }
+
+  for (const nfe of payload.nfes || []) {
+    if (!/^\d{44}$/.test(nfe.chave_nfe || "")) {
+      problemas.push(`Chave de NF-e inválida (precisa de 44 dígitos): ${nfe.chave_nfe || "vazia"}`);
+    }
+  }
+
+  // Rejeição por RNTRC ausente no modal rodoviário.
+  if (!/^\d{8}$/.test(payload.modal_rodoviario?.rntrc || "")) {
+    problemas.push("RNTRC não preenchido (8 dígitos) no cadastro da empresa emitente.");
+  }
+
+  // CFOP 5xxx é dentro da UF, 6xxx é interestadual.
+  if (payload.cfop && payload.uf_inicio && payload.uf_fim) {
+    const interestadual = String(payload.cfop).startsWith("6");
+    const ufsDiferentes = payload.uf_inicio !== payload.uf_fim;
+    if (interestadual !== ufsDiferentes) {
+      problemas.push(
+        `CFOP ${payload.cfop} não combina com o trajeto ${payload.uf_inicio} → ${payload.uf_fim} ` +
+          "(5xxx para operação dentro da UF, 6xxx para interestadual)."
+      );
+    }
+  }
+
+  // Rejeição 360: grupo IBS/CBS informado sem o total do DFe.
+  if (payload.ibs_cbs_situacao_tributaria && payload.valor_total_dfe == null) {
+    problemas.push("valor_total_dfe é obrigatório quando o grupo IBS/CBS é informado.");
+  }
+
+  // Rejeição 716 e irmãs: IE obrigatória para contribuinte em cada papel
+  // informado no CT-e.
+  const PAPEIS = {
+    remetente: "remetente",
+    expedidor: "expedidor",
+    recebedor: "recebedor",
+    destinatario: "destinatário",
+  };
+  for (const [prefixo, rotulo] of Object.entries(PAPEIS)) {
+    const temBloco = payload[`cnpj_${prefixo}`] || payload[`cpf_${prefixo}`];
+    // Pessoa física normalmente não tem IE — a cobrança é sobre CNPJ.
+    if (temBloco && payload[`cnpj_${prefixo}`] && !payload[`inscricao_estadual_${prefixo}`]) {
+      problemas.push(
+        `Inscrição estadual do ${rotulo} não informada. Preencha a IE no cadastro de ` +
+          `${payload[`nome_${prefixo}`] || rotulo} (ou marque como isento).`
+      );
+    }
+  }
+
+  if (!payload.valor_total) {
+    problemas.push("Valor total da prestação não informado.");
+  }
+
+  return problemas;
 }
 
 // Monta o payload de MDFe. Ele não carrega itens de produto — carrega as
@@ -460,6 +547,7 @@ function urlCompleta(caminho) {
 module.exports = {
   montarPayloadNfe,
   montarPayloadCte,
+  validarPayloadCte,
   urlCompleta,
   enviarPorEmail,
   cancelar,

@@ -394,6 +394,19 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
 
   const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
 
+  // Validação local do CT-e: evita mandar pra SEFAZ algo que já dá pra ver
+  // que vai voltar rejeitado, e explica o motivo em português na hora.
+  if (documento.tipo === "CTe") {
+    const problemas = focusNfe.validarPayloadCte(payload);
+    if (problemas.length) {
+      return res.status(422).json({
+        erro: "O CT-e não passou na conferência antes do envio.",
+        detalhe: problemas.join(" | "),
+        problemas,
+      });
+    }
+  }
+
   try {
     await focusNfe.emitir({ tipo: documento.tipo, ref, payload });
     const atualizado = await prisma.documentoFiscal.update({
@@ -467,23 +480,39 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
   if (resultado.status === "autorizado") {
     // A Focus NFe nomeia os campos de retorno de forma diferente por tipo
     // de documento (chave_nfe / chave_cte / chave_mdfe e o mesmo padrão
-    // para o XML e o PDF — DANFE, DACTE ou DAMDFE).
+    // para o XML e o PDF — DANFE, DACTE ou DAMDFE). Alguns retornos vêm
+    // com o nome genérico ("chave", "caminho_xml"), então tentamos os
+    // candidatos em ordem em vez de depender de um nome só — era por isso
+    // que a coluna Chave ficava vazia mesmo com o documento autorizado.
     const CAMPOS_POR_TIPO = {
-      NFe: { chave: "chave_nfe", xml: "caminho_xml_nota_fiscal", pdf: "caminho_danfe" },
-      CTe: { chave: "chave_cte", xml: "caminho_xml_cte", pdf: "caminho_dacte" },
-      MDFe: { chave: "chave_mdfe", xml: "caminho_xml_mdfe", pdf: "caminho_damdfe" },
+      NFe: {
+        chave: ["chave_nfe", "chave"],
+        xml: ["caminho_xml_nota_fiscal", "caminho_xml", "caminho_xml_nfe"],
+        pdf: ["caminho_danfe", "caminho_pdf"],
+      },
+      CTe: {
+        chave: ["chave_cte", "chave"],
+        xml: ["caminho_xml_cte", "caminho_xml"],
+        pdf: ["caminho_dacte", "caminho_pdf"],
+      },
+      MDFe: {
+        chave: ["chave_mdfe", "chave"],
+        xml: ["caminho_xml_mdfe", "caminho_xml"],
+        pdf: ["caminho_damdfe", "caminho_pdf"],
+      },
     };
     const campos = CAMPOS_POR_TIPO[documento.tipo];
+    const primeiroPreenchido = (nomes) => nomes.map((n) => resultado[n]).find(Boolean);
 
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       data: {
         status: "autorizado",
-        chaveAcesso: resultado[campos.chave],
-        protocoloAutorizacao: resultado.numero_protocolo,
+        chaveAcesso: primeiroPreenchido(campos.chave),
+        protocoloAutorizacao: resultado.numero_protocolo || resultado.protocolo,
         dataAutorizacao: new Date(),
-        xmlUrl: focusNfe.urlCompleta(resultado[campos.xml]),
-        pdfUrl: focusNfe.urlCompleta(resultado[campos.pdf]),
+        xmlUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.xml)),
+        pdfUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.pdf)),
       },
     });
     return res.json(atualizado);

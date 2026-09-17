@@ -2315,10 +2315,18 @@ Detalhe: ${e.detalhe}` : ""}`);
                               <FileText size={14} /> {processando === nota.id ? "Corrigindo…" : "Corrigir link do DANFE"}
                             </button>
                           )}
-                          {nota.xmlUrl?.startsWith("http") && (
+                          {nota.xmlUrl?.startsWith("http") ? (
                             <a className="nf-dropdown-item" href={nota.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
                               <FileText size={14} /> Baixar XML
                             </a>
+                          ) : (
+                            <button
+                              className="nf-dropdown-item"
+                              disabled={processando === nota.id}
+                              onClick={() => { setMenuAberto(null); consultarStatusNota(nota.id); }}
+                            >
+                              <FileText size={14} /> {processando === nota.id ? "Buscando…" : "Buscar XML"}
+                            </button>
                           )}
                           <button
                             className="nf-dropdown-item"
@@ -3345,10 +3353,21 @@ function CteView() {
                               <FileText size={14} /> {processando === cte.id ? "Corrigindo…" : "Corrigir link do DACTE"}
                             </button>
                           )}
-                          {cte.xmlUrl?.startsWith("http") && (
+                          {cte.xmlUrl?.startsWith("http") ? (
                             <a className="nf-dropdown-item" href={cte.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
                               <FileText size={14} /> Baixar XML
                             </a>
+                          ) : (
+                            // Sem link salvo (documento autorizado antes da
+                            // consulta gravar o caminho): uma consulta nova
+                            // preenche o XML sem reenviar nada à SEFAZ.
+                            <button
+                              className="nf-dropdown-item"
+                              disabled={processando === cte.id}
+                              onClick={() => { setMenuAberto(null); consultarStatusCte(cte.id); }}
+                            >
+                              <FileText size={14} /> {processando === cte.id ? "Buscando…" : "Buscar XML"}
+                            </button>
                           )}
                           <button
                             className="nf-dropdown-item"

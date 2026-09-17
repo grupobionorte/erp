@@ -28,6 +28,94 @@ const CODIGO_FORMA_PAGAMENTO = {
   "Boleto": "15", "Transferência Bancária": "16", "Sem pagamento (a prazo)": "90",
 };
 
+// --- Helpers de formatação fiscal -----------------------------------------
+// A SEFAZ valida os decimais com casas fixas. Multiplicação em ponto
+// flutuante gera coisas como 45.00000000000001, que o schema rejeita.
+function dec(valor, casas = 2) {
+  if (valor === null || valor === undefined || valor === "") return undefined;
+  return Number(Number(valor).toFixed(casas));
+}
+
+function somenteDigitos(valor) {
+  if (!valor) return undefined;
+  return String(valor).replace(/\D/g, "") || undefined;
+}
+
+// Partes de data/hora de um instante, já no fuso informado.
+function partesNoFuso(d, timeZone) {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((parte) => [parte.type, parte.value])
+  );
+}
+
+// Offset do fuso, em minutos, para aquele instante (cobre horário de verão).
+function offsetMinutos(d, timeZone) {
+  const p = partesNoFuso(d, timeZone);
+  const comoUtc = Date.UTC(
+    Number(p.year), Number(p.month) - 1, Number(p.day),
+    Number(p.hour), Number(p.minute), Number(p.second)
+  );
+  return Math.round((comoUtc - Math.floor(d.getTime() / 1000) * 1000) / 60000);
+}
+
+// O formulário grava a data de emissão como data pura (2026-09-16T00:00:00Z).
+// Converter isso direto pro fuso jogaria a emissão pro dia anterior, então
+// nesse caso mantemos o dia escolhido e usamos a hora atual — que é o que a
+// SEFAZ espera (data de emissão não pode ser futura nem muito antiga).
+function normalizarDataEmissao(valor, timeZone) {
+  if (!valor) return new Date();
+  const d = valor instanceof Date ? valor : new Date(valor);
+  const ehSomenteData =
+    d.getUTCHours() === 0 && d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0;
+  if (!ehSomenteData) return d;
+
+  const agora = new Date();
+  const h = partesNoFuso(agora, timeZone);
+  const alvo = Date.UTC(
+    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+    Number(h.hour), Number(h.minute), Number(h.second)
+  );
+  // Dois passos para acertar o offset (o primeiro chute pode cair em outro
+  // lado de uma virada de horário de verão).
+  let instante = new Date(alvo - offsetMinutos(agora, timeZone) * 60000);
+  instante = new Date(alvo - offsetMinutos(instante, timeZone) * 60000);
+  return instante;
+}
+
+// toISOString() devolve UTC ("...T00:00:00.000Z"), o que joga a emissão pro
+// dia anterior no horário local. A SEFAZ quer a hora local com o offset
+// explícito — e o servidor do Render roda em UTC, então não dá pra usar
+// getHours() direto. O fuso padrão é o de Mato Grosso (UTC-4); ajuste
+// TZ_FISCAL se a empresa emitir de outro estado.
+function dataEmissaoSefaz(data = new Date(), timeZone = process.env.TZ_FISCAL || "America/Cuiaba") {
+  const pad = (n) => String(n).padStart(2, "0");
+
+  try {
+    const d = normalizarDataEmissao(data, timeZone);
+    const p = partesNoFuso(d, timeZone);
+    const offsetMin = offsetMinutos(d, timeZone);
+    const sinal = offsetMin < 0 ? "-" : "+";
+    const abs = Math.abs(offsetMin);
+
+    return (
+      `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}` +
+      `${sinal}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+    );
+  } catch {
+    // Se o fuso for inválido, cai para UTC explícito em vez de quebrar a emissão.
+    const d = data instanceof Date ? data : new Date(data);
+    return d.toISOString().replace(/\.\d{3}Z$/, "+00:00");
+  }
+}
+
 // Monta o payload que a Focus NFe espera para uma NFe a partir dos nossos
 // registros já carregados do banco (empresa, destinatário, itens com
 // produto, transportadora/veículo, colaborador responsável e os campos de
@@ -42,7 +130,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     finalidade_emissao: CODIGO_FINALIDADE[documento.finalidadeOperacao] ?? 1,
     consumidor_final: documento.consumidorFinal ? 1 : 0,
     presenca_comprador: CODIGO_PRESENCA[documento.indicadorPresenca] ?? 0,
-    cnpj_emitente: empresa.cnpj,
+    cnpj_emitente: somenteDigitos(empresa.cnpj),
 
     nome_destinatario: destinatario.nomeRazaoSocial,
     cpf_destinatario: destinatario.tipo === "pessoa_fisica" ? destinatario.documento : undefined,
@@ -111,11 +199,11 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       pis_situacao_tributaria: item.produto.pisCst || "07",
       pis_base_calculo: item.produto.pisAliquota ? item.valorTotal : undefined,
       pis_aliquota_porcentual: item.produto.pisAliquota || undefined,
-      pis_valor: item.produto.pisAliquota ? item.valorTotal * (item.produto.pisAliquota / 100) : undefined,
+      pis_valor: item.produto.pisAliquota ? dec(item.valorTotal * (item.produto.pisAliquota / 100)) : undefined,
       cofins_situacao_tributaria: item.produto.cofinsCst || "07",
       cofins_base_calculo: item.produto.cofinsAliquota ? item.valorTotal : undefined,
       cofins_aliquota_porcentual: item.produto.cofinsAliquota || undefined,
-      cofins_valor: item.produto.cofinsAliquota ? item.valorTotal * (item.produto.cofinsAliquota / 100) : undefined,
+      cofins_valor: item.produto.cofinsAliquota ? dec(item.valorTotal * (item.produto.cofinsAliquota / 100)) : undefined,
       // IBS/CBS (Reforma Tributária) — só manda se o produto já tiver isso
       // configurado (depende do contador confirmar o código certo pra
       // cada produto; não temos como advinhar isso com segurança aqui).
@@ -127,11 +215,11 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
       ibs_cbs_classificacao_tributaria: item.produto.classificacaoTributariaIbsCbs || undefined,
       ibs_cbs_base_calculo: item.produto.cstIbsCbs ? item.valorTotal : undefined,
       ibs_uf_aliquota: item.produto.cstIbsCbs ? 0.10 : undefined,
-      ibs_uf_valor: item.produto.cstIbsCbs ? item.valorTotal * (0.10 / 100) : undefined,
+      ibs_uf_valor: item.produto.cstIbsCbs ? dec(item.valorTotal * (0.10 / 100)) : undefined,
       ibs_mun_aliquota: item.produto.cstIbsCbs ? 0 : undefined,
       ibs_mun_valor: item.produto.cstIbsCbs ? 0 : undefined,
       cbs_aliquota: item.produto.cstIbsCbs ? 0.90 : undefined,
-      cbs_valor: item.produto.cstIbsCbs ? item.valorTotal * (0.90 / 100) : undefined,
+      cbs_valor: item.produto.cstIbsCbs ? dec(item.valorTotal * (0.90 / 100)) : undefined,
     })),
   };
 }
@@ -182,14 +270,28 @@ const CODIGO_TIPO_SERVICO = { "Normal": 0, "Subcontratação": 1, "Redespacho": 
 function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
   const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador] ?? 3; // padrão: Destinatário
 
+  // O indicador de IE precisa descrever QUEM é o tomador — se ficar fixo em
+  // 9 (não contribuinte) enquanto o tomador é uma empresa com IE, a SEFAZ
+  // rejeita por inconsistência entre o papel e o cadastro.
+  const pessoaTomador = { 0: remetente, 1: expedidor, 2: recebedor, 3: destinatario }[codigoTomador];
+  const indicadorIeTomador =
+    pessoaTomador?.indicadorIe === "Contribuinte" ? 1 :
+    pessoaTomador?.indicadorIe === "Contribuinte Isento" ? 2 : 9;
+
+  // vTotDFe: obrigatório sempre que o grupo IBS/CBS for informado (NT
+  // 2025.001 — rejeição 360 "Total do DFe de preenchimento obrigatório").
+  // Durante 2026 o IBS e a CBS NÃO entram nesse total, então ele é igual ao
+  // valor total da prestação.
+  const temIbsCbs = Boolean(documento.cstIbsCbsPrestacao);
+
   return {
     cfop: documento.cfopPrestacao || undefined,
     natureza_operacao: documento.naturezaOperacao || "Prestação de serviço de transporte",
-    data_emissao: (documento.dataEmissao || new Date()).toISOString(),
+    data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
     tipo_documento: CODIGO_TIPO_CTE[documento.tipoCte] ?? 0,
     tipo_servico: CODIGO_TIPO_SERVICO[documento.tipoServico] ?? 0,
     indicador_globalizado: documento.cteGlobalizado ? 1 : undefined,
-    cnpj_emitente: empresa.cnpj,
+    cnpj_emitente: somenteDigitos(empresa.cnpj),
 
     // Município/UF de envio — quando não temos um cadastro à parte pra
     // isso, usamos o mesmo do início da prestação (é o caso mais comum).
@@ -210,7 +312,7 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     retirar_mercadoria: 1,
     detalhes_retirar: "Não se aplica",
 
-    indicador_inscricao_estadual_tomador: 9,
+    indicador_inscricao_estadual_tomador: indicadorIeTomador,
     tomador: codigoTomador,
 
     ...blocoPessoaCte(remetente, "remetente"),
@@ -218,17 +320,21 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     ...blocoPessoaCte(recebedor, "recebedor"),
     ...blocoPessoaCte(destinatario, "destinatario"),
 
-    valor_total: documento.valorTotal,
-    valor_receber: documento.valorTotal,
+    valor_total: dec(documento.valorTotal),
+    valor_receber: dec(documento.valorTotal),
 
     icms_situacao_tributaria: documento.cstIcmsPrestacao || "90",
-    icms_base_calculo: documento.baseCalculoIcmsPrestacao || undefined,
-    icms_aliquota: documento.aliquotaIcmsPrestacao || undefined,
-    icms_valor: documento.valorIcms || undefined,
-    icms_reducao_base_calculo: documento.percentualReducaoBaseIcms || undefined,
-    icms_valor_credito_presumido: documento.valorCreditoPresumidoIcms || undefined,
+    icms_base_calculo: dec(documento.baseCalculoIcmsPrestacao),
+    icms_aliquota: dec(documento.aliquotaIcmsPrestacao),
+    icms_valor: dec(documento.valorIcms),
+    icms_reducao_base_calculo: dec(documento.percentualReducaoBaseIcms),
+    icms_valor_credito_presumido: dec(documento.valorCreditoPresumidoIcms),
 
-    valor_total_carga: documento.valorTotal,
+    // Total do DFe — exigido pela SEFAZ quando o grupo IBS/CBS está
+    // presente. Em 2026 é igual ao valor total da prestação.
+    valor_total_dfe: temIbsCbs ? dec(documento.valorTotal) : undefined,
+
+    valor_total_carga: dec(documento.valorTotal),
     produto_predominante: documento.especieVolumes || documento.naturezaOperacao || "Carga geral",
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
     // Obrigatório (schema exige pelo menos um) — ainda não temos um campo
@@ -269,13 +375,13 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // fase de transição de 2026 (confirmadas com o suporte da Focus NFe).
     ibs_cbs_situacao_tributaria: documento.cstIbsCbsPrestacao || undefined,
     ibs_cbs_classificacao_tributaria: documento.classificacaoTributariaIbsCbsPrestacao || undefined,
-    ibs_cbs_base_calculo: documento.cstIbsCbsPrestacao ? documento.valorTotal : undefined,
-    ibs_uf_aliquota: documento.cstIbsCbsPrestacao ? 0.10 : undefined,
-    ibs_uf_valor: documento.cstIbsCbsPrestacao ? documento.valorTotal * (0.10 / 100) : undefined,
-    ibs_mun_aliquota: documento.cstIbsCbsPrestacao ? 0 : undefined,
-    ibs_mun_valor: documento.cstIbsCbsPrestacao ? 0 : undefined,
-    cbs_aliquota: documento.cstIbsCbsPrestacao ? 0.90 : undefined,
-    cbs_valor: documento.cstIbsCbsPrestacao ? documento.valorTotal * (0.90 / 100) : undefined,
+    ibs_cbs_base_calculo: temIbsCbs ? dec(documento.valorTotal) : undefined,
+    ibs_uf_aliquota: temIbsCbs ? 0.10 : undefined,
+    ibs_uf_valor: temIbsCbs ? dec(documento.valorTotal * (0.10 / 100)) : undefined,
+    ibs_mun_aliquota: temIbsCbs ? 0 : undefined,
+    ibs_mun_valor: temIbsCbs ? 0 : undefined,
+    cbs_aliquota: temIbsCbs ? 0.90 : undefined,
+    cbs_valor: temIbsCbs ? dec(documento.valorTotal * (0.90 / 100)) : undefined,
   };
 }
 

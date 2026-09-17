@@ -1893,6 +1893,24 @@ const STATUS_DOCUMENTO_LABEL = {
   cancelado: "Cancelado",
 };
 
+// Cor por status — "Rejeitado" precisa saltar aos olhos: quem olha a lista
+// no pátio não pode confundir um documento recusado com um válido.
+const STATUS_DOCUMENTO_COR = {
+  rascunho: "#8a887f",
+  enviado: "#b57a12",
+  autorizado: "#1a7f37",
+  rejeitado: "#c62828",
+  cancelado: "#8a887f",
+};
+
+function StatusDocumento({ status }) {
+  return (
+    <span style={{ color: STATUS_DOCUMENTO_COR[status] || "inherit", fontWeight: 600 }}>
+      {STATUS_DOCUMENTO_LABEL[status] || status}
+    </span>
+  );
+}
+
 function CartaCorrecaoModal({ nota, onClose }) {
   const [historico, setHistorico] = useState(null);
   const [texto, setTexto] = useState("");
@@ -2143,8 +2161,11 @@ Detalhe: ${e.detalhe}` : ""}`);
   const consultarStatusNota = async (id) => {
     setProcessando(id);
     try {
-      await apiRequest(`/documentos-fiscais/${id}/status`);
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/status`);
       carregar();
+      if (resultado.statusProvedor) {
+        alert(`A SEFAZ ainda está processando essa emissão (status: "${resultado.statusProvedor}"). Tente consultar de novo daqui a alguns minutos.`);
+      }
     } catch (e) {
       alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `
 
@@ -2230,7 +2251,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
                 <td>
-                  {STATUS_DOCUMENTO_LABEL[nota.status] || nota.status}
+                  <StatusDocumento status={nota.status} />
                   {processando === nota.id && nota.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
@@ -2238,7 +2259,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
                     ? `Cancelada: ${nota.justificativaCancelamento}`
-                    : nota.chaveAcesso || nota.motivoRejeicao || "—"}
+                    : nota.chaveAcesso || (nota.status === "rejeitado" ? nota.motivoRejeicao : null) || "—"}
                 </td>
                 <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
                 <td className="actions-col" style={{ position: "relative" }}>
@@ -3153,8 +3174,11 @@ function CteView() {
   const consultarStatusCte = async (id) => {
     setProcessando(id);
     try {
-      await apiRequest(`/documentos-fiscais/${id}/status`);
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/status`);
       carregar();
+      if (resultado.statusProvedor) {
+        alert(`A SEFAZ ainda está processando essa emissão (status: "${resultado.statusProvedor}"). Tente consultar de novo daqui a alguns minutos.`);
+      }
     } catch (e) {
       alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
     } finally {
@@ -3257,7 +3281,7 @@ function CteView() {
                 <td>{cte.origemPercurso ? `${cte.origemPercurso}/${cte.ufInicio || "—"}` : "—"} → {cte.destinoPercurso ? `${cte.destinoPercurso}/${cte.ufFim || "—"}` : "—"}</td>
                 <td>{cte.valorTotal != null ? `R$ ${Number(cte.valorTotal).toFixed(2)}` : "—"}</td>
                 <td>
-                  {STATUS_DOCUMENTO_LABEL[cte.status] || cte.status}
+                  <StatusDocumento status={cte.status} />
                   {processando === cte.id && cte.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
@@ -3265,7 +3289,7 @@ function CteView() {
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
                   {cte.status === "cancelado" && cte.justificativaCancelamento
                     ? `Cancelado: ${cte.justificativaCancelamento}`
-                    : cte.chaveAcesso || cte.motivoRejeicao || "—"}
+                    : cte.chaveAcesso || (cte.status === "rejeitado" ? cte.motivoRejeicao : null) || "—"}
                 </td>
                 <td>{new Date(cte.dataEmissao).toLocaleDateString("pt-BR")}</td>
                 <td className="actions-col" style={{ position: "relative" }}>

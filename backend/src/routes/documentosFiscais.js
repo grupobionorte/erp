@@ -398,7 +398,10 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     await focusNfe.emitir({ tipo: documento.tipo, ref, payload });
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
-      data: { status: "enviado" },
+      // Limpa o motivo da tentativa anterior — senão a tela mostra
+      // "Enviado" com a rejeição velha ao lado e parece que o documento
+      // continua rejeitado.
+      data: { status: "enviado", motivoRejeicao: null },
     });
     res.json(atualizado);
   } catch (erro) {
@@ -487,9 +490,13 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
   }
 
   if (resultado.status === "erro_autorizacao") {
+    // Guarda o código junto da mensagem: é por ele que se procura a regra
+    // de validação da SEFAZ (ex.: "360 - Total do DFe de preenchimento
+    // obrigatório").
+    const motivo = [resultado.status_sefaz, resultado.mensagem_sefaz].filter(Boolean).join(" - ");
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
-      data: { status: "rejeitado", motivoRejeicao: resultado.mensagem_sefaz },
+      data: { status: "rejeitado", motivoRejeicao: motivo || "Rejeitado pela SEFAZ" },
     });
     return res.json(atualizado);
   }

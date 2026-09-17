@@ -313,6 +313,11 @@ model DocumentoFiscal {
   xmlUrl               String?                @map("xml_url")
   pdfUrl               String?                @map("pdf_url")
   motivoRejeicao       String?                @map("motivo_rejeicao")
+  // Quantas vezes esse documento já foi mandado ao provedor. A referência
+  // enviada à Focus é derivada daqui, então um envio que ficou preso na
+  // fila (status "processando" eterno) não bloqueia o documento: a próxima
+  // tentativa sai com uma ref nova.
+  tentativaEnvio       Int                    @default(1) @map("tentativa_envio")
   justificativaCancelamento String?           @map("justificativa_cancelamento")
   valorTotal           Float?                 @map("valor_total")
   cartasCorrecao       CartaCorrecao[]

@@ -3196,6 +3196,35 @@ function CteView() {
     }
   };
 
+  // Reenvio de um CTe que ficou preso em "Enviado": o provedor engasgou e o
+  // status nunca resolveu. Sai com uma referência nova, porque a anterior
+  // continua ocupada lá.
+  const reenviarCteTravado = async (id) => {
+    const aviso =
+      "Esse CTe continua em processamento no provedor.\n\n" +
+      "Reenviar cria uma nova referência. Se o envio antigo ainda estiver na fila, " +
+      "os dois podem ser autorizados e você terá um CTe duplicado na SEFAZ.\n\n" +
+      "Só faça isso se a consulta de status estiver travada há horas. Continuar?";
+    if (!window.confirm(aviso)) return;
+    setProcessando(id);
+    try {
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/emitir`, {
+        method: "POST",
+        body: JSON.stringify({ forcarNovoEnvio: true }),
+      });
+      await carregar();
+      if (resultado.status === "enviado") {
+        consultarAteResolver(id);
+      } else {
+        setProcessando(null);
+      }
+    } catch (e) {
+      alert(`Não foi possível reenviar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+      carregar();
+      setProcessando(null);
+    }
+  };
+
   const cancelarCteAutorizado = async (id) => {
     const justificativa = window.prompt("Motivo do cancelamento (mínimo 15 caracteres):");
     if (!justificativa) return;
@@ -3330,13 +3359,22 @@ function CteView() {
                         </>
                       )}
                       {cte.status === "enviado" && (
-                        <button
-                          className="nf-dropdown-item"
-                          disabled={processando === cte.id}
-                          onClick={() => { setMenuAberto(null); consultarStatusCte(cte.id); }}
-                        >
-                          <Search size={14} /> {processando === cte.id ? "Consultando…" : "Consultar status"}
-                        </button>
+                        <>
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === cte.id}
+                            onClick={() => { setMenuAberto(null); consultarStatusCte(cte.id); }}
+                          >
+                            <Search size={14} /> {processando === cte.id ? "Consultando…" : "Consultar status"}
+                          </button>
+                          <button
+                            className="nf-dropdown-item"
+                            disabled={processando === cte.id}
+                            onClick={() => { setMenuAberto(null); reenviarCteTravado(cte.id); }}
+                          >
+                            <FileText size={14} /> Reenviar com nova referência
+                          </button>
+                        </>
                       )}
                       {cte.status === "autorizado" && (
                         <>

@@ -5,6 +5,17 @@ const focusNfe = require("../services/focusNfe");
 const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
+// Referência enviada ao provedor. A primeira tentativa mantém o formato
+// antigo ("cte-2") pra não quebrar os documentos já emitidos; a partir da
+// segunda o número da tentativa entra no fim ("cte-2-2"). Isso destrava o
+// caso em que um envio fica preso em processamento no provedor: a ref
+// anterior continua ocupada, mas o documento pode ser mandado de novo.
+function refDocumento(documento) {
+  const base = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  const tentativa = documento.tentativaEnvio || 1;
+  return tentativa > 1 ? `${base}-${tentativa}` : base;
+}
+
 // Converte um item de "documentosTransportados" (vindo do formulário do
 // CTe) no formato que o Prisma espera pra criar um CteDocumento.
 function mapCteDocumento(doc) {
@@ -355,8 +366,21 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
-  if (documento.status !== "rascunho" && documento.status !== "rejeitado") {
-    return res.status(409).json({ erro: `Documento já está em status "${documento.status}"` });
+
+  // Reenvio de um documento travado em "enviado": o provedor engasgou e o
+  // status nunca resolveu. Exige confirmação explícita porque, se o envio
+  // antigo ainda estiver vivo na fila, os dois podem ser autorizados e aí
+  // sobra documento duplicado na SEFAZ. Consulte o status antes.
+  const forcarNovoEnvio = Boolean(req.body?.forcarNovoEnvio);
+  const travadoEmEnvio = documento.status === "enviado" && forcarNovoEnvio;
+
+  if (documento.status !== "rascunho" && documento.status !== "rejeitado" && !travadoEmEnvio) {
+    return res.status(409).json({
+      erro: `Documento já está em status "${documento.status}"`,
+      ...(documento.status === "enviado"
+        ? { detalhe: "Consulte o status primeiro. Se o provedor continuar sem resposta, reenvie com nova referência." }
+        : {}),
+    });
   }
 
   // Cada tipo de documento tem um payload diferente — NFe leva itens de
@@ -392,7 +416,14 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
           documentosVinculados: documento.documentosVinculados,
         });
 
-  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  // A partir da segunda ida ao provedor (documento rejeitado ou travado em
+  // envio), sobe o contador: assim a ref é nova e não esbarra na anterior,
+  // que pode estar ocupada ou presa em processamento.
+  const primeiraTentativa = documento.status === "rascunho";
+  const tentativa = primeiraTentativa
+    ? documento.tentativaEnvio || 1
+    : (documento.tentativaEnvio || 1) + 1;
+  const ref = refDocumento({ ...documento, tentativaEnvio: tentativa });
 
   // Validação local do CT-e: evita mandar pra SEFAZ algo que já dá pra ver
   // que vai voltar rejeitado, e explica o motivo em português na hora.
@@ -414,7 +445,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       // Limpa o motivo da tentativa anterior — senão a tela mostra
       // "Enviado" com a rejeição velha ao lado e parece que o documento
       // continua rejeitado.
-      data: { status: "enviado", motivoRejeicao: null },
+      data: { status: "enviado", motivoRejeicao: null, tentativaEnvio: tentativa },
     });
     res.json(atualizado);
   } catch (erro) {
@@ -427,7 +458,9 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
 
     await prisma.documentoFiscal.update({
       where: { id },
-      data: { status: "rejeitado", motivoRejeicao: detalheProvedor },
+      // Guarda a tentativa mesmo no erro: se a requisição chegou a sair e
+      // o provedor ficou com essa ref, a próxima já usa outra.
+      data: { status: "rejeitado", motivoRejeicao: detalheProvedor, tentativaEnvio: tentativa },
     });
     res.status(502).json({ erro: "Falha ao enviar para o provedor", detalhe: detalheProvedor });
   }
@@ -459,7 +492,7 @@ router.post("/:id/enviar-email", asyncHandler(async (req, res) => {
     return res.status(400).json({ erro: "Nenhum e-mail informado e o destinatário não tem e-mail cadastrado" });
   }
 
-  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  const ref = refDocumento(documento);
   await focusNfe.enviarPorEmail({ tipo: documento.tipo, ref, emails });
   res.json({ enviado: true, emails });
 }));
@@ -474,7 +507,7 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
 
-  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  const ref = refDocumento(documento);
   const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });
 
   if (resultado.status === "autorizado") {
@@ -750,7 +783,7 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
     return res.status(409).json({ erro: "Essa nota já tem 20 cartas de correção, o máximo permitido pela SEFAZ" });
   }
 
-  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  const ref = refDocumento(documento);
   try {
     const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto: texto.trim() });
     const carta = await prisma.cartaCorrecao.create({
@@ -803,7 +836,7 @@ router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) 
   const carta = await prisma.cartaCorrecao.findUnique({ where: { id: cartaId } });
   if (!carta || carta.documentoId !== id) return res.status(404).json({ erro: "Carta de correção não encontrada" });
 
-  const ref = `${documento.tipo.toLowerCase()}-${documento.id}`;
+  const ref = refDocumento(documento);
   try {
     const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });
     // A Focus só expõe o PDF/XML da carta de correção mais recente por

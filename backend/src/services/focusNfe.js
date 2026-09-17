@@ -188,7 +188,7 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     data_emissao: (documento.dataEmissao || new Date()).toISOString(),
     tipo_documento: CODIGO_TIPO_CTE[documento.tipoCte] ?? 0,
     tipo_servico: CODIGO_TIPO_SERVICO[documento.tipoServico] ?? 0,
-    indicador_globalizado: documento.cteGlobalizado ? 1 : 0,
+    indicador_globalizado: documento.cteGlobalizado ? 1 : undefined,
     cnpj_emitente: empresa.cnpj,
 
     // Município/UF de envio — quando não temos um cadastro à parte pra

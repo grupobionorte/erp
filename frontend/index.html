@@ -3462,16 +3462,84 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
   const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
 
+  const [aba, setAba] = useState("rota");
+
+  const nomeDe = (id) => (clientes || []).find(c => String(c.id) === String(id))?.nome;
+  // Quem é o tomador depende do papel escolhido — é esse cruzamento que a
+  // SEFAZ confere, e foi onde o primeiro CT-e saiu errado.
+  const idPorPapel = { "Remetente": remetenteId, "Expedidor": expedidorId, "Recebedor": recebedorId, "Destinatário": tomadorId };
+  const nomeTomador = nomeDe(idPorPapel[definicaoTomador]);
+
+  const pesoTotalCarga = documentosTransportados.reduce((t, d) => t + (Number(d.pesoBruto) || 0), 0);
+  const interestadual = Boolean(ufInicio && ufFim && ufInicio !== ufFim);
+  const cfopSugerido = interestadual ? "6353" : "5353";
+  const cfopIncompativel = Boolean(cfopPrestacao && ufInicio && ufFim && cfopPrestacao.startsWith("6") !== interestadual);
+
+  // Mesma conferência que o backend faz antes de mandar pra SEFAZ — aqui ela
+  // aparece enquanto se preenche, não depois da rejeição.
+  const pendencias = [];
+  if (!tomadorId) pendencias.push("Destinatário não selecionado.");
+  if (!documentosTransportados.length) pendencias.push("Nenhuma nota fiscal vinculada — é a rejeição 693.");
+  if (!ufInicio || !ufFim || !origemPercurso || !destinoPercurso) pendencias.push("Trajeto incompleto (UF e município de início e fim).");
+  if (cfopIncompativel) pendencias.push(`CFOP ${cfopPrestacao} não combina com o trajeto ${ufInicio} → ${ufFim}: o certo começa com ${interestadual ? "6" : "5"} (sugestão ${cfopSugerido}).`);
+  if (!valorTotal || Number(valorTotal) <= 0) pendencias.push("Valor da prestação não informado.");
+  for (const d of documentosTransportados) {
+    if (d.chaveAcesso && !/^\d{44}$/.test(String(d.chaveAcesso).replace(/\D/g, ""))) {
+      pendencias.push(`Chave de acesso com tamanho inválido no documento ${d.numeroDocumento || "sem número"}.`);
+    }
+  }
+
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
-        <div className="modal-header">
-          <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
-          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+      <div className="modal" style={{ width: 940, maxWidth: "96vw" }}>
+        <div className="modal-header" style={{ display: "block", paddingBottom: 0 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
+            <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+          </div>
+
+          {/* Resumo fixo: o que o CT-e diz hoje, sem precisar rolar as abas */}
+          <div className="cte-resumo">
+            <div>
+              <span className="cte-resumo-rotulo">Trajeto</span>
+              <span className="cte-resumo-valor">
+                {origemPercurso || "—"}/{ufInicio || "—"} → {destinoPercurso || "—"}/{ufFim || "—"}
+              </span>
+            </div>
+            <div>
+              <span className="cte-resumo-rotulo">Tomador</span>
+              <span className="cte-resumo-valor">
+                {nomeTomador ? `${nomeTomador} (${definicaoTomador.toLowerCase()})` : "—"}
+              </span>
+            </div>
+            <div>
+              <span className="cte-resumo-rotulo">Carga</span>
+              <span className="cte-resumo-valor">
+                {documentosTransportados.length} NF-e · {formatarDecimal(pesoTotalCarga, 3)} kg
+              </span>
+            </div>
+            <div>
+              <span className="cte-resumo-rotulo">Prestação</span>
+              <span className="cte-resumo-valor">R$ {formatarMoeda(Number(valorTotal) || 0)}</span>
+            </div>
+          </div>
+
+          <div className="cte-abas" role="tablist">
+            <button type="button" role="tab" className="cte-aba" aria-selected={aba === "rota"} onClick={() => setAba("rota")}>
+              Rota e pessoas
+            </button>
+            <button type="button" role="tab" className="cte-aba" aria-selected={aba === "carga"} onClick={() => setAba("carga")}>
+              Carga e documentos <span className="cte-contador">{documentosTransportados.length}</span>
+            </button>
+            <button type="button" role="tab" className="cte-aba" aria-selected={aba === "valores"} onClick={() => setAba("valores")}>
+              Valores e impostos
+            </button>
+          </div>
         </div>
         <div className="modal-body">
+          <div hidden={aba !== "carga"}>
           <div className="nf-section">
-            <h4 className="nf-section-title">Dados das mercadorias</h4>
+            <h4 className="nf-section-title">Notas fiscais transportadas</h4>
             {documentosTransportados.length > 0 ? (
               <div className="nf-itens-table" style={{ marginBottom: 14 }}>
                 <div className="nf-itens-header" style={{ gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px" }}>
@@ -3652,6 +3720,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </div>
           </div>
 
+          </div>
+
+          <div hidden={aba !== "rota"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
             <div className="nf-grid-4">
@@ -3707,6 +3778,12 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               <div className="field-group">
                 <label className="field-label">CFOP da prestação</label>
                 <CfopField value={cfopPrestacao} onChange={setCfopPrestacao} />
+                {cfopIncompativel && (
+                  <p className="cte-sugestao">
+                    Trajeto {interestadual ? "interestadual" : `dentro de ${ufInicio}`}: o CFOP deveria começar
+                    com {interestadual ? "6" : "5"} — sugestão {cfopSugerido}.
+                  </p>
+                )}
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0, maxWidth: 400 }}>
@@ -3716,52 +3793,45 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
           </div>
 
           <div className="nf-section">
-            <h4 className="nf-section-title">Pessoas</h4>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Remetente</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={remetenteId} onChange={e => setRemetenteId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Nenhum</option>
-                    {opcoesPessoas}
-                  </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setRemetenteId })}><Plus size={14} /></button>
+            <h4 className="nf-section-title">Pessoas e tomador</h4>
+            <p className="hint" style={{ marginTop: -6, marginBottom: 10 }}>
+              O tomador é quem contrata e paga o frete. Marque na linha de quem ele é — é esse cruzamento
+              que a SEFAZ confere contra o CFOP.
+            </p>
+            <div className="cte-papeis">
+              {[
+                { papel: "Remetente", descricao: "quem despacha", valor: remetenteId, setter: setRemetenteId, vazio: "Nenhum" },
+                { papel: "Expedidor", descricao: "opcional", valor: expedidorId, setter: setExpedidorId, vazio: "Nenhum" },
+                { papel: "Recebedor", descricao: "opcional", valor: recebedorId, setter: setRecebedorId, vazio: "Nenhum" },
+                { papel: "Destinatário", descricao: "quem recebe", valor: tomadorId, setter: setTomadorId, vazio: "Selecione…", obrigatorio: true },
+              ].map(({ papel, descricao, valor, setter, vazio, obrigatorio }) => (
+                <div className="cte-papel-linha" key={papel}>
+                  <span className="cte-papel-nome">
+                    <b>{papel}{obrigatorio && <span className="req">*</span>}</b>
+                    {descricao}
+                  </span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select value={valor} onChange={e => setter(e.target.value)} style={{ flex: 1 }}>
+                      <option value="">{vazio}</option>
+                      {opcoesPessoas}
+                    </select>
+                    <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo"
+                      onClick={() => setQuickAdd({ tipo: "clientes", setter })}><Plus size={14} /></button>
+                  </div>
+                  <button
+                    type="button"
+                    className={`cte-btn-tomador ${definicaoTomador === papel ? "ativo" : ""}`}
+                    onClick={() => setDefinicaoTomador(papel)}
+                    title={`Marcar ${papel.toLowerCase()} como tomador do frete`}
+                  >
+                    Tomador
+                  </button>
                 </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Expedidor</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={expedidorId} onChange={e => setExpedidorId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Nenhum</option>
-                    {opcoesPessoas}
-                  </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setExpedidorId })}><Plus size={14} /></button>
-                </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Destinatário<span className="req">*</span></label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={tomadorId} onChange={e => setTomadorId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Selecione…</option>
-                    {opcoesPessoas}
-                  </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setTomadorId })}><Plus size={14} /></button>
-                </div>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Recebedor</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={recebedorId} onChange={e => setRecebedorId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Nenhum</option>
-                    {opcoesPessoas}
-                  </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setRecebedorId })}><Plus size={14} /></button>
-                </div>
-              </div>
+              ))}
             </div>
-            {clientes?.length === 0 && <p className="hint" style={{ marginTop: -8 }}>Nenhum cliente cadastrado ainda.</p>}
+            {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
 
-            <div className="nf-grid-4">
+            <div className="nf-grid-4" style={{ marginTop: 14 }}>
               <div className="field-group">
                 <label className="field-label">UF início<span className="req">*</span></label>
                 <select value={ufInicio} onChange={e => { setUfInicio(e.target.value); setOrigemPercurso(""); }}>
@@ -3785,16 +3855,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                 <MunicipioField uf={ufFim} value={destinoPercurso} onChange={setDestinoPercurso} />
               </div>
             </div>
-            <div className="field-group" style={{ maxWidth: 200 }}>
+            <div className="field-group" style={{ marginBottom: 0, maxWidth: 200 }}>
               <label className="field-label">Distância (km)</label>
               <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
-            </div>
-
-            <div className="field-group" style={{ marginBottom: 0, maxWidth: 300 }}>
-              <label className="field-label">Definição do tomador</label>
-              <select value={definicaoTomador} onChange={e => setDefinicaoTomador(e.target.value)}>
-                {DEFINICAO_TOMADOR.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
             </div>
           </div>
 
@@ -3842,8 +3905,11 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </div>
           </div>
 
+          </div>
+
+          <div hidden={aba !== "valores"}>
           <div className="nf-section">
-            <h4 className="nf-section-title">Totais</h4>
+            <h4 className="nf-section-title">Prestação e impostos</h4>
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Forma de pagamento</label>
@@ -3912,11 +3978,25 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </div>
           </div>
 
+          </div>
+
           {erro && <p className="error-text">{erro}</p>}
         </div>
-        <div className="modal-footer">
-          <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
+        <div className="modal-footer cte-rodape">
+          {/* Conferência ao vivo: as mesmas regras que barram o envio no
+              servidor, mostradas enquanto ainda dá pra corrigir. */}
+          <div className={`cte-conferencia ${pendencias.length ? "pendente" : "ok"}`}>
+            <strong>
+              {pendencias.length
+                ? `${pendencias.length} ponto${pendencias.length > 1 ? "s" : ""} a resolver antes de emitir`
+                : "Pronto para emitir"}
+            </strong>
+            {pendencias.length > 0 && <ul>{pendencias.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
+            <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar rascunho"}</button>
+          </div>
         </div>
       </div>
       {quickAdd && (
@@ -4505,6 +4585,39 @@ function ErpBiomassa() {
         .modal-header h3 { margin: 0; font-size: 16px; font-weight: 500; }
         .modal-body { padding: 1rem 1.25rem; overflow-y: auto; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border, #e5e3da); }
+        /* Formulário de CT-e: resumo, abas, papéis e conferência */
+        .cte-resumo { display: flex; gap: 22px; flex-wrap: wrap; margin: 12px 0 14px; }
+        .cte-resumo-rotulo { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #8a887f; }
+        .cte-resumo-valor { font-size: 13.5px; font-weight: 600; color: var(--erp-azul); }
+        .cte-abas { display: flex; gap: 2px; }
+        .cte-aba {
+          border: none; background: none; cursor: pointer; font-family: inherit; font-size: 13.5px;
+          padding: 10px 16px 11px; color: #6b6b68; border-bottom: 2px solid transparent;
+          display: inline-flex; align-items: center; gap: 7px;
+        }
+        .cte-aba[aria-selected="true"] { color: var(--erp-azul); font-weight: 600; border-bottom-color: var(--erp-verde); }
+        .cte-contador { font-size: 11px; background: #f2f1ec; border-radius: 20px; padding: 1px 7px; color: #6b6b68; }
+        .cte-papeis { border: 0.5px solid #e5e3da; border-radius: 10px; padding: 2px 12px; }
+        .cte-papel-linha {
+          display: grid; grid-template-columns: 150px 1fr auto; gap: 12px; align-items: center;
+          padding: 9px 0; border-bottom: 0.5px solid #f0efe9;
+        }
+        .cte-papel-linha:last-child { border-bottom: none; }
+        .cte-papel-nome { font-size: 12px; color: #8a887f; }
+        .cte-papel-nome b { display: block; color: #23231f; font-weight: 600; font-size: 13.5px; }
+        .cte-btn-tomador {
+          border: 0.5px solid #c9c6ba; background: #fff; color: #6b6b68; border-radius: 20px;
+          padding: 5px 13px; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
+        }
+        .cte-btn-tomador.ativo { background: var(--erp-verde); border-color: var(--erp-verde); color: #fff; font-weight: 600; }
+        .cte-sugestao { background: var(--erp-azul-claro); color: var(--erp-azul); border-radius: 7px; padding: 7px 10px; font-size: 11.5px; margin: 6px 0 0; }
+        .cte-rodape { align-items: flex-start; gap: 14px; flex-wrap: wrap; }
+        .cte-conferencia { flex: 1 1 320px; border-radius: 9px; padding: 11px 13px; font-size: 12.5px; }
+        .cte-conferencia.ok { background: #eaf3de; color: #00732F; }
+        .cte-conferencia.pendente { background: #fbf3e2; color: #7a5205; }
+        .cte-conferencia ul { margin: 6px 0 0; padding-left: 17px; }
+        .cte-conferencia li { margin-bottom: 3px; }
+
         /* Cadastro de cliente/fornecedor — grade de 12 colunas e seções */
         .pessoa-modal { width: 780px; max-width: 96vw; }
         .pessoa-modal .modal-header h3 { margin: 0; }

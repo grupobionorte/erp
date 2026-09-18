@@ -15,6 +15,8 @@ router.get("/", exigirAdmin, asyncHandler(async (req, res) => {
     select: {
       id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true,
       empresas: { select: { id: true, razaoSocial: true } },
+      colaboradorId: true,
+      colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },
     },
     orderBy: { nome: "asc" },
   });
@@ -22,7 +24,22 @@ router.get("/", exigirAdmin, asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
-  const { nome, papel, ativo, empresaIds } = req.body;
+  const { nome, papel, ativo, empresaIds, colaboradorId } = req.body;
+
+  // Um colaborador só pode estar ligado a um login. Sem essa checagem o
+  // erro apareceria como violação de índice único, sem dizer com quem.
+  if (colaboradorId) {
+    const jaVinculado = await prisma.usuario.findUnique({
+      where: { colaboradorId: Number(colaboradorId) },
+      select: { id: true, nome: true },
+    });
+    if (jaVinculado && jaVinculado.id !== Number(req.params.id)) {
+      return res.status(409).json({
+        erro: "Esse colaborador já está vinculado a outro usuário",
+        detalhe: `Vinculado a ${jaVinculado.nome}.`,
+      });
+    }
+  }
 
   const usuario = await prisma.usuario.update({
     where: { id: Number(req.params.id) },
@@ -30,6 +47,8 @@ router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
       nome: nome || undefined,
       papel: papel || undefined,
       ativo: typeof ativo === "boolean" ? ativo : undefined,
+      // colaboradorId null limpa o vínculo; undefined deixa como está.
+      colaboradorId: colaboradorId === undefined ? undefined : (colaboradorId ? Number(colaboradorId) : null),
       // "set" substitui a lista inteira de empresas vinculadas pela nova —
       // só mexe nisso se o front mandou array (mesmo vazio, pra permitir
       // remover todo acesso).
@@ -38,6 +57,8 @@ router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
     select: {
       id: true, nome: true, email: true, papel: true, ativo: true,
       empresas: { select: { id: true, razaoSocial: true } },
+      colaboradorId: true,
+      colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },
     },
   });
 

@@ -474,22 +474,179 @@ function validarPayloadCte(payload) {
 
 // Monta o payload de MDFe. Ele não carrega itens de produto — carrega as
 // chaves de acesso das NFe/CTe que estão sendo transportadas na viagem.
-function montarPayloadMdfe({ empresa, veiculo, nomeMotorista, cpfMotorista, ufPercurso, documentosVinculados }) {
+// Unidade de medida do peso no MDFe: "01" KG, "02" TON.
+const UNIDADE_PESO_MDFE = { KG: "01", TON: "02" };
+
+function montarPayloadMdfe({
+  empresa,
+  veiculo,
+  veiculoReboque,
+  nomeMotorista,
+  cpfMotorista,
+  ufPercurso,
+  documentosVinculados,
+  documento = {},
+}) {
+  const ufs = (ufPercurso || "").split(",").map((u) => u.trim().toUpperCase()).filter(Boolean);
+  const ufInicio = ufs[0];
+  const ufFim = ufs[ufs.length - 1];
+  // O percurso são as UFs INTERMEDIÁRIAS — início e fim não entram aqui,
+  // senão a SEFAZ acusa percurso inválido.
+  const percursoIntermediario = ufs.slice(1, -1);
+
+  const chavesPorTipo = (tipo) =>
+    (documentosVinculados || []).filter((d) => d.tipo === tipo && d.chaveAcesso);
+
+  const ctes = chavesPorTipo("CTe");
+  const nfes = chavesPorTipo("NFe");
+
   return {
-    data_emissao: new Date().toISOString(),
-    cnpj_emitente: empresa.cnpj,
-    uf_ini: ufPercurso?.split(",")[0],
-    uf_fim: ufPercurso?.split(",").slice(-1)[0],
-    percurso: ufPercurso?.split(","),
-    modal: "1", // 1 = rodoviário
-    veiculo_placa: veiculo?.placa,
-    veiculo_tara: veiculo?.taraKg,
-    condutores: [{ nome: nomeMotorista, cpf: cpfMotorista }],
-    documentos: documentosVinculados.map((doc) => ({
-      chave_acesso: doc.chaveAcesso,
-      tipo: doc.tipo === "NFe" ? "nfe" : "cte",
-    })),
+    // 1 = prestador de serviço de transporte, 2 = carga própria.
+    emitente: documento.tipoEmitenteMdfe || "1",
+    modal: "1", // rodoviário
+    data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
+
+    cnpj_emitente: somenteDigitos(empresa.cnpj),
+    inscricao_estadual_emitente: empresa.ie || undefined,
+    nome_emitente: empresa.razaoSocial,
+    nome_fantasia_emitente: empresa.nomeFantasia || undefined,
+    logradouro_emitente: empresa.endereco?.logradouro,
+    numero_emitente: empresa.endereco?.numero,
+    complemento_emitente: empresa.endereco?.complemento || undefined,
+    bairro_emitente: empresa.endereco?.bairro,
+    codigo_municipio_emitente: empresa.endereco?.codigoIbgeCidade || undefined,
+    municipio_emitente: empresa.endereco?.cidade,
+    cep_emitente: somenteDigitos(empresa.endereco?.cep),
+    uf_emitente: empresa.endereco?.uf,
+    telefone_emitente: somenteDigitos(empresa.telefone),
+    email_emitente: empresa.email || undefined,
+
+    uf_inicio: ufInicio,
+    uf_fim: ufFim,
+    percursos: percursoIntermediario.map((uf) => ({ uf_percurso: uf })),
+
+    municipios_carregamento: documento.codigoMunicipioCarregamento
+      ? [{ codigo: Number(documento.codigoMunicipioCarregamento), nome: documento.municipioCarregamento }]
+      : undefined,
+    municipios_descarregamento: documento.codigoMunicipioDescarregamento
+      ? [{ codigo: Number(documento.codigoMunicipioDescarregamento), nome: documento.municipioDescarregamento }]
+      : undefined,
+
+    // Prestador de serviço relaciona CT-e; carga própria relaciona NF-e.
+    conhecimentos_transporte: ctes.length
+      ? ctes.map((d) => ({ chave_cte: d.chaveAcesso }))
+      : undefined,
+    notas_fiscais: nfes.length ? nfes.map((d) => ({ chave_nfe: d.chaveAcesso })) : undefined,
+    quantidade_total_cte: ctes.length || undefined,
+    quantidade_total_nfe: nfes.length || undefined,
+
+    // Totalizadores da carga.
+    valor_total_carga: dec(documento.valorTotalCarga),
+    codigo_unidade_medida_peso_bruto: documento.unidadeMedidaPeso || UNIDADE_PESO_MDFE.KG,
+    peso_bruto: dec(documento.pesoBrutoCarga, 4),
+    tipo_carga: documento.tipoCarga || undefined,
+    descricao_produto: documento.produtoPredominante || undefined,
+
+    // Seguro da carga — obrigatório no rodoviário depois da Lei 11.442/07.
+    seguros_carga: documento.seguroNomeSeguradora
+      ? [
+          {
+            responsavel_seguro: documento.seguroResponsavel || "1",
+            cnpj_responsavel:
+              (documento.seguroResponsavel || "1") === "1" ? somenteDigitos(empresa.cnpj) : undefined,
+            nome_seguradora: documento.seguroNomeSeguradora,
+            cnpj_seguradora: somenteDigitos(documento.seguroCnpjSeguradora),
+            numero_apolice: documento.seguroNumeroApolice || undefined,
+            numero_averbacao: documento.seguroNumeroAverbacao || undefined,
+          },
+        ]
+      : undefined,
+
+    rodoviario: {
+      rntrc: somenteDigitos(empresa.rntrc),
+      ciot: documento.ciot ? [{ codigo: documento.ciot, cnpj: somenteDigitos(empresa.cnpj) }] : undefined,
+      veiculo_tracao: {
+        placa: veiculo?.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+        renavam: somenteDigitos(veiculo?.renavam),
+        tara: veiculo?.taraKg ? Math.round(veiculo.taraKg) : undefined,
+        capacidade_kg: veiculo?.capacidadeKg ? Math.round(veiculo.capacidadeKg) : undefined,
+        tipo_rodado: veiculo?.tipoRodado || undefined,
+        tipo_carroceria: veiculo?.tipoCarroceria || undefined,
+        uf: veiculo?.uf || empresa.endereco?.uf,
+        condutores: nomeMotorista
+          ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
+          : undefined,
+      },
+      veiculos_reboque: veiculoReboque
+        ? [
+            {
+              placa: veiculoReboque.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+              renavam: somenteDigitos(veiculoReboque.renavam),
+              tara: veiculoReboque.taraKg ? Math.round(veiculoReboque.taraKg) : undefined,
+              capacidade_kg: veiculoReboque.capacidadeKg ? Math.round(veiculoReboque.capacidadeKg) : undefined,
+              tipo_carroceria: veiculoReboque.tipoCarroceria || undefined,
+              uf: veiculoReboque.uf || empresa.endereco?.uf,
+            },
+          ]
+        : undefined,
+    },
+
+    informacao_complementar: documento.informacoesComplementares || undefined,
   };
+}
+
+// Conferência do MDFe antes do envio, no mesmo espírito da do CT-e.
+function validarPayloadMdfe(payload) {
+  const problemas = [];
+
+  if (!payload.uf_inicio || !payload.uf_fim) {
+    problemas.push("UF de início e de fim do percurso não informadas.");
+  }
+  if (!payload.municipios_carregamento?.length) {
+    problemas.push("Município de carregamento não informado (precisa do código IBGE).");
+  }
+  if (!payload.municipios_descarregamento?.length) {
+    problemas.push("Município de descarregamento não informado (precisa do código IBGE).");
+  }
+  if (!payload.conhecimentos_transporte?.length && !payload.notas_fiscais?.length) {
+    problemas.push("Nenhum CT-e ou NF-e vinculado ao manifesto.");
+  }
+  for (const cte of payload.conhecimentos_transporte || []) {
+    if (!/^\d{44}$/.test(cte.chave_cte || "")) {
+      problemas.push(`Chave de CT-e inválida: ${cte.chave_cte || "vazia"}`);
+    }
+  }
+  for (const nfe of payload.notas_fiscais || []) {
+    if (!/^\d{44}$/.test(nfe.chave_nfe || "")) {
+      problemas.push(`Chave de NF-e inválida: ${nfe.chave_nfe || "vazia"}`);
+    }
+  }
+  if (!payload.valor_total_carga) {
+    problemas.push("Valor total da carga não informado.");
+  }
+  if (!payload.peso_bruto) {
+    problemas.push("Peso bruto da carga não informado.");
+  }
+  if (!/^\d{8}$/.test(payload.rodoviario?.rntrc || "")) {
+    problemas.push("RNTRC não preenchido (8 dígitos) no cadastro da empresa emitente.");
+  }
+  if (!payload.rodoviario?.veiculo_tracao?.placa) {
+    problemas.push("Veículo de tração sem placa.");
+  }
+  if (!payload.rodoviario?.veiculo_tracao?.condutores?.length) {
+    problemas.push("Condutor não informado (nome e CPF).");
+  }
+  if (!payload.seguros_carga?.length) {
+    problemas.push(
+      "Seguro da carga não informado — obrigatório no modal rodoviário (seguradora, CNPJ e apólice)."
+    );
+  }
+  // O percurso lista só as UFs intermediárias.
+  if ((payload.percursos || []).some((p) => p.uf_percurso === payload.uf_inicio || p.uf_percurso === payload.uf_fim)) {
+    problemas.push("O percurso deve conter apenas as UFs intermediárias, sem repetir a de início e a de fim.");
+  }
+
+  return problemas;
 }
 
 const ENDPOINT_POR_TIPO = { NFe: "nfe", CTe: "cte", MDFe: "mdfe" };
@@ -534,6 +691,19 @@ async function emitirCartaCorrecao({ tipo, ref, texto }) {
   return data;
 }
 
+// Encerramento do MDF-e. Não é opcional: enquanto um manifesto não for
+// encerrado, a SEFAZ recusa o próximo da mesma placa ("Existe MDF-e não
+// encerrado para esta placa"). Deve ser feito quando a carga chega ao
+// destino, informando onde e quando terminou a viagem.
+async function encerrarMdfe({ ref, data_encerramento, codigo_municipio, uf }) {
+  const { data } = await client.post(`/v2/mdfe/${ref}/encerramento`, {
+    data_encerramento,
+    codigo_municipio,
+    uf,
+  });
+  return data;
+}
+
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
@@ -548,6 +718,8 @@ module.exports = {
   montarPayloadNfe,
   montarPayloadCte,
   validarPayloadCte,
+  validarPayloadMdfe,
+  encerrarMdfe,
   urlCompleta,
   enviarPorEmail,
   cancelar,

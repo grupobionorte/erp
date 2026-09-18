@@ -24,7 +24,7 @@ function gerarToken(usuario, empresaId) {
 // efeito prático pra quem é "operador" — um "admin" acessa todas as
 // empresas ativas automaticamente, então a lista é ignorada nesse caso.
 router.post("/registrar", asyncHandler(async (req, res) => {
-  const { nome, email, senha, papel, empresaIds } = req.body;
+  const { nome, email, senha, papel, empresaIds, colaboradorId } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: "nome, email e senha são obrigatórios" });
   }
@@ -50,6 +50,21 @@ router.post("/registrar", asyncHandler(async (req, res) => {
     }
   }
 
+  // Um colaborador só pode ter um login. Sem isso o erro voltaria como
+  // violação de índice único, sem dizer de quem é o vínculo.
+  if (colaboradorId) {
+    const jaVinculado = await prisma.usuario.findUnique({
+      where: { colaboradorId: Number(colaboradorId) },
+      select: { nome: true },
+    });
+    if (jaVinculado) {
+      return res.status(409).json({
+        erro: "Esse colaborador já está vinculado a outro usuário",
+        detalhe: `Vinculado a ${jaVinculado.nome}.`,
+      });
+    }
+  }
+
   const senhaHash = await bcrypt.hash(senha, 10);
 
   const usuario = await prisma.usuario.create({
@@ -59,8 +74,13 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       senhaHash,
       papel: totalUsuarios === 0 ? "admin" : papel === "admin" ? "admin" : "operador",
       empresas: empresaIds?.length ? { connect: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
+      // Liga o login à ficha de colaborador, quando informada.
+      colaborador: colaboradorId ? { connect: { id: Number(colaboradorId) } } : undefined,
     },
-    include: { empresas: { select: { id: true, razaoSocial: true, logoUrl: true } } },
+    include: {
+      empresas: { select: { id: true, razaoSocial: true, logoUrl: true } },
+      colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },
+    },
   });
 
   res.status(201).json({
@@ -69,6 +89,8 @@ router.post("/registrar", asyncHandler(async (req, res) => {
     email: usuario.email,
     papel: usuario.papel,
     empresas: usuario.empresas,
+    colaboradorId: usuario.colaboradorId,
+    colaborador: usuario.colaborador,
   });
 }));
 

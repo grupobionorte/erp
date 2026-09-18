@@ -56,6 +56,12 @@ model Usuario {
   // automaticamente, mesmo sem estar nessa lista.
   empresas Empresa[] @relation("UsuarioEmpresas")
 
+  // Vínculo com a ficha de colaborador: é assim que o login de alguém se
+  // liga à pessoa real do RH (cargo, setor, CPF). Um colaborador tem no
+  // máximo um login, daí o índice único.
+  colaboradorId Int?         @unique @map("colaborador_id")
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+
   @@map("usuarios")
 }
 
@@ -215,6 +221,7 @@ model Colaborador {
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   documentosComoResponsavel DocumentoFiscal[]
+  usuario                   Usuario?
 
   @@unique([cpf, empresaId])
   @@map("colaboradores")
@@ -356,6 +363,40 @@ model DocumentoFiscal {
   nomeMotorista String? @map("nome_motorista")
   cpfMotorista  String? @map("cpf_motorista")
   ufPercurso    String? @map("uf_percurso") // ex: "MT,GO,SP"
+
+  // MDFe — carregamento e descarregamento. A SEFAZ exige município COM
+  // código IBGE nos dois lados (o CTe guarda só o nome, por isso os
+  // códigos vivem aqui).
+  municipioCarregamento         String? @map("municipio_carregamento")
+  codigoMunicipioCarregamento   String? @map("codigo_municipio_carregamento")
+  municipioDescarregamento      String? @map("municipio_descarregamento")
+  codigoMunicipioDescarregamento String? @map("codigo_municipio_descarregamento")
+
+  // MDFe — carga. tipoCarga segue a Resolução ANTT 5.849/2019
+  // ("01" granel sólido, "05" carga geral, etc.).
+  tipoCarga           String? @map("tipo_carga")
+  produtoPredominante String? @map("produto_predominante")
+  unidadeMedidaPeso   String? @map("unidade_medida_peso") // "01" KG, "02" TON
+  pesoBrutoCarga      Float?  @map("peso_bruto_carga")
+  valorTotalCarga     Float?  @map("valor_total_carga")
+
+  // MDFe — seguro da carga, obrigatório no modal rodoviário (Lei 11.442/07).
+  seguroResponsavel     String? @map("seguro_responsavel") // "1" emitente, "2" contratante
+  seguroNomeSeguradora  String? @map("seguro_nome_seguradora")
+  seguroCnpjSeguradora  String? @map("seguro_cnpj_seguradora")
+  seguroNumeroApolice   String? @map("seguro_numero_apolice")
+  seguroNumeroAverbacao String? @map("seguro_numero_averbacao")
+
+  // MDFe — tipo de emitente ("1" prestador de serviço de transporte,
+  // "2" transportador de carga própria) e CIOT.
+  tipoEmitenteMdfe String? @map("tipo_emitente_mdfe")
+  ciot             String?
+
+  // MDFe — encerramento. Enquanto não for encerrado, a SEFAZ recusa o
+  // próximo MDFe da mesma placa.
+  dataEncerramento              DateTime? @map("data_encerramento")
+  municipioEncerramento         String?   @map("municipio_encerramento")
+  codigoMunicipioEncerramento   String?   @map("codigo_municipio_encerramento")
 
   // Origem/destino do trajeto — usados no CTe (e reaproveitáveis se um dia
   // o MDFe também quiser mostrar cidade em vez de só a lista de UFs).

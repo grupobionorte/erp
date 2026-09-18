@@ -91,7 +91,7 @@ router.get("/", asyncHandler(async (req, res) => {
       // sem empresa" pra tratar aqui.
       ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);
@@ -339,6 +339,196 @@ router.post("/mdfe/rascunho", asyncHandler(async (req, res) => {
   res.status(201).json(documento);
 }));
 
+// Gera um rascunho de MDFe já preenchido a partir de CT-e(s) autorizados.
+// É o caminho prático: quase tudo que a SEFAZ exige no manifesto já está
+// no CT-e — trajeto, veículo, motorista, carga. O usuário só confere.
+router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
+  const { cteIds, tipoCarga, seguro } = req.body;
+
+  if (!cteIds?.length) {
+    return res.status(400).json({ erro: "Informe ao menos um CT-e (cteIds)" });
+  }
+
+  const ctes = await prisma.documentoFiscal.findMany({
+    where: { id: { in: cteIds }, tipo: "CTe", empresaId: req.usuario.empresaId },
+    include: { veiculo: true, veiculoReboque: true, documentosTransportados: true, empresa: true },
+  });
+
+  if (ctes.length !== cteIds.length) {
+    return res.status(400).json({ erro: "Algum CT-e não foi encontrado nessa empresa" });
+  }
+  // Um CT-e só pode estar em um manifesto: como o vínculo é uma FK no
+  // próprio CT-e, gerar um segundo MDFe com ele o tiraria do primeiro sem
+  // ninguém perceber.
+  const jaManifestado = ctes.filter((c) => c.mdfeId);
+  if (jaManifestado.length) {
+    const outros = await prisma.documentoFiscal.findMany({
+      where: { id: { in: jaManifestado.map((c) => c.mdfeId) }, status: { not: "cancelado" } },
+      select: { id: true, numero: true, status: true },
+    });
+    if (outros.length) {
+      return res.status(409).json({
+        erro: "CT-e já vinculado a outro MDF-e",
+        detalhe: `Manifesto(s): ${outros.map((m) => `nº ${m.numero || m.id} (${m.status})`).join(", ")}.`,
+      });
+    }
+  }
+
+  const naoAutorizado = ctes.find((c) => c.status !== "autorizado" || !c.chaveAcesso);
+  if (naoAutorizado) {
+    return res.status(400).json({
+      erro: "Só é possível manifestar CT-e autorizado",
+      detalhe: `O CT-e ${naoAutorizado.id} está em "${naoAutorizado.status}" e sem chave de acesso.`,
+    });
+  }
+
+  const primeiro = ctes[0];
+  const ultimo = ctes[ctes.length - 1];
+
+  // O MDFe exige município COM código IBGE nos dois extremos; o CTe guarda
+  // só o nome, então resolvemos pela tabela de municípios.
+  const buscarMunicipio = async (nome, uf) => {
+    if (!nome || !uf) return null;
+    return prisma.municipio.findFirst({
+      where: { nome: { equals: nome.trim(), mode: "insensitive" }, uf: uf.toUpperCase() },
+    });
+  };
+
+  const [carregamento, descarregamento] = await Promise.all([
+    buscarMunicipio(primeiro.origemPercurso, primeiro.ufInicio),
+    buscarMunicipio(ultimo.destinoPercurso, ultimo.ufFim),
+  ]);
+
+  const naoResolvidos = [];
+  if (!carregamento) naoResolvidos.push(`${primeiro.origemPercurso || "?"}/${primeiro.ufInicio || "?"} (carregamento)`);
+  if (!descarregamento) naoResolvidos.push(`${ultimo.destinoPercurso || "?"}/${ultimo.ufFim || "?"} (descarregamento)`);
+  if (naoResolvidos.length) {
+    return res.status(422).json({
+      erro: "Não consegui achar o código IBGE dos municípios do trajeto.",
+      detalhe: `Confira a grafia em: ${naoResolvidos.join(", ")}.`,
+    });
+  }
+
+  // Dentro do mesmo município o manifesto não é exigido — avisa, mas deixa
+  // o usuário decidir (pode haver exigência específica da operação dele).
+  const avisos = [];
+  if (carregamento.codigoIbge === descarregamento.codigoIbge) {
+    avisos.push(
+      "Carregamento e descarregamento no mesmo município: o MDF-e normalmente não é exigido nesse caso."
+    );
+  }
+
+  // Peso e valor da carga vêm da soma dos documentos transportados pelos
+  // CT-es; o valor do frete não entra aqui — o que a SEFAZ quer é o valor
+  // da mercadoria.
+  const somar = (campo) =>
+    ctes.reduce(
+      (total, cte) => total + (cte.documentosTransportados || []).reduce((t, d) => t + (d[campo] || 0), 0),
+      0
+    );
+  const pesoBruto = somar("pesoBruto");
+  const valorCarga = somar("valorTotalNota") || somar("valorTotalProdutos");
+
+  const ufsTrajeto = [...new Set(ctes.flatMap((c) => [c.ufInicio, c.ufFim]).filter(Boolean))];
+
+  const documento = await prisma.documentoFiscal.create({
+    data: {
+      tipo: "MDFe",
+      status: "rascunho",
+      empresaId: req.usuario.empresaId,
+      transportadoraId: primeiro.transportadoraId,
+      veiculoId: primeiro.veiculoId,
+      veiculoReboqueId: primeiro.veiculoReboqueId,
+      nomeMotorista: primeiro.nomeMotorista,
+      cpfMotorista: primeiro.cpfMotorista,
+      ufPercurso: ufsTrajeto.join(","),
+      ufInicio: primeiro.ufInicio,
+      ufFim: ultimo.ufFim,
+
+      municipioCarregamento: carregamento.nome,
+      codigoMunicipioCarregamento: carregamento.codigoIbge,
+      municipioDescarregamento: descarregamento.nome,
+      codigoMunicipioDescarregamento: descarregamento.codigoIbge,
+
+      tipoEmitenteMdfe: "1", // prestador de serviço de transporte
+      tipoCarga: tipoCarga || undefined,
+      produtoPredominante: primeiro.documentosTransportados?.[0]?.naturezaMercadoria
+        || primeiro.especieVolumes
+        || undefined,
+      unidadeMedidaPeso: "01", // KG
+      pesoBrutoCarga: pesoBruto || undefined,
+      valorTotalCarga: valorCarga || undefined,
+
+      seguroResponsavel: seguro?.responsavel || "1",
+      seguroNomeSeguradora: seguro?.nomeSeguradora || undefined,
+      seguroCnpjSeguradora: seguro?.cnpjSeguradora || undefined,
+      seguroNumeroApolice: seguro?.numeroApolice || undefined,
+      seguroNumeroAverbacao: seguro?.numeroAverbacao || undefined,
+
+      documentosVinculados: { connect: ctes.map((c) => ({ id: c.id })) },
+    },
+    include: { veiculo: true, transportadora: true, documentosVinculados: true },
+  });
+
+  res.status(201).json({ ...documento, avisos });
+}));
+
+// Encerramento do MDFe — obrigatório quando a viagem termina. Sem isso a
+// SEFAZ recusa o próximo manifesto da mesma placa.
+router.post("/:id/encerrar", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.tipo !== "MDFe") {
+    return res.status(400).json({ erro: "Encerramento só existe para MDF-e" });
+  }
+  if (documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.status !== "autorizado") {
+    return res.status(409).json({ erro: `Só é possível encerrar um MDF-e autorizado (atual: "${documento.status}")` });
+  }
+  if (documento.dataEncerramento) {
+    return res.status(409).json({ erro: "Esse MDF-e já foi encerrado" });
+  }
+
+  // Por padrão encerra no município de descarregamento, que é o caso
+  // comum — mas a viagem pode ter terminado em outro lugar.
+  const codigoMunicipio = req.body.codigoMunicipio || documento.codigoMunicipioDescarregamento;
+  const uf = req.body.uf || documento.ufFim;
+  const dataEncerramento = req.body.dataEncerramento || new Date().toISOString().slice(0, 10);
+
+  if (!codigoMunicipio || !uf) {
+    return res.status(400).json({
+      erro: "Informe o município e a UF de encerramento",
+      detalhe: "O manifesto não tem município de descarregamento salvo para usar como padrão.",
+    });
+  }
+
+  try {
+    const resultado = await focusNfe.encerrarMdfe({
+      ref: refDocumento(documento),
+      data_encerramento: dataEncerramento,
+      codigo_municipio: Number(codigoMunicipio),
+      uf,
+    });
+
+    const atualizado = await prisma.documentoFiscal.update({
+      where: { id },
+      data: {
+        dataEncerramento: new Date(dataEncerramento),
+        codigoMunicipioEncerramento: String(codigoMunicipio),
+        municipioEncerramento: req.body.municipio || documento.municipioDescarregamento,
+      },
+    });
+    res.json({ ...atualizado, retornoProvedor: resultado });
+  } catch (erro) {
+    const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+    res.status(502).json({ erro: "Não foi possível encerrar o MDF-e na SEFAZ", detalhe: detalheProvedor });
+  }
+}));
+
 // Passo 2: envia o rascunho para o provedor de emissão. Fica separado do
 // passo 1 de propósito — permite revisar o rascunho antes de emitir de
 // verdade, já que a emissão é irreversível (exige evento de cancelamento).
@@ -410,10 +600,12 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       : focusNfe.montarPayloadMdfe({
           empresa: documento.empresa,
           veiculo: documento.veiculo,
+          veiculoReboque: documento.veiculoReboque,
           nomeMotorista: documento.nomeMotorista,
           cpfMotorista: documento.cpfMotorista,
           ufPercurso: documento.ufPercurso,
           documentosVinculados: documento.documentosVinculados,
+          documento,
         });
 
   // A partir da segunda ida ao provedor (documento rejeitado ou travado em
@@ -427,6 +619,17 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
 
   // Validação local do CT-e: evita mandar pra SEFAZ algo que já dá pra ver
   // que vai voltar rejeitado, e explica o motivo em português na hora.
+  if (documento.tipo === "MDFe") {
+    const problemas = focusNfe.validarPayloadMdfe(payload);
+    if (problemas.length) {
+      return res.status(422).json({
+        erro: "O MDF-e não passou na conferência antes do envio.",
+        detalhe: problemas.join(" | "),
+        problemas,
+      });
+    }
+  }
+
   if (documento.tipo === "CTe") {
     const problemas = focusNfe.validarPayloadCte(payload);
     if (problemas.length) {
@@ -732,12 +935,20 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   // Autorizado: precisa mandar um evento de cancelamento de verdade pra
   // SEFAZ, com justificativa (entre 15 e 255 caracteres).
   if (existente.status === "autorizado") {
+    // MDF-e encerrado não pode mais ser cancelado — a viagem já foi
+    // registrada como concluída.
+    if (existente.tipo === "MDFe" && existente.dataEncerramento) {
+      return res.status(409).json({
+        erro: "Esse MDF-e já foi encerrado e não pode mais ser cancelado.",
+      });
+    }
+
     const { justificativa } = req.body;
     if (!justificativa || justificativa.trim().length < 15) {
       return res.status(400).json({ erro: "A justificativa precisa ter pelo menos 15 caracteres" });
     }
 
-    const ref = `${existente.tipo.toLowerCase()}-${existente.id}`;
+    const ref = refDocumento(existente);
     try {
       const resultado = await focusNfe.cancelar({ tipo: existente.tipo, ref, justificativa: justificativa.trim() });
       if (resultado.status !== "cancelado") {

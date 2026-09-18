@@ -119,6 +119,125 @@ function formatCEP(v) {
   return d;
 }
 
+// ---------- Valores em reais ----------
+// Exibição e digitação no padrão brasileiro: ponto separando milhar e
+// vírgula nos centavos (1.234,56). Internamente o valor continua sendo
+// número com ponto decimal, que é o que a API e a SEFAZ esperam.
+// Colunas das listagens que representam dinheiro e por isso saem com R$.
+const COLUNAS_MOEDA = new Set(["valorUnitario", "valorTotal", "valorTotalNota", "valorCarga"]);
+
+const FORMATADOR_MOEDA = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatarMoeda(valor) {
+  const n = Number(valor);
+  if (valor === "" || valor === null || valor === undefined || Number.isNaN(n)) return "";
+  return FORMATADOR_MOEDA.format(n);
+}
+
+// "1.234,56" -> 1234.56
+function moedaParaNumero(texto) {
+  if (typeof texto === "number") return texto;
+  if (!texto) return 0;
+  return Number(String(texto).replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+// Campo de digitação de valor: o usuário digita só números e o valor vai se
+// formando da direita pra esquerda (centavos primeiro), como em caixa de
+// supermercado. onChange devolve o número como string com ponto decimal,
+// pra não mudar nada de quem consome esse valor.
+function InputMoeda({ value, onChange, placeholder = "0,00", ...resto }) {
+  const [texto, setTexto] = useState(() => formatarMoeda(value));
+
+  // Quando o valor muda por fora (escolher um produto preenche o preço,
+  // abrir um registro pra editar), o texto acompanha.
+  useEffect(() => {
+    if (value === "" || value === null || value === undefined) {
+      setTexto("");
+      return;
+    }
+    if (Math.abs(Number(value) - moedaParaNumero(texto)) > 0.004) {
+      setTexto(formatarMoeda(value));
+    }
+  }, [value]);
+
+  const digitar = (e) => {
+    const digitos = e.target.value.replace(/\D/g, "").slice(0, 15);
+    if (!digitos) {
+      setTexto("");
+      onChange("");
+      return;
+    }
+    const numero = Number(digitos) / 100;
+    setTexto(formatarMoeda(numero));
+    onChange(String(numero));
+  };
+
+  return (
+    <input
+      inputMode="decimal"
+      value={texto}
+      placeholder={placeholder}
+      onChange={digitar}
+      style={{ textAlign: "right", ...(resto.style || {}) }}
+      {...resto}
+    />
+  );
+}
+
+// Peso e volume: mesma leitura brasileira do dinheiro (27.500,750), mas a
+// digitação aqui é livre — peso se digita inteiro ("27500"), não em
+// centavos. O ponto é ignorado enquanto se digita, então quem escrever
+// "27.500" continua com 27500 e não com 27,5.
+function formatarDecimal(valor, casas = 3) {
+  const n = Number(valor);
+  if (valor === "" || valor === null || valor === undefined || Number.isNaN(n)) return "";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }).format(n);
+}
+
+function decimalParaNumero(texto) {
+  if (typeof texto === "number") return texto;
+  if (!texto) return "";
+  const limpo = String(texto).replace(/\./g, "").replace(",", ".");
+  const n = Number(limpo);
+  return Number.isNaN(n) ? "" : n;
+}
+
+function InputDecimal({ value, onChange, casas = 3, ...resto }) {
+  const [texto, setTexto] = useState(() => formatarDecimal(value, casas));
+  const [editando, setEditando] = useState(false);
+
+  // Fora de edição, o campo mostra o número formatado; ao focar, mostra o
+  // que dá pra editar sem os separadores de milhar atrapalhando.
+  useEffect(() => {
+    if (!editando) setTexto(formatarDecimal(value, casas));
+  }, [value, casas, editando]);
+
+  const digitar = (e) => {
+    // Só dígitos e uma vírgula — ponto digitado é descartado, o que elimina
+    // a dúvida entre separador de milhar e decimal.
+    let limpo = e.target.value.replace(/[^\d,]/g, "");
+    const partes = limpo.split(",");
+    if (partes.length > 2) limpo = `${partes[0]},${partes.slice(1).join("")}`;
+    setTexto(limpo);
+    onChange(limpo === "" || limpo === "," ? "" : String(decimalParaNumero(limpo)));
+  };
+
+  return (
+    <input
+      inputMode="decimal"
+      value={texto}
+      onFocus={() => { setEditando(true); setTexto(value === "" || value == null ? "" : String(value).replace(".", ",")); }}
+      onBlur={() => setEditando(false)}
+      onChange={digitar}
+      {...resto}
+      style={{ textAlign: "right", ...(resto.style || {}) }}
+    />
+  );
+}
+
 function mapEndereco(endereco) {
   if (!endereco) return emptyEndereco;
   const { cep, logradouro, numero, complemento, bairro, cidade, uf } = endereco;
@@ -196,6 +315,7 @@ const MODULES = {
       nomeFantasia: data.fantasia || undefined,
       documento: data.documento,
       ie: data.ie || undefined,
+      indicadorIe: data.contribuinte || undefined,
       telefone: data.telefone || undefined,
       email: data.email || undefined,
       eFornecedor: true,
@@ -208,6 +328,7 @@ const MODULES = {
       fantasia: r.nomeFantasia,
       documento: r.documento,
       ie: r.ie,
+      contribuinte: r.indicadorIe,
       telefone: r.telefone,
       email: r.email,
       endereco: mapEndereco(r.endereco),
@@ -226,6 +347,12 @@ const MODULES = {
       { key: "admissao", label: "Data de admissão", type: "date" },
       { key: "telefone", label: "Telefone", type: "text" },
       { key: "email", label: "E-mail", type: "text" },
+      {
+        key: "usuarioId", label: "Usuário", type: "vinculo",
+        fonte: "/usuarios", vazio: "Sem usuário vinculado",
+        ajuda: "Qual login do sistema pertence a esta pessoa.",
+        rotulo: (u) => `${u.nome} (${u.email})`,
+      },
     ],
     columns: ["nome", "cargo", "setor", "telefone"],
     toApi: (data) => ({
@@ -236,6 +363,7 @@ const MODULES = {
       dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
       telefone: data.telefone || undefined,
       email: data.email || undefined,
+      usuarioId: data.usuarioId ?? null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -246,6 +374,7 @@ const MODULES = {
       admissao: r.dataAdmissao ? r.dataAdmissao.slice(0, 10) : "",
       telefone: r.telefone,
       email: r.email,
+      usuarioId: r.usuarioId ?? r.usuario?.id ?? null,
     }),
   },
   transportadoras: {
@@ -339,7 +468,7 @@ const MODULES = {
       { key: "cofinsAliquota", label: "COFINS — Alíquota (%)", type: "number" },
       { key: "cstIbsCbs", label: "IBS/CBS — CST (Reforma Tributária)", type: "text" },
       { key: "classificacaoTributariaIbsCbs", label: "IBS/CBS — Classificação (cClassTrib)", type: "text" },
-      { key: "valorUnitario", label: "Valor unitário (R$)", type: "number" },
+      { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda" },
     ],
     columns: ["codigo", "descricao", "ncm", "unidade", "valorUnitario"],
     toApi: (data) => ({
@@ -391,6 +520,12 @@ const MODULES = {
       { key: "senha", label: "Senha", type: "password", required: true, hideOnEdit: true },
       { key: "papel", label: "Papel", type: "select", options: ["operador", "admin"], default: "operador" },
       { key: "empresaIds", label: "Empresas com acesso", type: "empresas-multiselect" },
+      {
+        key: "colaboradorId", label: "Colaborador", type: "vinculo",
+        fonte: "/colaboradores", vazio: "Sem colaborador vinculado",
+        ajuda: "Liga este login à ficha do RH (cargo, setor, CPF).",
+        rotulo: (c) => [c.nome, c.cargo].filter(Boolean).join(" — "),
+      },
     ],
     columns: ["nome", "email", "papel"],
     toApi: (data) => ({
@@ -399,6 +534,7 @@ const MODULES = {
       senha: data.senha,
       papel: data.papel || "operador",
       empresaIds: data.empresaIds || [],
+      colaboradorId: data.colaboradorId ?? null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -406,6 +542,7 @@ const MODULES = {
       email: r.email,
       papel: r.papel,
       empresaIds: (r.empresas || []).map(e => e.id),
+      colaboradorId: r.colaboradorId ?? null,
     }),
   },
   empresas: {
@@ -747,6 +884,49 @@ function CfopField({ value, onChange }) {
 }
 
 function Field({ field, value, onChange, disabled }) {
+  // Campo que puxa outro cadastro para vincular (usuário <-> colaborador).
+  // A lista vem da própria API, então o que aparece aqui é sempre o que
+  // está cadastrado de verdade.
+  if (field.type === "vinculo") {
+    const [opcoes, setOpcoes] = useState(null);
+    const [erroFonte, setErroFonte] = useState("");
+
+    useEffect(() => {
+      let cancelado = false;
+      (async () => {
+        try {
+          const dados = await apiRequest(field.fonte);
+          if (!cancelado) setOpcoes(dados);
+        } catch (e) {
+          // Listar usuários é coisa de admin: um operador abrindo a tela de
+          // colaboradores não deve ver erro, só o campo indisponível.
+          if (!cancelado) { setErroFonte(e.message); setOpcoes([]); }
+        }
+      })();
+      return () => { cancelado = true; };
+    }, [field.fonte]);
+
+    const rotuloDe = (registro) => (field.rotulo ? field.rotulo(registro) : registro.nome);
+
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <select
+          value={value ?? ""}
+          disabled={disabled || opcoes === null || !!erroFonte}
+          onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
+        >
+          <option value="">{opcoes === null ? "Carregando…" : field.vazio || "Sem vínculo"}</option>
+          {(opcoes || []).map(o => (
+            <option key={o.id} value={o.id}>{rotuloDe(o)}</option>
+          ))}
+        </select>
+        {erroFonte && <p className="pf-ajuda">Só um admin pode ver essa lista.</p>}
+        {!erroFonte && field.ajuda && <p className="pf-ajuda">{field.ajuda}</p>}
+      </div>
+    );
+  }
+
   if (field.type === "endereco") {
     const v = value || emptyEndereco;
     const [buscandoCep, setBuscandoCep] = useState(false);
@@ -932,6 +1112,8 @@ function Field({ field, value, onChange, disabled }) {
             return <option key={valorOpcao} value={valorOpcao}>{rotuloOpcao}</option>;
           })}
         </select>
+      ) : field.type === "moeda" ? (
+        <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} />
       ) : (
         <input
           type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "password" ? "password" : "text"}
@@ -952,7 +1134,306 @@ function Field({ field, value, onChange, disabled }) {
   );
 }
 
+// ---------- Cadastro de pessoa (clientes e fornecedores) ----------
+// Tela própria em vez do formulário genérico: aqui os campos se ajustam ao
+// que está sendo preenchido — pessoa física troca os rótulos, a situação
+// fiscal governa a inscrição estadual, e CPF/CNPJ é conferido na digitação.
+// Cliente e fornecedor têm telas separadas; por baixo continuam na mesma
+// tabela, então o mesmo CNPJ nos dois lugares é um cadastro só.
+
+function soDigitos(v) { return (v || "").replace(/\D/g, ""); }
+
+function formatarDocumento(valor, tipo) {
+  const d = soDigitos(valor).slice(0, tipo === "Pessoa Física" ? 11 : 14);
+  if (tipo === "Pessoa Física") {
+    return d.replace(/^(\d{3})(\d)/, "$1.$2")
+            .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+            .replace(/\.(\d{3})(\d)/, ".$1-$2");
+  }
+  return d.replace(/^(\d{2})(\d)/, "$1.$2")
+          .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+          .replace(/\.(\d{3})(\d)/, ".$1/$2")
+          .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+function formatarTelefone(valor) {
+  const d = soDigitos(valor).slice(0, 11);
+  return d.length > 10
+    ? d.replace(/^(\d{2})(\d{5})(\d)/, "($1) $2-$3")
+    : d.replace(/^(\d{2})(\d{4})(\d)/, "($1) $2-$3");
+}
+
+// Mesma conta que a SEFAZ faz: documento com dígito errado é recusado na
+// emissão, então não deixamos entrar no cadastro.
+function cnpjValido(c) {
+  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
+  const calc = (base, pesos) => {
+    const soma = base.split("").reduce((t, n, i) => t + Number(n) * pesos[i], 0);
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  return calc(c.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]) === Number(c[12])
+      && calc(c.slice(0, 13), [6,5,4,3,2,9,8,7,6,5,4,3,2]) === Number(c[13]);
+}
+function cpfValido(c) {
+  if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
+  const dig = (ate) => {
+    let soma = 0;
+    for (let i = 0; i < ate; i++) soma += Number(c[i]) * (ate + 1 - i);
+    const r = (soma * 10) % 11;
+    return r === 10 ? 0 : r;
+  };
+  return dig(9) === Number(c[9]) && dig(10) === Number(c[10]);
+}
+
+function PessoaForm({ moduleKey, record, onSave, onCancel }) {
+  const config = MODULES[moduleKey];
+  const editando = !!record?.id;
+  const rotuloSingular = config.label.replace(/es$/, "").replace(/s$/, "");
+
+  const [data, setData] = useState(() => record || { tipo: "Pessoa Jurídica", contribuinte: "Contribuinte", endereco: emptyEndereco });
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  const [salvo, setSalvo] = useState(false);
+
+  const pf = data.tipo === "Pessoa Física";
+  const endereco = data.endereco || emptyEndereco;
+  const set = (k, v) => setData(d => ({ ...d, [k]: v }));
+  const setEndereco = (k, v) => setData(d => ({ ...d, endereco: { ...(d.endereco || emptyEndereco), [k]: v } }));
+
+  const docDigitos = soDigitos(data.documento);
+  const docCompleto = pf ? docDigitos.length === 11 : docDigitos.length === 14;
+  const docValido = pf ? cpfValido(docDigitos) : cnpjValido(docDigitos);
+
+  const trocarTipo = (novoTipo) => {
+    setData(d => ({ ...d, tipo: novoTipo, documento: "", fantasia: novoTipo === "Pessoa Física" ? "" : d.fantasia }));
+  };
+
+  // A inscrição estadual segue a situação fiscal: isento vai como "ISENTO"
+  // nos documentos, não contribuinte não leva inscrição. Foi o que nos
+  // custou a rejeição 716 no CT-e.
+  const trocarContribuinte = (valor) => {
+    setData(d => ({
+      ...d,
+      contribuinte: valor,
+      ie: valor === "Contribuinte Isento" ? "ISENTO" : valor === "Não Contribuinte" ? "" : (d.ie === "ISENTO" ? "" : d.ie),
+    }));
+  };
+  const ieBloqueada = data.contribuinte === "Contribuinte Isento" || data.contribuinte === "Não Contribuinte";
+
+  const buscarPorCep = async (cepDigitado) => {
+    setEndereco("cep", cepDigitado);
+    const digitos = soDigitos(cepDigitado);
+    if (digitos.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digitos}/json/`);
+      const dados = await res.json();
+      if (!dados.erro) {
+        setData(d => ({
+          ...d,
+          endereco: {
+            ...(d.endereco || emptyEndereco),
+            cep: cepDigitado,
+            logradouro: dados.logradouro || d.endereco?.logradouro || "",
+            bairro: dados.bairro || d.endereco?.bairro || "",
+            cidade: dados.localidade || d.endereco?.cidade || "",
+            uf: dados.uf || d.endereco?.uf || "MT",
+          },
+        }));
+      }
+    } catch {
+      // sem internet ou CEP inexistente — preenche na mão
+    } finally {
+      setBuscandoCep(false);
+    }
+  };
+
+  const salvar = async () => {
+    const faltando = [];
+    if (!data.nome?.trim()) faltando.push(pf ? "nome completo" : "razão social");
+    if (!docDigitos) faltando.push(pf ? "CPF" : "CNPJ");
+    if (data.contribuinte === "Contribuinte" && !data.ie?.trim()) faltando.push("inscrição estadual");
+    if (faltando.length) { setErro(`Falta preencher: ${faltando.join(", ")}.`); return; }
+    if (docCompleto && !docValido) {
+      setErro(`O ${pf ? "CPF" : "CNPJ"} informado tem dígito verificador inválido. A SEFAZ recusa documentos emitidos assim.`);
+      return;
+    }
+    setErro("");
+    setSalvando(true);
+    try {
+      await onSave(data);
+      setSalvo(true);
+    } catch (e) {
+      setErro([e.message || "Erro ao salvar no servidor", e.detalhe].filter(Boolean).join(" — "));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal pessoa-modal">
+        <div className="modal-header">
+          <div>
+            <h3>{editando ? `Editar ${rotuloSingular.toLowerCase()}` : `Novo ${rotuloSingular.toLowerCase()}`}</h3>
+            <p className="subtle">Os dados daqui vão direto para a NF-e e o CT-e</p>
+          </div>
+          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+        </div>
+
+        <div className="modal-body">
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Identificação</h4>
+            <div className="pf-grade">
+              <div className="pf-c12" style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <div className="pf-segmentado" role="group" aria-label="Tipo de pessoa">
+                  <button type="button" aria-pressed={!pf} onClick={() => trocarTipo("Pessoa Jurídica")}>Pessoa jurídica</button>
+                  <button type="button" aria-pressed={pf} onClick={() => trocarTipo("Pessoa Física")}>Pessoa física</button>
+                </div>
+                {docCompleto && docValido && (
+                  <span className="pf-selo">✓ {pf ? "CPF" : "CNPJ"} válido</span>
+                )}
+              </div>
+
+              <label className="pf-campo pf-c7">
+                <span className="field-label">{pf ? "Nome completo" : "Razão social"}<span className="req">*</span></span>
+                <input value={data.nome || ""} onChange={e => set("nome", e.target.value)} />
+              </label>
+
+              <label className={`pf-campo pf-c5 ${docCompleto && !docValido ? "pf-invalido" : ""} ${docCompleto && docValido ? "pf-ok" : ""}`}>
+                <span className="field-label">{pf ? "CPF" : "CNPJ"}<span className="req">*</span></span>
+                <input
+                  inputMode="numeric"
+                  maxLength={pf ? 14 : 18}
+                  placeholder={pf ? "000.000.000-00" : "00.000.000/0000-00"}
+                  value={data.documento || ""}
+                  onChange={e => set("documento", formatarDocumento(e.target.value, data.tipo))}
+                />
+                {docCompleto && !docValido && (
+                  <p className="pf-erro-campo">Dígito verificador não confere. Confira o número na nota.</p>
+                )}
+              </label>
+
+              {!pf && (
+                <label className="pf-campo pf-c5">
+                  <span className="field-label">Nome fantasia</span>
+                  <input value={data.fantasia || ""} onChange={e => set("fantasia", e.target.value)} />
+                </label>
+              )}
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Situação fiscal</h4>
+            <div className="pf-grade">
+              <label className="pf-campo pf-c5">
+                <span className="field-label">Contribuinte de ICMS</span>
+                <select value={data.contribuinte || "Contribuinte"} onChange={e => trocarContribuinte(e.target.value)}>
+                  <option value="Contribuinte">Contribuinte</option>
+                  <option value="Contribuinte Isento">Contribuinte isento</option>
+                  <option value="Não Contribuinte">Não contribuinte</option>
+                </select>
+              </label>
+              <label className="pf-campo pf-c4">
+                <span className="field-label">
+                  Inscrição estadual{data.contribuinte === "Contribuinte" && <span className="req">*</span>}
+                </span>
+                <input value={data.ie || ""} disabled={ieBloqueada} onChange={e => set("ie", e.target.value)} />
+                <p className="pf-ajuda">
+                  {data.contribuinte === "Contribuinte Isento"
+                    ? "Vai como ISENTO nos documentos fiscais."
+                    : data.contribuinte === "Não Contribuinte"
+                      ? "Não contribuinte não tem inscrição estadual."
+                      : "Obrigatória para contribuinte: sem ela o CT-e volta rejeitado."}
+                </p>
+              </label>
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Endereço</h4>
+            <div className="pf-grade">
+              <label className="pf-campo pf-c3">
+                <span className="field-label">CEP</span>
+                <input value={endereco.cep || ""} maxLength={9} inputMode="numeric"
+                  onChange={e => buscarPorCep(formatCEP(e.target.value))} />
+                {buscandoCep && <p className="pf-ajuda pf-buscando">Buscando endereço…</p>}
+              </label>
+              <label className="pf-campo pf-c9">
+                <span className="field-label">Logradouro</span>
+                <input value={endereco.logradouro || ""} onChange={e => setEndereco("logradouro", e.target.value)} />
+              </label>
+
+              <label className="pf-campo pf-c2">
+                <span className="field-label">Número</span>
+                <input value={endereco.numero || ""} onChange={e => setEndereco("numero", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c4">
+                <span className="field-label">Complemento</span>
+                <input value={endereco.complemento || ""} onChange={e => setEndereco("complemento", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c6">
+                <span className="field-label">Bairro</span>
+                <input value={endereco.bairro || ""} onChange={e => setEndereco("bairro", e.target.value)} />
+              </label>
+
+              <label className="pf-campo pf-c3">
+                <span className="field-label">UF</span>
+                <select value={endereco.uf || "MT"} onChange={e => setEndereco("uf", e.target.value)}>
+                  {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                </select>
+              </label>
+              <label className="pf-campo pf-c6">
+                <span className="field-label">Município</span>
+                <input value={endereco.cidade || ""} onChange={e => setEndereco("cidade", e.target.value)} />
+                <p className="pf-ajuda">O código IBGE é resolvido pelo sistema — é ele que o MDF-e exige.</p>
+              </label>
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Contato</h4>
+            <div className="pf-grade">
+              <label className="pf-campo pf-c4">
+                <span className="field-label">Telefone</span>
+                <input inputMode="numeric" maxLength={15} value={data.telefone || ""}
+                  onChange={e => set("telefone", formatarTelefone(e.target.value))} />
+              </label>
+              <label className="pf-campo pf-c8">
+                <span className="field-label">E-mail</span>
+                <input type="email" value={data.email || ""} onChange={e => set("email", e.target.value)} />
+                <p className="pf-ajuda">Usado para enviar o DANFE e o DACTE automaticamente.</p>
+              </label>
+            </div>
+            {erro && <p className="pf-aviso">{erro}</p>}
+          </section>
+        </div>
+
+        <div className="modal-footer pf-rodape">
+          <span className="pf-dica">
+            {salvo ? `${rotuloSingular} salvo.` : <>Campos com <span className="req">*</span> são exigidos pela SEFAZ</>}
+          </span>
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+            <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
+            <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+              {salvando ? "Salvando…" : `Salvar ${rotuloSingular.toLowerCase()}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RecordForm({ moduleKey, record, onSave, onCancel }) {
+  // Clientes e fornecedores têm formulário próprio (campos que reagem ao
+  // tipo de pessoa e à situação fiscal); o resto segue o genérico.
+  if (moduleKey === "clientes" || moduleKey === "fornecedores") {
+    return <PessoaForm moduleKey={moduleKey} record={record} onSave={onSave} onCancel={onCancel} />;
+  }
+
   const config = MODULES[moduleKey];
   const editando = !!record?.id;
   // Alguns campos só fazem sentido na criação (ex: senha de um usuário
@@ -1358,7 +1839,9 @@ function ModuleView({ moduleKey }) {
             {filtered.map(item => (
               <tr key={item.id}>
                 {config.columns.map(col => (
-                  <td key={col}>{getPath(item, col) || "—"}</td>
+                  <td key={col}>{COLUNAS_MOEDA.has(col)
+                    ? (getPath(item, col) != null && getPath(item, col) !== "" ? `R$ ${formatarMoeda(getPath(item, col))}` : "—")
+                    : getPath(item, col) || "—"}</td>
                 ))}
                 <td className="actions-col">
                   <button className="icon-btn" onClick={() => { setEditing(item); setShowForm(true); }} aria-label="Editar">
@@ -1432,21 +1915,279 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
   );
 }
 
-function EmissaoView() {
-  const { items: transportadoras } = useApiCollection("transportadoras");
-  const [transportadoraId, setTransportadoraId] = useState("");
-  const [gerado, setGerado] = useState(null);
+// ---------- MDFe ----------
+// O manifesto é quase todo derivável do CT-e: trajeto, veículo, motorista e
+// carga já estão lá. Por isso o caminho principal aqui é "gerar a partir de
+// CT-e autorizado" em vez de digitar tudo de novo.
 
-  const podeGerar = !!transportadoraId;
+const TIPOS_CARGA_MDFE = [
+  { codigo: "01", label: "01 — Granel sólido" },
+  { codigo: "02", label: "02 — Granel líquido" },
+  { codigo: "03", label: "03 — Frigorificada" },
+  { codigo: "04", label: "04 — Conteinerizada" },
+  { codigo: "05", label: "05 — Carga geral" },
+  { codigo: "06", label: "06 — Neogranel" },
+  { codigo: "07", label: "07 — Perigosa (granel sólido)" },
+  { codigo: "08", label: "08 — Perigosa (granel líquido)" },
+  { codigo: "09", label: "09 — Perigosa (frigorificada)" },
+  { codigo: "10", label: "10 — Perigosa (conteinerizada)" },
+  { codigo: "11", label: "11 — Perigosa (carga geral)" },
+  { codigo: "12", label: "12 — Granel pressurizada" },
+];
 
-  const gerarSimulacao = () => {
-    const transp = (transportadoras || []).find(t => t.id === Number(transportadoraId));
-    setGerado({
-      tipo: "MDFe",
-      numero: Math.floor(100000 + Math.random() * 900000),
-      transportadora: transp,
-      data: new Date().toLocaleDateString("pt-BR"),
+function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
+  const [ctes, setCtes] = useState(ctePreSelecionado ? [ctePreSelecionado] : null);
+  const [selecionados, setSelecionados] = useState(ctePreSelecionado ? [ctePreSelecionado.id] : []);
+  const [tipoCarga, setTipoCarga] = useState("01");
+  const [seguro, setSeguro] = useState({ responsavel: "1", nomeSeguradora: "", cnpjSeguradora: "", numeroApolice: "", numeroAverbacao: "" });
+  const [erro, setErro] = useState("");
+  const [gerando, setGerando] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Seguro muda pouco entre viagens: reaproveita o do último
+        // manifesto pra não obrigar a redigitar apólice toda vez.
+        const manifestos = await apiRequest("/documentos-fiscais?tipo=MDFe");
+        const ultimo = manifestos.find(m => m.seguroNomeSeguradora);
+        if (ultimo) {
+          setSeguro({
+            responsavel: ultimo.seguroResponsavel || "1",
+            nomeSeguradora: ultimo.seguroNomeSeguradora || "",
+            cnpjSeguradora: ultimo.seguroCnpjSeguradora || "",
+            numeroApolice: ultimo.seguroNumeroApolice || "",
+            numeroAverbacao: ultimo.seguroNumeroAverbacao || "",
+          });
+        }
+      } catch { /* sem manifesto anterior, começa em branco */ }
+
+      // Quando o usuário veio da tela de CTe, o documento já está escolhido.
+      if (ctePreSelecionado) return;
+      try {
+        const dados = await apiRequest("/documentos-fiscais?tipo=CTe");
+        // Só CT-e autorizado pode ser manifestado, e só o que ainda não
+        // está em outro MDF-e.
+        setCtes(dados.filter(c => c.status === "autorizado" && c.chaveAcesso && !c.mdfeId));
+      } catch (e) {
+        setErro(e.message);
+        setCtes([]);
+      }
+    })();
+  }, [ctePreSelecionado]);
+
+  const alternar = (id) => setSelecionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+
+  const confirmar = async () => {
+    if (!selecionados.length) { setErro("Selecione ao menos um CT-e."); return; }
+    if (!seguro.nomeSeguradora || !seguro.numeroApolice) {
+      setErro("Seguradora e número da apólice são obrigatórios no modal rodoviário.");
+      return;
+    }
+    setErro("");
+    setGerando(true);
+    try {
+      await onGerar({ cteIds: selecionados, tipoCarga, seguro });
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <h3>{ctePreSelecionado ? `MDF-e do CT-e ${ctePreSelecionado.numero || ""}` : "Novo MDFe a partir de CT-e"}</h3>
+          <button className="icon-btn" onClick={onCancel}><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          {ctes === null && <p className="subtle">Carregando CT-es autorizados…</p>}
+          {ctes?.length === 0 && (
+            <p className="hint">
+              Nenhum CT-e autorizado disponível. Emita e autorize um CT-e primeiro — o manifesto é montado a partir dele.
+            </p>
+          )}
+          {ctes?.length > 0 && (
+            <>
+              <label className="field-label">
+                {ctePreSelecionado ? "CT-e que será manifestado" : "CT-es transportados nessa viagem"}
+              </label>
+              <div style={{ border: "0.5px solid #e5e3da", borderRadius: 8, maxHeight: 220, overflowY: "auto", marginBottom: 16 }}>
+                {ctes.map(cte => (
+                  <label key={cte.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderBottom: "0.5px solid #f0efe9", cursor: ctePreSelecionado ? "default" : "pointer" }}>
+                    <input type="checkbox" checked={selecionados.includes(cte.id)} disabled={!!ctePreSelecionado} onChange={() => alternar(cte.id)} />
+                    <span style={{ flex: 1 }}>
+                      <strong>{cte.numero || "—"}/{cte.serie || "—"}</strong>{" "}
+                      {cte.origemPercurso}/{cte.ufInicio} → {cte.destinoPercurso}/{cte.ufFim}
+                      <span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{cte.chaveAcesso}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">Tipo da carga</label>
+                <select value={tipoCarga} onChange={e => setTipoCarga(e.target.value)}>
+                  {TIPOS_CARGA_MDFE.map(t => <option key={t.codigo} value={t.codigo}>{t.label}</option>)}
+                </select>
+                <p className="hint">Cavaco e serragem costumam ser granel sólido; lenha e briquete em fardos, carga geral.</p>
+              </div>
+
+              <p className="field-label" style={{ marginTop: 12 }}>Seguro da carga — obrigatório no rodoviário</p>
+              <div className="form-grid">
+                <div className="field-group">
+                  <label className="field-label">Responsável</label>
+                  <select value={seguro.responsavel} onChange={e => setSeguro(s => ({ ...s, responsavel: e.target.value }))}>
+                    <option value="1">Emitente do MDF-e</option>
+                    <option value="2">Contratante do transporte</option>
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Seguradora</label>
+                  <input value={seguro.nomeSeguradora} onChange={e => setSeguro(s => ({ ...s, nomeSeguradora: e.target.value }))} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">CNPJ da seguradora</label>
+                  <input value={seguro.cnpjSeguradora} onChange={e => setSeguro(s => ({ ...s, cnpjSeguradora: e.target.value }))} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Número da apólice</label>
+                  <input value={seguro.numeroApolice} onChange={e => setSeguro(s => ({ ...s, numeroApolice: e.target.value }))} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Número da averbação</label>
+                  <input value={seguro.numeroAverbacao} onChange={e => setSeguro(s => ({ ...s, numeroAverbacao: e.target.value }))} />
+                </div>
+              </div>
+            </>
+          )}
+          {erro && <p className="form-error">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel}>Cancelar</button>
+          <button className="btn btn-primary" disabled={gerando || !ctes?.length} onClick={confirmar}>
+            {gerando ? "Gerando…" : "Gerar rascunho"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MdfeView() {
+  const [mdfes, setMdfes] = useState(null);
+  const [erro, setErro] = useState(null);
+  const [processando, setProcessando] = useState(null);
+  const [menuAberto, setMenuAberto] = useState(null);
+  const [mostrarGerar, setMostrarGerar] = useState(false);
+
+  useEffect(() => {
+    const fechar = () => setMenuAberto(null);
+    document.addEventListener("click", fechar);
+    return () => document.removeEventListener("click", fechar);
+  }, []);
+
+  const carregar = useCallback(async () => {
+    try {
+      setErro(null);
+      setMdfes(await apiRequest("/documentos-fiscais?tipo=MDFe"));
+    } catch (e) {
+      setErro(e.message);
+      setMdfes([]);
+    }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const gerar = async (dados) => {
+    const criado = await apiRequest("/documentos-fiscais/mdfe/gerar-do-cte", {
+      method: "POST",
+      body: JSON.stringify(dados),
     });
+    setMostrarGerar(false);
+    await carregar();
+    if (criado.avisos?.length) alert(criado.avisos.join("\n\n"));
+  };
+
+  const consultarAteResolver = async (id, tentativa = 0) => {
+    if (tentativa > 8) { setProcessando(null); carregar(); return; }
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/status`);
+      if (resultado.statusProvedor) return consultarAteResolver(id, tentativa + 1);
+      carregar();
+    } catch { carregar(); }
+    setProcessando(null);
+  };
+
+  const emitir = async (id) => {
+    setProcessando(id);
+    try {
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
+      await carregar();
+      if (resultado.status === "enviado") return consultarAteResolver(id);
+    } catch (e) {
+      alert(`Não foi possível emitir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+      carregar();
+    }
+    setProcessando(null);
+  };
+
+  const consultarStatus = async (id) => {
+    setProcessando(id);
+    try {
+      const resultado = await apiRequest(`/documentos-fiscais/${id}/status`);
+      carregar();
+      if (resultado.statusProvedor) {
+        alert(`A SEFAZ ainda está processando (status: "${resultado.statusProvedor}"). Consulte de novo em alguns minutos.`);
+      }
+    } catch (e) {
+      alert(`Não foi possível consultar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  // Encerrar não é opcional: enquanto o manifesto ficar aberto, a SEFAZ
+  // recusa o próximo MDF-e da mesma placa.
+  const encerrar = async (mdfe) => {
+    const destino = mdfe.municipioDescarregamento ? `${mdfe.municipioDescarregamento}/${mdfe.ufFim}` : "o município de descarregamento";
+    if (!window.confirm(`Encerrar esse MDF-e em ${destino}, com a data de hoje?\n\nFaça isso quando a carga já tiver sido entregue.`)) return;
+    setProcessando(mdfe.id);
+    try {
+      await apiRequest(`/documentos-fiscais/${mdfe.id}/encerrar`, { method: "POST", body: JSON.stringify({}) });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível encerrar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const cancelarAutorizado = async (id) => {
+    const justificativa = window.prompt("Motivo do cancelamento (mínimo 15 caracteres):");
+    if (!justificativa) return;
+    if (justificativa.trim().length < 15) { alert("A justificativa precisa ter pelo menos 15 caracteres."); return; }
+    setProcessando(id);
+    try {
+      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE", body: JSON.stringify({ justificativa }) });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível cancelar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const excluirRascunho = async (id) => {
+    if (!window.confirm("Excluir esse rascunho de MDFe?")) return;
+    try {
+      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível excluir: ${e.message}`);
+    }
   };
 
   return (
@@ -1454,40 +2195,139 @@ function EmissaoView() {
       <div className="view-header">
         <div className="view-title">
           <div className="icon-badge" style={{ background: "#faece7", color: "#712b13" }}>
-            <FileText size={20} />
+            <Truck size={20} />
           </div>
           <div>
-            <h2>Emissão de MDFe (simulação)</h2>
-            <p className="subtle">Monta o documento a partir dos cadastros reais — sem envio à SEFAZ</p>
+            <h2>MDFe</h2>
+            <p className="subtle">
+              {mdfes ? `${mdfes.length} ${mdfes.length === 1 ? "manifesto" : "manifestos"}` : "Carregando…"}
+            </p>
           </div>
         </div>
-      </div>
-
-      <div className="emissao-form">
-        <div className="field-group">
-          <label className="field-label">Transportadora</label>
-          <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)}>
-            <option value="">Selecione uma transportadora…</option>
-            {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
-          {transportadoras?.length === 0 && <p className="hint">Nenhuma transportadora cadastrada ainda.</p>}
-        </div>
-
-        <button className="btn btn-primary" disabled={!podeGerar} onClick={gerarSimulacao}>
-          Gerar simulação de MDFe
+        <button className="btn btn-primary" onClick={() => setMostrarGerar(true)}>
+          <Plus size={16} /> Novo MDFe
         </button>
       </div>
 
-      {gerado && (
-        <div className="doc-preview">
-          <div className="doc-preview-header">
-            <p className="doc-tipo">{gerado.tipo} nº {gerado.numero}</p>
-            <p className="subtle">{gerado.data}</p>
-          </div>
-          {gerado.transportadora && <p><strong>Transportadora:</strong> {gerado.transportadora.nome} — RNTRC {gerado.transportadora.rntrc || "—"}</p>}
-          <p className="hint" style={{ marginTop: 12 }}>Documento simulado — não foi enviado à SEFAZ.</p>
-        </div>
+      {erro && <p className="form-error">{erro}</p>}
+
+      {mdfes?.length === 0 && (
+        <p className="hint">
+          Nenhum manifesto ainda. O MDF-e é montado a partir de um CT-e autorizado e é exigido no transporte
+          intermunicipal e interestadual.
+        </p>
       )}
+
+      {mdfes?.length > 0 && (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Número/Série</th>
+              <th>Trajeto</th>
+              <th>Documentos</th>
+              <th>Status</th>
+              <th>Chave / Motivo</th>
+              <th>Encerrado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {mdfes.map(mdfe => (
+              <tr key={mdfe.id}>
+                <td>{mdfe.numero || "—"}/{mdfe.serie || "—"}</td>
+                <td>
+                  {mdfe.municipioCarregamento}/{mdfe.ufInicio} → {mdfe.municipioDescarregamento}/{mdfe.ufFim}
+                </td>
+                <td>{mdfe.documentosVinculados?.length || 0} CT-e</td>
+                <td>
+                  <StatusDocumento status={mdfe.status} />
+                  {processando === mdfe.id && (
+                    <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· aguardando…</span>
+                  )}
+                </td>
+                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                    title={mdfe.chaveAcesso || mdfe.motivoRejeicao || ""}>
+                  {mdfe.chaveAcesso || (mdfe.status === "rejeitado" ? mdfe.motivoRejeicao : null) || "—"}
+                </td>
+                <td>
+                  {mdfe.dataEncerramento
+                    ? new Date(mdfe.dataEncerramento).toLocaleDateString("pt-BR")
+                    : mdfe.status === "autorizado"
+                      ? <span style={{ color: "#b57a12", fontWeight: 600 }}>Em aberto</span>
+                      : "—"}
+                </td>
+                <td className="actions-col" style={{ position: "relative" }}>
+                  <button
+                    className="icon-btn nf-menu-trigger"
+                    aria-label="Ações"
+                    onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === mdfe.id ? null : mdfe.id); }}
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                  {menuAberto === mdfe.id && (
+                    <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
+                      {(mdfe.status === "rascunho" || mdfe.status === "rejeitado") && (
+                        <>
+                          <button className="nf-dropdown-item" disabled={processando === mdfe.id}
+                            onClick={() => { setMenuAberto(null); emitir(mdfe.id); }}>
+                            <FileText size={14} /> {mdfe.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir MDFe"}
+                          </button>
+                          <button className="nf-dropdown-item nf-dropdown-item-danger"
+                            onClick={() => { setMenuAberto(null); excluirRascunho(mdfe.id); }}>
+                            <Trash2 size={14} /> Excluir rascunho
+                          </button>
+                        </>
+                      )}
+                      {mdfe.status === "enviado" && (
+                        <button className="nf-dropdown-item" disabled={processando === mdfe.id}
+                          onClick={() => { setMenuAberto(null); consultarStatus(mdfe.id); }}>
+                          <Search size={14} /> Consultar status
+                        </button>
+                      )}
+                      {mdfe.status === "autorizado" && (
+                        <>
+                          {mdfe.pdfUrl?.startsWith("http") ? (
+                            <a className="nf-dropdown-item" href={mdfe.pdfUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar DAMDFE
+                            </a>
+                          ) : (
+                            <button className="nf-dropdown-item" disabled={processando === mdfe.id}
+                              onClick={() => { setMenuAberto(null); consultarStatus(mdfe.id); }}>
+                              <FileText size={14} /> Buscar DAMDFE
+                            </button>
+                          )}
+                          {mdfe.xmlUrl?.startsWith("http") ? (
+                            <a className="nf-dropdown-item" href={mdfe.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                              <FileText size={14} /> Baixar XML
+                            </a>
+                          ) : (
+                            <button className="nf-dropdown-item" disabled={processando === mdfe.id}
+                              onClick={() => { setMenuAberto(null); consultarStatus(mdfe.id); }}>
+                              <FileText size={14} /> Buscar XML
+                            </button>
+                          )}
+                          {!mdfe.dataEncerramento && (
+                            <button className="nf-dropdown-item" disabled={processando === mdfe.id}
+                              onClick={() => { setMenuAberto(null); encerrar(mdfe); }}>
+                              <Search size={14} /> Encerrar MDFe
+                            </button>
+                          )}
+                          <button className="nf-dropdown-item nf-dropdown-item-danger" disabled={processando === mdfe.id}
+                            onClick={() => { setMenuAberto(null); cancelarAutorizado(mdfe.id); }}>
+                            <Trash2 size={14} /> Cancelar MDFe (SEFAZ)
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {mostrarGerar && <GerarMdfeModal onGerar={gerar} onCancel={() => setMostrarGerar(false)} />}
     </div>
   );
 }
@@ -1757,11 +2597,11 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               </div>
               <div className="field-group">
                 <label className="field-label">Peso bruto total (kg)</label>
-                <input type="number" value={pesoBrutoTotal} onChange={e => setPesoBrutoTotal(e.target.value)} />
+                <InputDecimal value={pesoBrutoTotal} onChange={setPesoBrutoTotal} />
               </div>
               <div className="field-group">
                 <label className="field-label">Peso líquido total (kg)</label>
-                <input type="number" value={pesoLiquidoTotal} onChange={e => setPesoLiquidoTotal(e.target.value)} />
+                <InputDecimal value={pesoLiquidoTotal} onChange={setPesoLiquidoTotal} />
               </div>
             </div>
           </div>
@@ -1788,11 +2628,11 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                       {(produtosDisponiveis || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
                     </select>
                     <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
-                    <input type="number" value={item.valorUnitario} onChange={e => atualizarItem(index, "valorUnitario", e.target.value)} />
+                    <InputMoeda value={item.valorUnitario} onChange={v => atualizarItem(index, "valorUnitario", v)} />
                     <input value={item.cfopUtilizado} onChange={e => atualizarItem(index, "cfopUtilizado", e.target.value)} />
                     <input value={item.ncmUtilizado} onChange={e => atualizarItem(index, "ncmUtilizado", e.target.value)} />
                     <input value={item.cstUtilizado} onChange={e => atualizarItem(index, "cstUtilizado", e.target.value)} />
-                    <span className="nf-item-total">R$ {totalItem.toFixed(2)}</span>
+                    <span className="nf-item-total">R$ {formatarMoeda(totalItem)}</span>
                     <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item">
                       <Trash2 size={14} />
                     </button>
@@ -1808,15 +2648,15 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Valor do frete (R$)</label>
-                <input type="number" value={valorFrete} onChange={e => setValorFrete(e.target.value)} />
+                <InputMoeda value={valorFrete} onChange={setValorFrete} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do seguro (R$)</label>
-                <input type="number" value={valorSeguro} onChange={e => setValorSeguro(e.target.value)} />
+                <InputMoeda value={valorSeguro} onChange={setValorSeguro} />
               </div>
               <div className="field-group">
                 <label className="field-label">Desconto (R$)</label>
-                <input type="number" value={valorDesconto} onChange={e => setValorDesconto(e.target.value)} />
+                <InputMoeda value={valorDesconto} onChange={setValorDesconto} />
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>
@@ -1830,42 +2670,42 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Base de cálculo do ICMS (R$)</label>
-                <input type="number" value={baseCalculoIcms} onChange={e => setBaseCalculoIcms(e.target.value)} />
+                <InputMoeda value={baseCalculoIcms} onChange={setBaseCalculoIcms} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do ICMS (R$)</label>
-                <input type="number" value={valorIcms} onChange={e => setValorIcms(e.target.value)} />
+                <InputMoeda value={valorIcms} onChange={setValorIcms} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do IPI (R$)</label>
-                <input type="number" value={valorIpi} onChange={e => setValorIpi(e.target.value)} />
+                <InputMoeda value={valorIpi} onChange={setValorIpi} />
               </div>
             </div>
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Base de cálculo do ICMS ST (R$)</label>
-                <input type="number" value={baseCalculoIcmsSt} onChange={e => setBaseCalculoIcmsSt(e.target.value)} />
+                <InputMoeda value={baseCalculoIcmsSt} onChange={setBaseCalculoIcmsSt} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do ICMS ST (R$)</label>
-                <input type="number" value={valorIcmsSt} onChange={e => setValorIcmsSt(e.target.value)} />
+                <InputMoeda value={valorIcmsSt} onChange={setValorIcmsSt} />
               </div>
               <div className="field-group">
                 <label className="field-label">Outras despesas (R$)</label>
-                <input type="number" value={outrasDespesas} onChange={e => setOutrasDespesas(e.target.value)} />
+                <InputMoeda value={outrasDespesas} onChange={setOutrasDespesas} />
               </div>
             </div>
             <p className="hint" style={{ marginTop: -4 }}>ICMS e ICMS ST são informativos (já embutidos no valor dos itens). IPI e outras despesas entram no total da nota.</p>
           </div>
 
           <div className="nf-total-card">
-            <div className="nf-total-row"><span>Subtotal dos itens</span><span>R$ {totalItens.toFixed(2)}</span></div>
-            <div className="nf-total-row"><span>+ Frete</span><span>R$ {(Number(valorFrete) || 0).toFixed(2)}</span></div>
-            <div className="nf-total-row"><span>+ Seguro</span><span>R$ {(Number(valorSeguro) || 0).toFixed(2)}</span></div>
-            <div className="nf-total-row"><span>− Desconto</span><span>R$ {(Number(valorDesconto) || 0).toFixed(2)}</span></div>
-            <div className="nf-total-row"><span>+ IPI</span><span>R$ {(Number(valorIpi) || 0).toFixed(2)}</span></div>
-            <div className="nf-total-row"><span>+ Outras despesas</span><span>R$ {(Number(outrasDespesas) || 0).toFixed(2)}</span></div>
-            <div className="nf-total-final"><span>Total da nota</span><span>R$ {valorTotalGeral.toFixed(2)}</span></div>
+            <div className="nf-total-row"><span>Subtotal dos itens</span><span>R$ {formatarMoeda(totalItens)}</span></div>
+            <div className="nf-total-row"><span>+ Frete</span><span>R$ {formatarMoeda((Number(valorFrete) || 0))}</span></div>
+            <div className="nf-total-row"><span>+ Seguro</span><span>R$ {formatarMoeda((Number(valorSeguro) || 0))}</span></div>
+            <div className="nf-total-row"><span>− Desconto</span><span>R$ {formatarMoeda((Number(valorDesconto) || 0))}</span></div>
+            <div className="nf-total-row"><span>+ IPI</span><span>R$ {formatarMoeda((Number(valorIpi) || 0))}</span></div>
+            <div className="nf-total-row"><span>+ Outras despesas</span><span>R$ {formatarMoeda((Number(outrasDespesas) || 0))}</span></div>
+            <div className="nf-total-final"><span>Total da nota</span><span>R$ {formatarMoeda(valorTotalGeral)}</span></div>
           </div>
 
           {erro && <p className="error-text" style={{ marginTop: 14 }}>{erro}</p>}
@@ -2251,7 +3091,7 @@ Detalhe: ${e.detalhe}` : ""}`);
               <tr key={nota.id}>
                 <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
-                <td>{nota.valorTotal != null ? `R$ ${Number(nota.valorTotal).toFixed(2)}` : "—"}</td>
+                <td>{nota.valorTotal != null ? `R$ ${formatarMoeda(nota.valorTotal)}` : "—"}</td>
                 <td>
                   <StatusDocumento status={nota.status} />
                   {processando === nota.id && nota.status === "enviado" && (
@@ -2430,7 +3270,7 @@ function NfeCteField({ onSelecionar }) {
               onMouseDown={() => { onSelecionar(s); setBusca(""); setAberto(false); }}
             >
               <span className="ncm-codigo">Nº {s.numero}</span>
-              <span className="ncm-descricao">{s.destinatario?.nomeRazaoSocial} — R$ {Number(s.valorTotal || 0).toFixed(2)}</span>
+              <span className="ncm-descricao">{s.destinatario?.nomeRazaoSocial} — R$ {formatarMoeda(Number(s.valorTotal || 0))}</span>
             </button>
           ))}
         </div>
@@ -2654,7 +3494,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                     <span>{d.dataEmissao ? new Date(d.dataEmissao).toLocaleDateString("pt-BR") : "—"}</span>
                     <span>{d.pesoBruto || "0"}</span>
                     <span>{d.pesoLiquido || "0"}</span>
-                    <span className="nf-item-total">R$ {Number(d.valorTotalNota || 0).toFixed(2)}</span>
+                    <span className="nf-item-total">R$ {formatarMoeda(Number(d.valorTotalNota || 0))}</span>
                     <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerDocumento(d._key)} aria-label="Remover">
                       <Trash2 size={14} />
                     </button>
@@ -2663,9 +3503,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                 <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px", padding: "8px 10px", borderTop: "1px solid #e5e3da", fontSize: 12, fontWeight: 600, color: "#55534c" }}>
                   <span style={{ gridColumn: "1 / 5" }}>Total ({documentosTransportados.length})</span>
                   <span></span>
-                  <span>{documentosTransportados.reduce((s, d) => s + (Number(d.pesoBruto) || 0), 0).toFixed(3)}</span>
-                  <span>{documentosTransportados.reduce((s, d) => s + (Number(d.pesoLiquido) || 0), 0).toFixed(3)}</span>
-                  <span style={{ textAlign: "right" }}>R$ {documentosTransportados.reduce((s, d) => s + (Number(d.valorTotalNota) || 0), 0).toFixed(2)}</span>
+                  <span>{formatarDecimal(documentosTransportados.reduce((s, d) => s + (Number(d.pesoBruto) || 0), 0), 3)}</span>
+                  <span>{formatarDecimal(documentosTransportados.reduce((s, d) => s + (Number(d.pesoLiquido) || 0), 0), 3)}</span>
+                  <span style={{ textAlign: "right" }}>R$ {formatarMoeda(documentosTransportados.reduce((s, d) => s + (Number(d.valorTotalNota) || 0), 0))}</span>
                   <span></span>
                 </div>
               </div>
@@ -2740,29 +3580,29 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Base de cálc. do ICMS</label>
-                <input type="number" value={docEmEdicao.baseCalculoIcms} onChange={e => setDocCampo("baseCalculoIcms", e.target.value)} />
+                <InputMoeda value={docEmEdicao.baseCalculoIcms} onChange={v => setDocCampo("baseCalculoIcms", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do ICMS</label>
-                <input type="number" value={docEmEdicao.valorIcms} onChange={e => setDocCampo("valorIcms", e.target.value)} />
+                <InputMoeda value={docEmEdicao.valorIcms} onChange={v => setDocCampo("valorIcms", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Base de cálc. ICMS S.T.</label>
-                <input type="number" value={docEmEdicao.baseCalculoIcmsSt} onChange={e => setDocCampo("baseCalculoIcmsSt", e.target.value)} />
+                <InputMoeda value={docEmEdicao.baseCalculoIcmsSt} onChange={v => setDocCampo("baseCalculoIcmsSt", v)} />
               </div>
             </div>
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Valor do ICMS S.T.</label>
-                <input type="number" value={docEmEdicao.valorIcmsSt} onChange={e => setDocCampo("valorIcmsSt", e.target.value)} />
+                <InputMoeda value={docEmEdicao.valorIcmsSt} onChange={v => setDocCampo("valorIcmsSt", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor total dos produtos</label>
-                <input type="number" value={docEmEdicao.valorTotalProdutos} onChange={e => setDocCampo("valorTotalProdutos", e.target.value)} />
+                <InputMoeda value={docEmEdicao.valorTotalProdutos} onChange={v => setDocCampo("valorTotalProdutos", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor total da nota fiscal</label>
-                <input type="number" value={docEmEdicao.valorTotalNota} onChange={e => setDocCampo("valorTotalNota", e.target.value)} />
+                <InputMoeda value={docEmEdicao.valorTotalNota} onChange={v => setDocCampo("valorTotalNota", v)} />
               </div>
             </div>
 
@@ -2770,11 +3610,11 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Peso bruto (kg)</label>
-                <input type="number" value={docEmEdicao.pesoBruto} onChange={e => setDocCampo("pesoBruto", e.target.value)} />
+                <InputDecimal value={docEmEdicao.pesoBruto} onChange={v => setDocCampo("pesoBruto", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">M3</label>
-                <input type="number" value={docEmEdicao.m3} onChange={e => setDocCampo("m3", e.target.value)} />
+                <InputDecimal value={docEmEdicao.m3} onChange={v => setDocCampo("m3", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Quantidade de volumes</label>
@@ -2782,7 +3622,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               </div>
               <div className="field-group">
                 <label className="field-label">Peso líquido (kg)</label>
-                <input type="number" value={docEmEdicao.pesoLiquido} onChange={e => setDocCampo("pesoLiquido", e.target.value)} />
+                <InputDecimal value={docEmEdicao.pesoLiquido} onChange={v => setDocCampo("pesoLiquido", v)} />
               </div>
             </div>
 
@@ -2802,7 +3642,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               </div>
               <div className="field-group">
                 <label className="field-label">Valor da carga p/ averbação</label>
-                <input type="number" value={docEmEdicao.valorCargaAverbacao} onChange={e => setDocCampo("valorCargaAverbacao", e.target.value)} />
+                <InputMoeda value={docEmEdicao.valorCargaAverbacao} onChange={v => setDocCampo("valorCargaAverbacao", v)} />
               </div>
             </div>
 
@@ -3015,7 +3855,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               </div>
               <div className="field-group">
                 <label className="field-label">Valor da prestação (R$)<span className="req">*</span></label>
-                <input type="number" value={valorTotal} onChange={e => setValorTotal(e.target.value)} />
+                <InputMoeda value={valorTotal} onChange={setValorTotal} />
               </div>
               <div className="field-group">
                 <label className="field-label">Situação tributária (CST)</label>
@@ -3037,7 +3877,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Base de cálculo do ICMS (R$)</label>
-                <input type="number" value={baseCalculoIcmsPrestacao} onChange={e => setBaseCalculoIcmsPrestacao(e.target.value)} />
+                <InputMoeda value={baseCalculoIcmsPrestacao} onChange={setBaseCalculoIcmsPrestacao} />
               </div>
               <div className="field-group">
                 <label className="field-label">Alíquota do ICMS (%)</label>
@@ -3045,7 +3885,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do ICMS (R$)</label>
-                <input type="number" value={valorIcms} onChange={e => setValorIcms(e.target.value)} />
+                <InputMoeda value={valorIcms} onChange={setValorIcms} />
               </div>
               <div className="field-group">
                 <label className="field-label">% Redução da base</label>
@@ -3054,7 +3894,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </div>
             <div className="field-group">
               <label className="field-label">Valor de crédito presumido (R$)</label>
-              <input type="number" value={valorCreditoPresumidoIcms} onChange={e => setValorCreditoPresumidoIcms(e.target.value)} style={{ maxWidth: 220 }} />
+              <InputMoeda value={valorCreditoPresumidoIcms} onChange={setValorCreditoPresumidoIcms} style={{ maxWidth: 220 }} />
             </div>
             <div className="nf-grid-3">
               <div className="field-group">
@@ -3091,7 +3931,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   );
 }
 
-function CteView() {
+function CteView({ onIrParaMdfe }) {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
   const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
@@ -3104,6 +3944,7 @@ function CteView() {
   const [processando, setProcessando] = useState(null);
   const [menuAberto, setMenuAberto] = useState(null);
   const [cteParaCorrigir, setCteParaCorrigir] = useState(null);
+  const [cteParaManifestar, setCteParaManifestar] = useState(null);
 
   useEffect(() => {
     const fechar = () => setMenuAberto(null);
@@ -3225,6 +4066,20 @@ function CteView() {
     }
   };
 
+  // Gera o rascunho de MDF-e já preenchido com os dados desse CT-e e leva
+  // o usuário para a tela de MDFe, onde ele revisa e emite.
+  const gerarMdfeDoCte = async (dados) => {
+    const criado = await apiRequest("/documentos-fiscais/mdfe/gerar-do-cte", {
+      method: "POST",
+      body: JSON.stringify(dados),
+    });
+    setCteParaManifestar(null);
+    carregar();
+    const avisos = criado.avisos?.length ? `\n\n${criado.avisos.join("\n")}` : "";
+    alert(`Rascunho de MDF-e criado a partir desse CT-e.${avisos}\n\nRevise os dados e emita na tela de MDFe.`);
+    if (onIrParaMdfe) onIrParaMdfe();
+  };
+
   const cancelarCteAutorizado = async (id) => {
     const justificativa = window.prompt("Motivo do cancelamento (mínimo 15 caracteres):");
     if (!justificativa) return;
@@ -3318,7 +4173,7 @@ function CteView() {
                 <td>{cte.numero ? `${cte.numero}/${cte.serie ?? "—"}` : "—"}</td>
                 <td>{cte.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{cte.origemPercurso ? `${cte.origemPercurso}/${cte.ufInicio || "—"}` : "—"} → {cte.destinoPercurso ? `${cte.destinoPercurso}/${cte.ufFim || "—"}` : "—"}</td>
-                <td>{cte.valorTotal != null ? `R$ ${Number(cte.valorTotal).toFixed(2)}` : "—"}</td>
+                <td>{cte.valorTotal != null ? `R$ ${formatarMoeda(cte.valorTotal)}` : "—"}</td>
                 <td>
                   <StatusDocumento status={cte.status} />
                   {processando === cte.id && cte.status === "enviado" && (
@@ -3417,6 +4272,15 @@ function CteView() {
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteParaCorrigir(cte); }}>
                             <Pencil size={14} /> Carta de correção
                           </button>
+                          {cte.mdfeId ? (
+                            <button className="nf-dropdown-item" disabled onClick={() => setMenuAberto(null)}>
+                              <Truck size={14} /> MDF-e já gerado
+                            </button>
+                          ) : (
+                            <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteParaManifestar(cte); }}>
+                              <Truck size={14} /> Emitir MDF-e
+                            </button>
+                          )}
                           <button
                             className="nf-dropdown-item nf-dropdown-item-danger"
                             disabled={processando === cte.id}
@@ -3451,6 +4315,13 @@ function CteView() {
       )}
       {cteParaCorrigir && (
         <CartaCorrecaoModal nota={cteParaCorrigir} onClose={() => setCteParaCorrigir(null)} />
+      )}
+      {cteParaManifestar && (
+        <GerarMdfeModal
+          ctePreSelecionado={cteParaManifestar}
+          onGerar={gerarMdfeDoCte}
+          onCancel={() => setCteParaManifestar(null)}
+        />
       )}
     </div>
   );
@@ -3634,6 +4505,61 @@ function ErpBiomassa() {
         .modal-header h3 { margin: 0; font-size: 16px; font-weight: 500; }
         .modal-body { padding: 1rem 1.25rem; overflow-y: auto; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border, #e5e3da); }
+        /* Cadastro de cliente/fornecedor — grade de 12 colunas e seções */
+        .pessoa-modal { width: 780px; max-width: 96vw; }
+        .pessoa-modal .modal-header h3 { margin: 0; }
+        .pessoa-modal .modal-header .subtle { margin-top: 3px; }
+        .pf-secao { padding: 18px 0; border-bottom: 1px solid var(--border, #e5e3da); }
+        .pf-secao:last-child { border-bottom: none; padding-bottom: 4px; }
+        .pf-secao:first-child { padding-top: 6px; }
+        .pf-secao-titulo {
+          display: flex; align-items: center; gap: 9px;
+          margin: 0 0 14px; font-size: 13.5px; font-weight: 600; color: var(--erp-azul);
+        }
+        .pf-secao-titulo::before {
+          content: ""; width: 3px; height: 15px; border-radius: 2px;
+          background: var(--erp-verde); flex-shrink: 0;
+        }
+        .pf-grade { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px 14px; }
+        .pf-c2 { grid-column: span 2; } .pf-c3 { grid-column: span 3; }
+        .pf-c4 { grid-column: span 4; } .pf-c5 { grid-column: span 5; }
+        .pf-c6 { grid-column: span 6; } .pf-c7 { grid-column: span 7; }
+        .pf-c8 { grid-column: span 8; } .pf-c9 { grid-column: span 9; }
+        .pf-c12 { grid-column: span 12; }
+        @media (max-width: 640px) {
+          .pf-c2, .pf-c3, .pf-c4, .pf-c5, .pf-c6, .pf-c7, .pf-c8, .pf-c9 { grid-column: span 12; }
+        }
+        .pf-campo { display: block; }
+        .pf-campo input, .pf-campo select {
+          width: 100%; padding: 9px 11px; border-radius: 8px;
+          border: 0.5px solid var(--border-strong, #c9c6ba); background: var(--surface-2, #fff);
+          color: var(--text-primary, #1a1a1a); font-size: 13.5px; box-sizing: border-box;
+        }
+        .pf-campo input:disabled { background: #f7f6f2; color: #8a887f; }
+        .pf-invalido input { border-color: #a32d2d; }
+        .pf-ok input { border-color: var(--erp-verde); }
+        .pf-erro-campo { font-size: 11.5px; color: #a32d2d; margin: 5px 0 0; }
+        .pf-ajuda { font-size: 11.5px; color: var(--text-secondary, #6b6b68); margin: 5px 0 0; }
+        .pf-buscando { color: #00732F; }
+        .pf-segmentado { display: inline-flex; background: #f2f1ec; border-radius: 9px; padding: 3px; gap: 3px; }
+        .pf-segmentado button {
+          border: none; background: none; cursor: pointer; font-family: inherit;
+          padding: 7px 16px; border-radius: 7px; font-size: 13px; color: #6b6b68;
+        }
+        .pf-segmentado button[aria-pressed="true"] {
+          background: #fff; color: var(--erp-azul); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+        }
+        .pf-selo {
+          display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+          padding: 3px 9px; border-radius: 20px; background: #eaf3de; color: #00732F; font-weight: 500;
+        }
+        .pf-aviso {
+          background: #faece7; color: #791f1f; border-radius: 9px;
+          padding: 11px 13px; font-size: 12.5px; margin: 16px 0 0;
+        }
+        .pf-rodape { justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .pf-dica { font-size: 12px; color: var(--text-secondary, #6b6b68); }
+
         .field-group { margin-bottom: 12px; }
         .cadastro-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
         @media (max-width: 640px) { .cadastro-fields-grid { grid-template-columns: 1fr; } }
@@ -3764,8 +4690,8 @@ function ErpBiomassa() {
       <div className="main">
         {view === "dashboard" && <Dashboard counts={counts} carregandoContagens={carregandoContagens} onNavigate={setView} usuario={usuario} />}
         {view === "notasFiscais" && <NotasFiscaisView />}
-        {view === "cte" && <CteView />}
-        {view === "emissao" && <EmissaoView />}
+        {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
+        {view === "emissao" && <MdfeView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>
     </div>

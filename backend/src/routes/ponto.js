@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { apurarPeriodo } = require("../lib/jornada");
+const { enviarComprovantePonto } = require("../lib/email");
 const router = express.Router();
 
 // Router separado para o aparelho: fica fora do login de usuário, porque
@@ -153,6 +154,17 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
           },
         });
       });
+
+      // Comprovante por e-mail. Sai sem travar a resposta: se o servidor de
+      // e-mail estiver fora, a batida já está gravada e quem está na fila do
+      // tablet não pode esperar por isso.
+      if (process.env.EMAIL_COMPROVANTE_PONTO !== "false") {
+        const empresa = rep.empresaId
+          ? await prisma.empresa.findUnique({ where: { id: rep.empresaId }, select: { razaoSocial: true, cnpj: true } })
+          : null;
+        enviarComprovantePonto({ colaborador, marcacao: gravada, rep, empresa })
+          .catch((e) => console.error("[ponto] comprovante não enviado:", e.message));
+      }
 
       resultados.push({
         idLocal: m.idLocal,

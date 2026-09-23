@@ -1199,11 +1199,212 @@ function cpfValido(c) {
   return dig(9) === Number(c[9]) && dig(10) === Number(c[10]);
 }
 
+// ---------- Jornada de trabalho ----------
+// Escala com revezamento não cabe em "dia da semana": numa 6x1 a folga
+// anda. Por isso a escala é definida por ciclo, a partir de uma data de
+// referência, e o deslocamento é o que faz a folga revezar.
+
+const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+function JornadaAba({ colaboradorId }) {
+  const [jornadas, setJornadas] = useState(null);
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const [nova, setNova] = useState({
+    tipo: "escala",
+    vigenciaInicio: hoje,
+    toleranciaMinutos: 10,
+    diasTrabalho: 6, diasFolga: 1, deslocamentoPorCiclo: 0, dataReferencia: hoje,
+    entrada: "07:00", intervaloInicio: "11:00", intervaloFim: "12:00", saida: "17:00",
+    dias: DIAS_SEMANA.map((_, i) => ({
+      diaSemana: i, folga: i === 0,
+      entrada: "07:00", intervaloInicio: "11:00", intervaloFim: "12:00", saida: "17:00",
+    })),
+  });
+
+  const carregar = useCallback(async () => {
+    if (!colaboradorId) { setJornadas([]); return; }
+    try { setJornadas(await apiRequest(`/ponto/jornada/${colaboradorId}`)); }
+    catch (e) { setErro(e.message); setJornadas([]); }
+  }, [colaboradorId]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const salvar = async () => {
+    setErro("");
+    setSalvando(true);
+    try {
+      await apiRequest(`/ponto/jornada/${colaboradorId}`, { method: "POST", body: JSON.stringify(nova) });
+      await carregar();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const remover = async (id) => {
+    if (!window.confirm("Remover essa jornada? A apuração dos períodos que dependiam dela deixa de ter horário previsto.")) return;
+    try { await apiRequest(`/ponto/jornada/${id}`, { method: "DELETE" }); carregar(); }
+    catch (e) { alert(`Não foi possível: ${e.message}`); }
+  };
+
+  const setCampo = (k, v) => setNova(n => ({ ...n, [k]: v }));
+  const setDia = (i, k, v) => setNova(n => ({
+    ...n, dias: n.dias.map((d, idx) => idx === i ? { ...d, [k]: v } : d),
+  }));
+
+  if (!colaboradorId) {
+    return <p className="hint">Salve o colaborador primeiro; depois a aba de jornada fica disponível.</p>;
+  }
+
+  const ciclo = (Number(nova.diasTrabalho) || 0) + (Number(nova.diasFolga) || 0);
+
+  return (
+    <div>
+      {jornadas?.length > 0 && (
+        <div className="pf-secao" style={{ paddingTop: 0 }}>
+          <h4 className="pf-secao-titulo">Jornadas cadastradas</h4>
+          <table className="data-table">
+            <thead><tr><th>Vigência</th><th>Tipo</th><th>Horário</th><th>Ciclo</th><th></th></tr></thead>
+            <tbody>
+              {jornadas.map(j => (
+                <tr key={j.id}>
+                  <td>
+                    {new Date(j.vigenciaInicio).toLocaleDateString("pt-BR")}
+                    {j.vigenciaFim ? ` até ${new Date(j.vigenciaFim).toLocaleDateString("pt-BR")}` : " — atual"}
+                  </td>
+                  <td>{j.tipo === "escala" ? "Escala" : "Semanal"}</td>
+                  <td>{[j.entrada, j.intervaloInicio, j.intervaloFim, j.saida].filter(Boolean).join(" · ") || "por dia da semana"}</td>
+                  <td>
+                    {j.tipo === "escala"
+                      ? `${j.diasTrabalho}x${j.diasFolga}${j.deslocamentoPorCiclo ? ` · folga anda ${j.deslocamentoPorCiclo}d` : " · folga fixa"}`
+                      : "—"}
+                  </td>
+                  <td className="actions-col">
+                    <button className="icon-btn icon-btn-danger" onClick={() => remover(j.id)} aria-label="Remover"><Trash2 size={15} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="pf-secao">
+        <h4 className="pf-secao-titulo">Nova jornada</h4>
+        <p className="hint" style={{ marginTop: -6 }}>
+          A jornada anterior é encerrada no dia anterior ao início desta. O histórico fica guardado, para
+          que um mês já fechado não seja recalculado com regra nova.
+        </p>
+
+        <div className="pf-grade">
+          <label className="pf-campo pf-c4">
+            <span className="field-label">Tipo</span>
+            <select value={nova.tipo} onChange={e => setCampo("tipo", e.target.value)}>
+              <option value="escala">Escala por ciclo (6x1, 5x2…)</option>
+              <option value="semanal">Horário fixo por dia da semana</option>
+            </select>
+          </label>
+          <label className="pf-campo pf-c4">
+            <span className="field-label">Vale a partir de<span className="req">*</span></span>
+            <input type="date" value={nova.vigenciaInicio} onChange={e => setCampo("vigenciaInicio", e.target.value)} />
+          </label>
+          <label className="pf-campo pf-c4">
+            <span className="field-label">Tolerância (minutos)</span>
+            <input type="number" min="0" max="30" value={nova.toleranciaMinutos}
+              onChange={e => setCampo("toleranciaMinutos", e.target.value)} />
+            <p className="pf-ajuda">A CLT admite até 10 minutos por dia sem virar hora extra nem desconto.</p>
+          </label>
+        </div>
+
+        {nova.tipo === "escala" ? (
+          <>
+            <div className="pf-grade" style={{ marginTop: 12 }}>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Dias de trabalho</span>
+                <input type="number" min="1" max="30" value={nova.diasTrabalho} onChange={e => setCampo("diasTrabalho", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Dias de folga</span>
+                <input type="number" min="1" max="30" value={nova.diasFolga} onChange={e => setCampo("diasFolga", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Primeiro dia trabalhado<span className="req">*</span></span>
+                <input type="date" value={nova.dataReferencia} onChange={e => setCampo("dataReferencia", e.target.value)} />
+                <p className="pf-ajuda">É daqui que o ciclo é contado.</p>
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">A folga anda quantos dias por ciclo</span>
+                <input type="number" min="0" max="6" value={nova.deslocamentoPorCiclo}
+                  onChange={e => setCampo("deslocamentoPorCiclo", e.target.value)} />
+                <p className="pf-ajuda">0 = folga sempre no mesmo dia da semana.</p>
+              </label>
+            </div>
+
+            {ciclo === 7 && Number(nova.deslocamentoPorCiclo) === 0 && (
+              <p className="hint" style={{ background: "#fbf3e2", color: "#7a5205", padding: "10px 12px", borderRadius: 8 }}>
+                Ciclo de 7 dias sem deslocamento: a folga vai cair sempre no mesmo dia da semana. Se a
+                folga do pessoal reveza, coloque 1 aqui.
+              </p>
+            )}
+
+            <div className="pf-grade" style={{ marginTop: 12 }}>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Entrada<span className="req">*</span></span>
+                <input type="time" value={nova.entrada} onChange={e => setCampo("entrada", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Saída para o intervalo</span>
+                <input type="time" value={nova.intervaloInicio} onChange={e => setCampo("intervaloInicio", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Volta do intervalo</span>
+                <input type="time" value={nova.intervaloFim} onChange={e => setCampo("intervaloFim", e.target.value)} />
+              </label>
+              <label className="pf-campo pf-c3">
+                <span className="field-label">Saída<span className="req">*</span></span>
+                <input type="time" value={nova.saida} onChange={e => setCampo("saida", e.target.value)} />
+              </label>
+            </div>
+          </>
+        ) : (
+          <table className="data-table" style={{ marginTop: 10 }}>
+            <thead>
+              <tr><th>Dia</th><th>Folga</th><th>Entrada</th><th>Intervalo</th><th>Volta</th><th>Saída</th></tr>
+            </thead>
+            <tbody>
+              {nova.dias.map((d, i) => (
+                <tr key={d.diaSemana}>
+                  <td>{DIAS_SEMANA[d.diaSemana]}</td>
+                  <td><input type="checkbox" checked={d.folga} onChange={e => setDia(i, "folga", e.target.checked)} /></td>
+                  <td><input type="time" disabled={d.folga} value={d.entrada || ""} onChange={e => setDia(i, "entrada", e.target.value)} /></td>
+                  <td><input type="time" disabled={d.folga} value={d.intervaloInicio || ""} onChange={e => setDia(i, "intervaloInicio", e.target.value)} /></td>
+                  <td><input type="time" disabled={d.folga} value={d.intervaloFim || ""} onChange={e => setDia(i, "intervaloFim", e.target.value)} /></td>
+                  <td><input type="time" disabled={d.folga} value={d.saida || ""} onChange={e => setDia(i, "saida", e.target.value)} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {erro && <p className="pf-aviso">{erro}</p>}
+        <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={salvar} disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar jornada"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PessoaForm({ moduleKey, record, onSave, onCancel }) {
   const config = MODULES[moduleKey];
   const editando = !!record?.id;
   const rotuloSingular = config.label.replace(/es$/, "").replace(/s$/, "");
 
+  const [aba, setAba] = useState("dados");
+  const temJornada = moduleKey === "colaboradores";
   const [data, setData] = useState(() => record || { tipo: "Pessoa Jurídica", contribuinte: "Contribuinte", endereco: emptyEndereco });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -1296,7 +1497,19 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
+        {temJornada && (
+          <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
+            <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
+            <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
+              Horários de trabalho
+            </button>
+          </div>
+        )}
+
         <div className="modal-body">
+          {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
+
+          <div hidden={temJornada && aba !== "dados"}>
           <section className="pf-secao">
             <h4 className="pf-secao-titulo">Identificação</h4>
             <div className="pf-grade">
@@ -1422,6 +1635,7 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
             </div>
             {erro && <p className="pf-aviso">{erro}</p>}
           </section>
+          </div>
         </div>
 
         <div className="modal-footer pf-rodape">
@@ -2013,52 +2227,50 @@ function PontoEspelho() {
 
   const [pessoas, setPessoas] = useState([]);
   const [filtro, setFiltro] = useState({ colaboradorId: "", de: primeiroDia, ate: hoje });
-  const [marcacoes, setMarcacoes] = useState(null);
+  const [espelho, setEspelho] = useState(null);
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
 
   useEffect(() => {
     apiRequest("/ponto/colaboradores").then(setPessoas).catch(() => setPessoas([]));
   }, []);
 
   const buscar = useCallback(async () => {
-    setErro("");
+    if (!filtro.colaboradorId) { setErro("Escolha um colaborador para apurar o período."); return; }
+    setErro(""); setCarregando(true);
     try {
-      const params = new URLSearchParams();
-      if (filtro.colaboradorId) params.set("colaboradorId", filtro.colaboradorId);
-      if (filtro.de) params.set("de", filtro.de);
-      if (filtro.ate) params.set("ate", filtro.ate);
-      setMarcacoes(await apiRequest(`/ponto/marcacoes?${params}`));
-    } catch (e) { setErro(e.message); setMarcacoes([]); }
+      const params = new URLSearchParams(filtro);
+      setEspelho(await apiRequest(`/ponto/espelho?${params}`));
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+      setEspelho(null);
+    } finally { setCarregando(false); }
   }, [filtro]);
 
-  useEffect(() => { buscar(); }, []);
-
-  // Agrupa por pessoa e dia, que é como o espelho é lido e conferido.
-  const porDia = {};
-  for (const m of (marcacoes || [])) {
-    const dia = diaPonto(m.dataHora);
-    const chave = `${m.colaborador.id}|${dia}`;
-    (porDia[chave] = porDia[chave] || { colaborador: m.colaborador, dia, batidas: [] }).batidas.push(m);
-  }
-  const linhas = Object.values(porDia);
-
-  const registrarTratamento = async (colaboradorId, dia) => {
+  const registrarTratamento = async (dia) => {
     const tipo = window.prompt("Tipo de tratamento: inclusao, desconsideracao ou pre_assinalado", "inclusao");
     if (!tipo) return;
     const hora = window.prompt(`Hora do registro no dia ${dia} (formato 08:15):`, "08:00");
     if (!hora) return;
     const motivo = window.prompt("Motivo (fica registrado com seu nome):");
     if (!motivo || motivo.trim().length < 5) { alert("Informe o motivo."); return; }
-
-    const [d, m, a] = dia.split("/");
     try {
       await apiRequest("/ponto/tratamentos", {
         method: "POST",
-        body: JSON.stringify({ tipo, colaboradorId, dataHora: `${a}-${m}-${d}T${hora}:00`, motivo }),
+        body: JSON.stringify({ tipo, colaboradorId: Number(filtro.colaboradorId), dataHora: `${dia}T${hora}:00`, motivo }),
       });
       buscar();
     } catch (e) { alert(`Não foi possível: ${e.message}`); }
   };
+
+  const corDaSituacao = (situacoes) => {
+    if (situacoes.includes("falta") || situacoes.includes("batida faltando")) return "#c62828";
+    if (situacoes.includes("atraso") || situacoes.includes("intervalo abaixo de 1h")) return "#b57a12";
+    if (situacoes.includes("hora extra") || situacoes.includes("trabalho em folga")) return "#1F3B57";
+    return "#6b6b68";
+  };
+
+  const T = espelho?.totais;
 
   return (
     <div>
@@ -2066,7 +2278,7 @@ function PontoEspelho() {
         <div className="field-group">
           <label className="field-label">Colaborador</label>
           <select value={filtro.colaboradorId} onChange={e => setFiltro(f => ({ ...f, colaboradorId: e.target.value }))}>
-            <option value="">Todos</option>
+            <option value="">Selecione…</option>
             {pessoas.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
         </div>
@@ -2079,44 +2291,74 @@ function PontoEspelho() {
           <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
         </div>
         <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
-          <button className="btn btn-primary" onClick={buscar}>Buscar</button>
+          <button className="btn btn-primary" onClick={buscar} disabled={carregando}>
+            {carregando ? "Apurando…" : "Apurar período"}
+          </button>
         </div>
       </div>
 
       {erro && <p className="error-text">{erro}</p>}
-      {marcacoes === null && <p className="hint">Carregando…</p>}
-      {marcacoes?.length === 0 && <p className="hint">Nenhuma marcação no período.</p>}
 
-      {linhas.length > 0 && (
+      {espelho && !espelho.temJornada && (
+        <p className="hint" style={{ background: "#fbf3e2", color: "#7a5205", padding: "10px 12px", borderRadius: 8 }}>
+          {espelho.colaborador.nome} não tem jornada cadastrada no período, então não há horário previsto para
+          comparar — as batidas aparecem, sem apuração de atraso, falta ou extra. A jornada se cadastra na aba
+          "Horários de trabalho" do colaborador.
+        </p>
+      )}
+
+      {T && (
+        <div className="cte-resumo" style={{ marginBottom: 14 }}>
+          <div><span className="cte-resumo-rotulo">Trabalhado</span><span className="cte-resumo-valor">{T.trabalhadoTexto}</span></div>
+          <div><span className="cte-resumo-rotulo">Previsto</span><span className="cte-resumo-valor">{T.previstoTexto}</span></div>
+          <div>
+            <span className="cte-resumo-rotulo">Saldo</span>
+            <span className="cte-resumo-valor" style={{ color: T.saldoMinutos < 0 ? "#c62828" : "#00732F" }}>{T.saldoTexto}</span>
+          </div>
+          <div><span className="cte-resumo-rotulo">Dias trabalhados</span><span className="cte-resumo-valor">{T.diasTrabalhados}</span></div>
+          <div><span className="cte-resumo-rotulo">Faltas</span><span className="cte-resumo-valor">{T.faltas}</span></div>
+          <div><span className="cte-resumo-rotulo">Atrasos</span><span className="cte-resumo-valor">{T.atrasos}</span></div>
+          {T.inconsistencias > 0 && (
+            <div>
+              <span className="cte-resumo-rotulo">A resolver</span>
+              <span className="cte-resumo-valor" style={{ color: "#c62828" }}>{T.inconsistencias}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {espelho && (
         <table className="data-table">
           <thead>
-            <tr><th>Colaborador</th><th>Dia</th><th>Batidas</th><th>Origem</th><th></th></tr>
+            <tr><th>Dia</th><th>Previsto</th><th>Batidas</th><th>Trabalhado</th><th>Saldo</th><th>Situação</th><th></th></tr>
           </thead>
           <tbody>
-            {linhas.map(linha => (
-              <tr key={`${linha.colaborador.id}-${linha.dia}`}>
-                <td><strong>{linha.colaborador.nome}</strong></td>
-                <td>{linha.dia}</td>
+            {espelho.dias.map(d => (
+              <tr key={d.dia} style={d.folga && !d.batidas.length ? { opacity: 0.5 } : undefined}>
                 <td>
-                  {linha.batidas.map(b => {
-                    return (
-                      <span key={b.id} title={`NSR ${b.nsr} · ${b.rep.identificador} · ${b.metodoIdentificacao}`}
-                        style={{ display: "inline-block", marginRight: 10, fontVariantNumeric: "tabular-nums" }}>
-                        {horaPonto(b.dataHora)}
-                        {b.tratamentos?.length > 0 && <span style={{ color: "#b57a12" }} title="Tem tratamento">*</span>}
-                      </span>
-                    );
-                  })}
+                  {new Date(`${d.dia}T12:00:00Z`).toLocaleDateString("pt-BR")}
+                  <span className="subtle" style={{ display: "block", fontSize: 11.5 }}>
+                    {DIAS_SEMANA[d.diaSemana]}{d.posicaoCiclo ? ` · ciclo ${d.posicaoCiclo}` : ""}
+                  </span>
                 </td>
-                <td className="subtle" style={{ fontSize: 11.5 }}>
-                  {[...new Set(linha.batidas.map(b => b.metodoIdentificacao))].join(", ")}
-                  {linha.batidas.some(b => b.origemOffline) && " · offline"}
+                <td>{d.folga ? "Folga" : (d.previstoTexto || "—")}</td>
+                <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                  {d.batidas.length
+                    ? d.batidas.map(b => (
+                        <span key={b.id} title={`NSR ${b.nsr} · ${b.metodo}${b.offline ? " · offline" : ""}`}
+                          style={{ marginRight: 9 }}>
+                          {b.hora}{b.temTratamento && <span style={{ color: "#b57a12" }}>*</span>}
+                        </span>
+                      ))
+                    : "—"}
                 </td>
+                <td style={{ fontVariantNumeric: "tabular-nums" }}>{d.trabalhadoTexto}</td>
+                <td style={{ fontVariantNumeric: "tabular-nums", color: d.diferencaMinutos < 0 ? "#c62828" : d.diferencaMinutos > 0 ? "#00732F" : "inherit" }}>
+                  {d.diferencaMinutos ? d.diferencaTexto : "—"}
+                </td>
+                <td style={{ color: corDaSituacao(d.situacoes), fontSize: 12.5 }}>{d.situacoes.join(", ") || "—"}</td>
                 <td className="actions-col">
-                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5 }}
-                    onClick={() => registrarTratamento(linha.colaborador.id, linha.dia)}>
-                    Tratar
-                  </button>
+                  <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => registrarTratamento(d.dia)}>Tratar</button>
                 </td>
               </tr>
             ))}
@@ -2126,12 +2368,13 @@ function PontoEspelho() {
 
       <p className="hint" style={{ marginTop: 14 }}>
         As batidas não podem ser alteradas nem apagadas — é exigência da Portaria 671/2021. Correções entram
-        como tratamento, ao lado do registro original, com autor e motivo. O asterisco marca o dia que tem
-        tratamento.
+        como tratamento, ao lado do registro original, com autor e motivo. O asterisco marca a batida que tem
+        tratamento. A tolerância vem da jornada: diferenças menores que ela não viram crédito nem débito.
       </p>
     </div>
   );
 }
+
 
 function ModuleView({ moduleKey }) {
   const config = MODULES[moduleKey];

@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
+const { apurarPeriodo } = require("../lib/jornada");
 const router = express.Router();
 
 // Router separado para o aparelho: fica fora do login de usuário, porque
@@ -272,8 +273,17 @@ router.put("/biometria/:colaboradorId", asyncHandler(async (req, res) => {
   const colaboradorId = Number(req.params.colaboradorId);
   const { vetor, versaoModelo, consentimentoTexto } = req.body;
 
-  if (!Array.isArray(vetor) || vetor.length < 32) {
+  // Aceita dois formatos: um vetor só (como era) ou uma lista de vetores.
+  // Vários perfis por pessoa resolvem o caso de quem alterna óculos e de
+  // quem foi cadastrado numa luz muito diferente da do pátio.
+  const listaVetores = Array.isArray(vetor?.[0]) ? vetor : [vetor];
+  const invalido = !Array.isArray(listaVetores) || !listaVetores.length ||
+    listaVetores.some((v) => !Array.isArray(v) || v.length < 32);
+  if (invalido) {
     return res.status(400).json({ erro: "Vetor facial inválido" });
+  }
+  if (listaVetores.length > 5) {
+    return res.status(400).json({ erro: "Máximo de 5 perfis de rosto por pessoa" });
   }
   // Sem consentimento registrado não se guarda biometria: é dado sensível.
   if (!consentimentoTexto || consentimentoTexto.trim().length < 20) {
@@ -287,12 +297,12 @@ router.put("/biometria/:colaboradorId", asyncHandler(async (req, res) => {
     where: { colaboradorId },
     create: {
       colaboradorId,
-      vetor,
+      vetor: listaVetores,
       versaoModelo: versaoModelo || "desconhecida",
       consentimentoEm: new Date(),
       consentimentoTexto: consentimentoTexto.trim(),
     },
-    update: { vetor, versaoModelo: versaoModelo || "desconhecida" },
+    update: { vetor: listaVetores, versaoModelo: versaoModelo || "desconhecida" },
     select: { colaboradorId: true, versaoModelo: true, consentimentoEm: true, atualizadoEm: true },
   });
 
@@ -315,6 +325,132 @@ router.put("/pin/:colaboradorId", asyncHandler(async (req, res) => {
     data: { pinPontoHash: await bcrypt.hash(String(pin), 10) },
   });
   res.json({ definido: true });
+}));
+
+// ---------------------------------------------------------------------------
+// Jornada de trabalho
+// ---------------------------------------------------------------------------
+router.get("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
+  const jornadas = await prisma.jornadaTrabalho.findMany({
+    where: { colaboradorId: Number(req.params.colaboradorId) },
+    include: { dias: { orderBy: { diaSemana: "asc" } } },
+    orderBy: { vigenciaInicio: "desc" },
+  });
+  res.json(jornadas);
+}));
+
+router.post("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
+  const colaboradorId = Number(req.params.colaboradorId);
+  const {
+    tipo, vigenciaInicio, vigenciaFim, toleranciaMinutos,
+    diasTrabalho, diasFolga, deslocamentoPorCiclo, dataReferencia,
+    entrada, intervaloInicio, intervaloFim, saida, dias,
+  } = req.body;
+
+  if (!vigenciaInicio) return res.status(400).json({ erro: "Informe a partir de quando a jornada vale" });
+
+  const hora = (v) => (v && /^\d{1,2}:\d{2}$/.test(v) ? v : null);
+
+  if (tipo === "escala") {
+    if (!hora(entrada) || !hora(saida)) {
+      return res.status(400).json({ erro: "Escala precisa de entrada e saída (formato 07:00)" });
+    }
+    if (!diasTrabalho || !diasFolga) {
+      return res.status(400).json({ erro: "Informe quantos dias de trabalho e de folga tem o ciclo" });
+    }
+    if (!dataReferencia) {
+      return res.status(400).json({
+        erro: "Informe a data de referência do ciclo",
+        detalhe: "É o primeiro dia trabalhado do ciclo. Sem ela não dá para saber quando cai a folga.",
+      });
+    }
+  }
+
+  // Fecha a vigência da jornada anterior no dia anterior ao início da nova,
+  // para não existirem duas valendo ao mesmo tempo.
+  const anterior = await prisma.jornadaTrabalho.findFirst({
+    where: { colaboradorId, vigenciaFim: null },
+    orderBy: { vigenciaInicio: "desc" },
+  });
+  if (anterior) {
+    const fim = new Date(vigenciaInicio);
+    fim.setDate(fim.getDate() - 1);
+    if (fim >= anterior.vigenciaInicio) {
+      await prisma.jornadaTrabalho.update({ where: { id: anterior.id }, data: { vigenciaFim: fim } });
+    }
+  }
+
+  const jornada = await prisma.jornadaTrabalho.create({
+    data: {
+      colaboradorId,
+      tipo: tipo === "semanal" ? "semanal" : "escala",
+      vigenciaInicio: new Date(vigenciaInicio),
+      vigenciaFim: vigenciaFim ? new Date(vigenciaFim) : null,
+      toleranciaMinutos: Number(toleranciaMinutos ?? 10),
+      diasTrabalho: diasTrabalho ? Number(diasTrabalho) : null,
+      diasFolga: diasFolga ? Number(diasFolga) : null,
+      deslocamentoPorCiclo: Number(deslocamentoPorCiclo || 0),
+      dataReferencia: dataReferencia ? new Date(dataReferencia) : null,
+      entrada: hora(entrada), intervaloInicio: hora(intervaloInicio),
+      intervaloFim: hora(intervaloFim), saida: hora(saida),
+      dias: tipo === "semanal" && Array.isArray(dias) ? {
+        create: dias.map((d) => ({
+          diaSemana: Number(d.diaSemana),
+          folga: Boolean(d.folga),
+          entrada: hora(d.entrada), intervaloInicio: hora(d.intervaloInicio),
+          intervaloFim: hora(d.intervaloFim), saida: hora(d.saida),
+        })),
+      } : undefined,
+    },
+    include: { dias: true },
+  });
+
+  res.status(201).json(jornada);
+}));
+
+router.delete("/jornada/:id", asyncHandler(async (req, res) => {
+  await prisma.jornadaTrabalho.delete({ where: { id: Number(req.params.id) } });
+  res.json({ removido: true });
+}));
+
+// ---------------------------------------------------------------------------
+// Espelho apurado: batidas x jornada, com totais do período
+// ---------------------------------------------------------------------------
+router.get("/espelho", asyncHandler(async (req, res) => {
+  const { colaboradorId, de, ate } = req.query;
+  if (!colaboradorId || !de || !ate) {
+    return res.status(400).json({ erro: "Informe colaboradorId, de e ate" });
+  }
+
+  const colaborador = await prisma.colaborador.findUnique({
+    where: { id: Number(colaboradorId) },
+    select: { id: true, nome: true, cpf: true, cargo: true, setor: true },
+  });
+  if (!colaborador) return res.status(404).json({ erro: "Colaborador não encontrado" });
+
+  // A jornada usada é a vigente no início do período. Se a jornada mudou no
+  // meio do mês, a apuração pega a que valia — por isso a vigência existe.
+  const jornada = await prisma.jornadaTrabalho.findFirst({
+    where: {
+      colaboradorId: colaborador.id,
+      vigenciaInicio: { lte: new Date(`${ate}T23:59:59`) },
+      OR: [{ vigenciaFim: null }, { vigenciaFim: { gte: new Date(`${de}T00:00:00`) } }],
+    },
+    include: { dias: true },
+    orderBy: { vigenciaInicio: "desc" },
+  });
+
+  const marcacoes = await prisma.marcacaoPonto.findMany({
+    where: {
+      colaboradorId: colaborador.id,
+      dataHora: { gte: new Date(`${de}T00:00:00`), lte: new Date(`${ate}T23:59:59`) },
+    },
+    include: { tratamentos: true },
+    orderBy: { dataHora: "asc" },
+  });
+
+  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada });
+  res.json({ colaborador, jornada, ...apuracao });
 }));
 
 // ---------------------------------------------------------------------------

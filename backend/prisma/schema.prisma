@@ -226,6 +226,7 @@ model Colaborador {
   documentosComoResponsavel DocumentoFiscal[]
   usuario                   Usuario?
   marcacoesPonto            MarcacaoPonto[]
+  jornadas                  JornadaTrabalho[]
   tratamentosPonto          TratamentoPonto[]
   biometriaFacial           BiometriaFacial?
 
@@ -684,4 +685,59 @@ model BiometriaFacial {
   atualizadoEm    DateTime @updatedAt @map("atualizado_em")
 
   @@map("biometrias_faciais")
+}
+
+// Jornada de trabalho do colaborador. Guardada com vigência: quando o
+// horário de alguém muda, a jornada antiga continua valendo para os meses
+// já fechados — recalcular o passado com a regra nova bagunçaria
+// fechamento que já foi pago.
+model JornadaTrabalho {
+  id   Int    @id @default(autoincrement())
+  tipo String @default("escala")            // escala | semanal
+
+  colaboradorId Int         @map("colaborador_id")
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+
+  vigenciaInicio DateTime  @map("vigencia_inicio")
+  vigenciaFim    DateTime? @map("vigencia_fim")
+
+  toleranciaMinutos Int @default(10) @map("tolerancia_minutos")
+
+  // Escala por ciclo (6x1, 5x2...). O deslocamento é o que faz a folga
+  // revezar: 0 mantém a folga no mesmo dia da semana.
+  diasTrabalho         Int?      @map("dias_trabalho")
+  diasFolga            Int?      @map("dias_folga")
+  deslocamentoPorCiclo Int       @default(0) @map("deslocamento_por_ciclo")
+  dataReferencia       DateTime? @map("data_referencia")
+
+  // Horários do dia trabalhado na escala (formato "HH:MM").
+  entrada         String?
+  intervaloInicio String? @map("intervalo_inicio")
+  intervaloFim    String? @map("intervalo_fim")
+  saida           String?
+
+  dias JornadaDia[]
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([colaboradorId, vigenciaInicio])
+  @@map("jornadas_trabalho")
+}
+
+// Usado quando o tipo é "semanal": um horário por dia da semana.
+model JornadaDia {
+  id        Int             @id @default(autoincrement())
+  jornadaId Int             @map("jornada_id")
+  jornada   JornadaTrabalho @relation(fields: [jornadaId], references: [id], onDelete: Cascade)
+
+  diaSemana Int     @map("dia_semana")        // 0 = domingo
+  folga     Boolean @default(false)
+
+  entrada         String?
+  intervaloInicio String? @map("intervalo_inicio")
+  intervaloFim    String? @map("intervalo_fim")
+  saida           String?
+
+  @@unique([jornadaId, diaSemana])
+  @@map("jornadas_dias")
 }

@@ -303,7 +303,7 @@
     </div>
     <div class="linha">
       <button class="btn btn-verde" id="btnEntrarCadastro">Entrar</button>
-      <button class="btn" id="btnFecharCadastro">Fechar</button>
+      <button class="btn" id="btnFecharCadastro">Voltar à configuração</button>
     </div>
   </div>
 
@@ -319,7 +319,8 @@
     <div class="linha">
       <button class="btn btn-verde" id="btnCapturar">Capturar rosto</button>
       <button class="btn" id="btnTestar">Testar reconhecimento</button>
-      <button class="btn" id="btnFecharCadastro2">Fechar</button>
+      <button class="btn" id="btnFecharCadastro2">Voltar à configuração</button>
+      <button class="btn" id="btnVoltarPonto">Voltar ao ponto</button>
     </div>
     <p class="ajuda" id="statusCadastro"></p>
     <pre id="resultadoTeste" class="oculto" style="background:#fff; border:1px solid #E5E3DA; border-radius:9px;
@@ -377,10 +378,12 @@ const cfgPadrao = {
 const estado = {
   cfg: { ...cfgPadrao },
   colaboradores: [],
+  rostosInvalidos: [],
   rep: null,
   deslocamentoRelogio: 0,   // ms entre o relógio do servidor e o do tablet
   fila: [],
   modo: "facial",
+  pausado: false,
   rostoDesde: 0,
   ultimaMedidaOlho: null,
   candidato: null,
@@ -629,6 +632,24 @@ function mostrarFalha(mensagem) {
   setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 3000);
 }
 
+/* ---------- painéis (configuração, cadastro) ---------- */
+// Enquanto um painel está aberto, o reconhecimento para por completo: nada
+// de capturar, comparar ou falar. Além de atrapalhar quem está configurando,
+// as duas coisas disputavam a mesma câmera e a mesma GPU.
+function pausarReconhecimento() {
+  estado.pausado = true;
+  estado.fase = null;
+  estado.candidato = null;
+  try { window.speechSynthesis?.cancel(); } catch { /* sem voz, tudo bem */ }
+}
+
+function retomarReconhecimento() {
+  estado.pausado = false;
+  estado.fase = null;
+  estado.candidato = null;
+  limparVivacidade();
+}
+
 /* ---------- voz ---------- */
 // Usa a voz do próprio Android (Web Speech API). Funciona offline desde que
 // o pacote de português esteja instalado no aparelho — e é por isso que ela
@@ -641,8 +662,12 @@ function escolherVozPtBr() {
   return vozes.find(v => /pt[-_]BR/i.test(v.lang)) || vozes.find(v => /^pt/i.test(v.lang)) || null;
 }
 
-function falar(texto, { repetirApos = 8000, interromper = false } = {}) {
+function falar(texto, { repetirApos = 8000, interromper = false, mesmoPausado = false } = {}) {
   if (!estado.cfg.voz || !("speechSynthesis" in window) || !vozLiberada || !texto) return;
+  // Com um painel aberto (configuração, cadastro de rostos), o app fica em
+  // silêncio: quem está mexendo ali não precisa ouvir o tablet pedindo pra
+  // balançar a cabeça.
+  if (estado.pausado && !mesmoPausado) return;
 
   // Não fica repetindo a mesma frase a cada volta do laço.
   const agoraMs = Date.now();
@@ -777,6 +802,7 @@ function avaliarLuz(video) {
 // continua valendo: este laço só olha a luz, uma vez por segundo.
 async function lacoRepouso() {
   if (estado.cfg.somentePin) {
+    if (estado.pausado) return setTimeout(lacoRepouso, 1000);
     const emRepouso = avaliarLuz($("video"));
     if (emRepouso) atualizarRepouso();
     setTimeout(lacoRepouso, 1000);
@@ -823,9 +849,48 @@ async function carregarModelos() {
   }
 }
 
+// Normaliza o que veio do servidor para uma lista de números de verdade.
+// Vetor lido no formato errado produzia NaN na comparação — e NaN nunca é
+// menor que o limiar, então a pessoa simplesmente nunca era reconhecida,
+// sem nenhuma pista do motivo na tela.
+function vetorValido(bruto) {
+  // Aceita lista ou objeto com chaves numéricas, que é como um Float32Array
+  // acaba virando quando passa por JSON sem conversão.
+  const lista = Array.isArray(bruto)
+    ? bruto
+    : (bruto && typeof bruto === "object" ? Object.values(bruto) : null);
+  if (!lista || lista.length < 32) return null;
+  // typeof antes do Number: null e "" viram 0 numa conversão e passariam
+  // como valor válido, corrompendo o vetor em silêncio.
+  if (!lista.every(v => typeof v === "number" && Number.isFinite(v))) return null;
+  return Float32Array.from(lista);
+}
+
 async function prepararRostosConhecidos() {
-  const comVetor = estado.colaboradores.filter(c => Array.isArray(c.vetorFacial) && c.vetorFacial.length);
-  rostosConhecidos = comVetor.map(c => ({ colaborador: c, vetor: Float32Array.from(c.vetorFacial) }));
+  rostosConhecidos = [];
+  estado.rostosInvalidos = [];
+
+  for (const c of estado.colaboradores) {
+    const bruto = c.vetorFacial;
+    if (!bruto) continue;
+
+    // Duas formas convivem: um vetor só (cadastros antigos) ou vários
+    // perfis da mesma pessoa (com óculos e sem, por exemplo).
+    const primeiro = Array.isArray(bruto) ? bruto[0] : null;
+    const perfis = (Array.isArray(primeiro) || (primeiro && typeof primeiro === "object"))
+      ? bruto
+      : [bruto];
+
+    let aproveitados = 0;
+    for (const perfil of perfis) {
+      const vetor = vetorValido(perfil);
+      if (vetor) { rostosConhecidos.push({ colaborador: c, vetor }); aproveitados++; }
+    }
+    if (!aproveitados) {
+      estado.rostosInvalidos.push(c.nome);
+      console.warn(`Rosto ilegível no cadastro de ${c.nome} — precisa recadastrar.`);
+    }
+  }
 }
 
 function distancia(a, b) {
@@ -949,7 +1014,11 @@ async function lacoFacial() {
   const moldura = $("moldura");
   const instrucao = $("instrucao");
 
-  if (estado.ocupado || estado.modo !== "facial" || !estado.modelosProntos) {
+  if (estado.pausado || estado.ocupado || estado.modo !== "facial" || !estado.modelosProntos) {
+    if (estado.pausado) {
+      $("moldura").className = "moldura";
+      $("instrucao").textContent = "Configuração aberta — registro pausado";
+    }
     return setTimeout(lacoFacial, 400);
   }
 
@@ -1166,9 +1235,13 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgVoz").checked = estado.cfg.voz !== false;
   $("cfgVozVelocidade").value = estado.cfg.vozVelocidade || 1;
   $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
+  pausarReconhecimento();
   $("painelConfig").classList.remove("oculto");
 });
-$("btnFecharCfg").addEventListener("click", () => $("painelConfig").classList.add("oculto"));
+$("btnFecharCfg").addEventListener("click", () => {
+  $("painelConfig").classList.add("oculto");
+  retomarReconhecimento();
+});
 
 $("btnSalvarCfg").addEventListener("click", async () => {
   estado.cfg = {
@@ -1200,16 +1273,47 @@ $("btnSalvarCfg").addEventListener("click", async () => {
       `Se não for esse o tablet, o token está errado — pegue o token certo no ERP, em Ponto, Tablets.<br>` +
       `${dados.colaboradores.length} colaboradores · ${comRosto} com rosto cadastrado`;
     if (!estado.modelosProntos) await carregarModelos();
-    if (estado.cfg.voz) { liberarVoz(); falar("Voz ativada.", { repetirApos: 0, interromper: true }); }
+    if (estado.cfg.voz) { liberarVoz(); falar("Voz ativada.", { repetirApos: 0, interromper: true, mesmoPausado: true }); }
   } catch (e) {
     $("statusCfg").textContent = `Falhou: ${e.message}`;
   }
 });
 
 /* ---------- cadastro de rostos ---------- */
-$("btnCadastroFacial").addEventListener("click", () => $("painelCadastro").classList.remove("oculto"));
-$("btnFecharCadastro").addEventListener("click", () => $("painelCadastro").classList.add("oculto"));
-$("btnFecharCadastro2").addEventListener("click", () => location.reload());
+$("btnCadastroFacial").addEventListener("click", () => {
+  pausarReconhecimento();
+  $("painelCadastro").classList.remove("oculto");
+});
+// Sai do cadastro de rostos devolvendo a câmera e parando o teste. Sem
+// liberar a câmera aqui, ela continua ligada atrás do painel e disputa o
+// aparelho com o reconhecimento do ponto.
+function fecharCadastro({ voltarParaConfig }) {
+  testando = false;
+  $("btnTestar").textContent = "Testar reconhecimento";
+  $("resultadoTeste").classList.add("oculto");
+
+  const video = $("videoCad");
+  try { video.srcObject?.getTracks().forEach(t => t.stop()); video.srcObject = null; } catch { /* já estava parada */ }
+
+  // Volta ao começo do painel: quem entrar de novo passa pelo login.
+  estado.tokenAdmin = null;
+  $("areaCadastro").classList.add("oculto");
+  $("loginCadastro").classList.remove("oculto");
+  $("cadSenha").value = "";
+  $("statusCadastro").textContent = "";
+  $("painelCadastro").classList.add("oculto");
+
+  if (voltarParaConfig) {
+    $("painelConfig").classList.remove("oculto");
+  } else {
+    $("painelConfig").classList.add("oculto");
+    retomarReconhecimento();
+  }
+}
+
+$("btnFecharCadastro").addEventListener("click", () => fecharCadastro({ voltarParaConfig: true }));
+$("btnFecharCadastro2").addEventListener("click", () => fecharCadastro({ voltarParaConfig: true }));
+$("btnVoltarPonto").addEventListener("click", () => fecharCadastro({ voltarParaConfig: false }));
 
 $("btnEntrarCadastro").addEventListener("click", async () => {
   try {
@@ -1309,6 +1413,11 @@ $("btnCapturar").addEventListener("click", async () => {
     return;
   }
 
+  if (![...media].every(Number.isFinite)) {
+    $("statusCadastro").textContent = "A captura gerou valores inválidos. Tente de novo com mais luz.";
+    return;
+  }
+
   const colaboradorId = $("selColaborador").value;
   const pessoa = estado.colaboradores.find(c => String(c.id) === String(colaboradorId));
   // Perfis anteriores são mantidos: é assim que se cadastra a mesma pessoa
@@ -1320,7 +1429,12 @@ $("btnCapturar").addEventListener("click", async () => {
   })();
   const adicionar = anteriores.length > 0 &&
     window.confirm(`${pessoa.nome} já tem ${anteriores.length} perfil(is) de rosto.\n\nOK = adicionar este como perfil novo (ex.: com óculos)\nCancelar = substituir tudo pelo novo`);
-  const perfis = (adicionar ? anteriores : []).concat([Array.from(media)]).slice(-5);
+  // Só listas de números vão para o servidor: Float32Array cru vira objeto
+  // ao passar por JSON e quebra a comparação depois.
+  const anterioresLimpos = anteriores
+    .map(v => (Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : null)))
+    .filter(v => Array.isArray(v) && v.length >= 32 && v.every(n => typeof n === "number" && Number.isFinite(n)));
+  const perfis = (adicionar ? anterioresLimpos : []).concat([Array.from(media)]).slice(-5);
   try {
     const resposta = await fetch(`${estado.cfg.api}/ponto/biometria/${colaboradorId}`, {
       method: "PUT",
@@ -1408,13 +1522,18 @@ $("btnTestar").addEventListener("click", async () => {
       const ordenado = [...porPessoa.values()].sort((a, b) => a.dist - b.dist).slice(0, 5);
       const limiar = Number(estado.cfg.limiar);
 
+      const invalidos = estado.rostosInvalidos || [];
+      const aviso = invalidos.length
+        ? `\n\nCadastro de rosto ilegível (precisa recadastrar): ${invalidos.join(", ")}`
+        : "";
+
       $("resultadoTeste").textContent = ordenado.length
         ? `Rostos carregados no tablet: ${rostosConhecidos.length} perfis de ${porPessoa.size} pessoas\n` +
           `Limiar atual: ${limiar.toFixed(2)} (aceita abaixo disso)\n\n` +
           ordenado.map((o, i) =>
             `${i + 1}. ${o.nome.padEnd(32)} ${o.dist.toFixed(3)}  ${o.dist <= limiar ? "ACEITA" : "recusa"}`
-          ).join("\n")
-        : "Nenhum rosto cadastrado chegou a este tablet. Toque em Salvar e sincronizar na configuração.";
+          ).join("\n") + aviso
+        : "Nenhum rosto válido chegou a este tablet. Toque em Salvar e sincronizar na configuração." + aviso;
     }
     await new Promise(r => setTimeout(r, 700));
   }

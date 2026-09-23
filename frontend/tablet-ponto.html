@@ -158,6 +158,21 @@
   <input id="cfgLimiar" type="number" step="0.01" min="0.3" max="0.8" value="0.45">
   <p class="ajuda">Menor = mais rigoroso, mais recusas. Maior = mais fácil confundir pessoas parecidas. Ajuste no local, com gente de verdade.</p>
 
+  <label style="display:flex; align-items:center; gap:10px; margin-top:16px;">
+    <input type="checkbox" id="cfgPiscada" style="width:auto;"> Exigir piscada antes de aceitar o rosto
+  </label>
+  <p class="ajuda">
+    Desligar acelera o registro, mas o tablet passa a aceitar uma foto do colega na tela de um celular.
+    Só desligue se a piscada não estiver funcionando e o PIN não der conta do movimento.
+  </p>
+
+  <label style="display:flex; align-items:center; gap:10px;">
+    <input type="checkbox" id="cfgDiagnostico" style="width:auto;"> Mostrar medidas na tela (ajuste)
+  </label>
+  <p class="ajuda">
+    Exibe a abertura do olho e a distância do rosto reconhecido. Use para calibrar no local e depois desligue.
+  </p>
+
   <div class="aviso-lgpd">
     Biometria facial é dado pessoal sensível. Este aparelho calcula o vetor do rosto e envia só ele — a imagem
     não é gravada nem transmitida. Cada colaborador precisa ter assinado o termo de consentimento, e quem não
@@ -230,8 +245,12 @@
 const cfgPadrao = {
   api: "",
   token: "",
-  modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model",
+  modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.3/model",
   limiar: 0.45,
+  exigirPiscada: true,
+  // Mostra na tela a medida do olho e a distância do rosto. Serve pra
+  // ajustar os limites no local, com as pessoas de verdade.
+  diagnostico: false,
 };
 
 const estado = {
@@ -240,6 +259,8 @@ const estado = {
   deslocamentoRelogio: 0,   // ms entre o relógio do servidor e o do tablet
   fila: [],
   modo: "facial",
+  rostoDesde: 0,
+  ultimaMedidaOlho: null,
   modelosProntos: false,
   ocupado: false,
   pin: "",
@@ -436,20 +457,47 @@ function distancia(a, b) {
 
 // Vivacidade: exige uma piscada antes de aceitar. Não resolve tudo, mas
 // derruba o truque mais comum, que é mostrar a foto do colega no celular.
+//
+// Duas lições da primeira versão, que não funcionava:
+//  - limiar fixo não serve. A abertura do olho muda com a pessoa, com a
+//    distância da câmera e com a luz. Agora comparamos com a abertura
+//    normal daquele rosto, medida nos últimos segundos.
+//  - de nada adianta a conta certa se o app só olha 3 quadros por segundo.
+//    Uma piscada dura menos que isso, então a detecção de piscada roda num
+//    laço rápido, sem calcular o vetor do rosto (que é a parte lenta).
 function proporcaoOlho(pontos) {
   const d = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
   return (d(pontos[1], pontos[5]) + d(pontos[2], pontos[4])) / (2 * d(pontos[0], pontos[3]));
 }
 
+let referenciaOlhoAberto = null;   // abertura normal deste rosto
+let olhoFechadoDesde = 0;
+
 function avaliarPiscada(landmarks) {
   const razao = (proporcaoOlho(landmarks.getLeftEye()) + proporcaoOlho(landmarks.getRightEye())) / 2;
   const agoraMs = Date.now();
-  if (razao < 0.22) {
-    olhosFechadosEm = agoraMs;
-  } else if (olhosFechadosEm && agoraMs - olhosFechadosEm < 800) {
-    piscouRecentemente = true;
-    olhosFechadosEm = 0;
-    setTimeout(() => { piscouRecentemente = false; }, 4000);
+
+  // Vai aprendendo a abertura normal: sobe rápido, desce devagar, para uma
+  // piscada não virar a nova referência.
+  if (referenciaOlhoAberto === null) referenciaOlhoAberto = razao;
+  else if (razao > referenciaOlhoAberto) referenciaOlhoAberto = razao * 0.3 + referenciaOlhoAberto * 0.7;
+  else referenciaOlhoAberto = razao * 0.02 + referenciaOlhoAberto * 0.98;
+
+  estado.ultimaMedidaOlho = { razao, referencia: referenciaOlhoAberto };
+
+  // Fechou quando cai bem abaixo da própria referência.
+  const limite = referenciaOlhoAberto * 0.72;
+  if (razao < limite) {
+    if (!olhoFechadoDesde) olhoFechadoDesde = agoraMs;
+  } else if (olhoFechadoDesde) {
+    const duracao = agoraMs - olhoFechadoDesde;
+    olhoFechadoDesde = 0;
+    // Piscada de verdade: fecha e abre rápido. Olho fechado por muito tempo
+    // é pessoa de olhos fechados, não piscada.
+    if (duracao >= 60 && duracao <= 900) {
+      piscouRecentemente = true;
+      setTimeout(() => { piscouRecentemente = false; }, 6000);
+    }
   }
   return piscouRecentemente;
 }
@@ -464,6 +512,9 @@ async function iniciarCamera(elemento) {
   return stream;
 }
 
+// Fase 1 — rápida: só detecta rosto e marcos, para conseguir enxergar a
+// piscada. Sem o cálculo do vetor aqui, o laço roda várias vezes por
+// segundo em vez de 3.
 async function lacoFacial() {
   const video = $("video");
   const moldura = $("moldura");
@@ -476,37 +527,66 @@ async function lacoFacial() {
   try {
     const deteccao = await faceapi
       .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+      .withFaceLandmarks();
 
     if (!deteccao) {
       moldura.className = "moldura";
       instrucao.textContent = "Posicione o rosto na moldura";
+      referenciaOlhoAberto = null;   // outro rosto, outra referência
+      estado.rostoDesde = 0;
     } else {
-      const vivo = avaliarPiscada(deteccao.landmarks);
+      if (!estado.rostoDesde) estado.rostoDesde = Date.now();
+      const vivo = estado.cfg.exigirPiscada === false ? true : avaliarPiscada(deteccao.landmarks);
+
       if (!vivo) {
         moldura.className = "moldura vivacidade";
-        instrucao.textContent = "Pisque os olhos para confirmar";
+        const segundos = Math.floor((Date.now() - estado.rostoDesde) / 1000);
+        instrucao.textContent = segundos > 10
+          ? "Pisque os olhos — se não funcionar, use o PIN"
+          : "Pisque os olhos para confirmar";
+        if (estado.cfg.diagnostico) {
+          const m = estado.ultimaMedidaOlho || {};
+          instrucao.textContent += `  [olho ${m.razao?.toFixed(3)} / normal ${m.referencia?.toFixed(3)}]`;
+        }
       } else {
+        // Fase 2 — só agora calcula o vetor e compara com os cadastrados.
         moldura.className = "moldura detectado";
-        let melhor = null;
-        for (const conhecido of (rostosConhecidos || [])) {
-          const d = distancia(deteccao.descriptor, conhecido.vetor);
-          if (!melhor || d < melhor.d) melhor = { d, colaborador: conhecido.colaborador };
-        }
-        if (melhor && melhor.d <= Number(estado.cfg.limiar)) {
-          estado.ocupado = true;
-          piscouRecentemente = false;
-          registrarBatida(melhor.colaborador, "facial");
-        } else {
-          instrucao.textContent = "Rosto não reconhecido — use o PIN";
-        }
+        instrucao.textContent = "Identificando…";
+        await identificarRosto(video, instrucao);
       }
     }
   } catch (e) {
     console.warn("Falha no reconhecimento:", e.message);
   }
-  setTimeout(lacoFacial, 250);
+  // Laço curto: é isso que permite pegar uma piscada de 150 ms.
+  setTimeout(lacoFacial, 80);
+}
+
+async function identificarRosto(video, instrucao) {
+  const completa = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!completa) return;
+
+  let melhor = null;
+  for (const conhecido of (rostosConhecidos || [])) {
+    const d = distancia(completa.descriptor, conhecido.vetor);
+    if (!melhor || d < melhor.d) melhor = { d, colaborador: conhecido.colaborador };
+  }
+
+  if (melhor && melhor.d <= Number(estado.cfg.limiar)) {
+    estado.ocupado = true;
+    piscouRecentemente = false;
+    referenciaOlhoAberto = null;
+    estado.rostoDesde = 0;
+    registrarBatida(melhor.colaborador, "facial");
+  } else {
+    instrucao.textContent = (rostosConhecidos || []).length
+      ? `Rosto não reconhecido — use o PIN${estado.cfg.diagnostico && melhor ? ` [distância ${melhor.d.toFixed(3)}]` : ""}`
+      : "Nenhum rosto cadastrado ainda — use o PIN";
+  }
 }
 
 /* ---------- PIN ---------- */
@@ -568,6 +648,8 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgToken").value = estado.cfg.token;
   $("cfgModelos").value = estado.cfg.modelos;
   $("cfgLimiar").value = estado.cfg.limiar;
+  $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
+  $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
   $("painelConfig").classList.remove("oculto");
 });
 $("btnFecharCfg").addEventListener("click", () => $("painelConfig").classList.add("oculto"));
@@ -578,6 +660,8 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     token: $("cfgToken").value.trim(),
     modelos: $("cfgModelos").value.trim() || cfgPadrao.modelos,
     limiar: Number($("cfgLimiar").value) || cfgPadrao.limiar,
+    exigirPiscada: $("cfgPiscada").checked,
+    diagnostico: $("cfgDiagnostico").checked,
   };
   localStorage.setItem(CHAVE_CFG, JSON.stringify(estado.cfg));
   $("statusCfg").textContent = "Sincronizando…";

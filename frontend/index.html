@@ -47,6 +47,7 @@ function Eye(props) { return <IconBase {...props}><path d="M1 12s4-8 11-8 11 8 1
 function EyeOff(props) { return <IconBase {...props}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.7 19.7 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.5 19.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconBase>; }
 function Shield(props) { return <IconBase {...props}><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></IconBase>; }
 function Settings(props) { return <IconBase {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></IconBase>; }
+function Clock(props) { return <IconBase {...props}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></IconBase>; }
 function MoreVertical(props) { return <IconBase {...props}><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></IconBase>; }
 
 </script>
@@ -1757,6 +1758,377 @@ function LoginScreen({ onLogin }) {
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+// ---------- Controle de ponto ----------
+// O espelho mostra a hora no fuso da operação, não no fuso de quem está
+// olhando. Sem isso, o RH em outro estado veria a batida com uma hora de
+// diferença — e num espelho de ponto isso vira discussão trabalhista.
+// Deve acompanhar o TZ_FISCAL configurado no backend.
+const FUSO_OPERACAO = "America/Cuiaba";
+
+const horaPonto = (iso) => new Date(iso).toLocaleTimeString("pt-BR", {
+  timeZone: FUSO_OPERACAO, hour: "2-digit", minute: "2-digit",
+});
+const diaPonto = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO_OPERACAO });
+
+// Três frentes, na ordem em que o RH usa: os tablets (que geram as batidas),
+// as pessoas (PIN e biometria) e o espelho (o que foi registrado).
+
+function PontoView() {
+  const [aba, setAba] = useState("espelho");
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#eaf1f6", color: "#1F3B57" }}>
+            <Clock size={20} />
+          </div>
+          <div>
+            <h2>Controle de ponto</h2>
+            <p className="subtle">Registros, pessoas e tablets</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="cte-abas" style={{ marginBottom: 18, borderBottom: "0.5px solid #e5e3da" }}>
+        <button type="button" className="cte-aba" aria-selected={aba === "espelho"} onClick={() => setAba("espelho")}>Espelho de ponto</button>
+        <button type="button" className="cte-aba" aria-selected={aba === "pessoas"} onClick={() => setAba("pessoas")}>Pessoas</button>
+        <button type="button" className="cte-aba" aria-selected={aba === "tablets"} onClick={() => setAba("tablets")}>Tablets</button>
+      </div>
+
+      {aba === "espelho" && <PontoEspelho />}
+      {aba === "pessoas" && <PontoPessoas />}
+      {aba === "tablets" && <PontoTablets />}
+    </div>
+  );
+}
+
+function PontoTablets() {
+  const [reps, setReps] = useState(null);
+  const [erro, setErro] = useState("");
+  const [novo, setNovo] = useState({ identificador: "", descricao: "", localizacao: "" });
+  const [tokenNovo, setTokenNovo] = useState(null);
+  const [integridade, setIntegridade] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try { setReps(await apiRequest("/ponto/reps")); }
+    catch (e) { setErro(e.message); setReps([]); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const cadastrar = async () => {
+    if (!novo.identificador.trim()) { setErro("Dê um nome ao tablet (ex.: TABLET-PATIO-01)."); return; }
+    setErro("");
+    try {
+      const rep = await apiRequest("/ponto/reps", { method: "POST", body: JSON.stringify(novo) });
+      // O token aparece uma vez só: é a credencial do aparelho.
+      setTokenNovo(rep);
+      setNovo({ identificador: "", descricao: "", localizacao: "" });
+      carregar();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  };
+
+  const alternarAtivo = async (rep) => {
+    const acao = rep.ativo ? "desativar" : "reativar";
+    if (!window.confirm(`Deseja ${acao} o ${rep.identificador}?${rep.ativo ? "\n\nO aparelho para de registrar imediatamente." : ""}`)) return;
+    try {
+      await apiRequest(`/ponto/reps/${rep.id}`, { method: "PUT", body: JSON.stringify({ ativo: !rep.ativo }) });
+      carregar();
+    } catch (e) { alert(`Não foi possível: ${e.message}`); }
+  };
+
+  const conferir = async (rep) => {
+    setIntegridade({ rep: rep.identificador, carregando: true });
+    try {
+      setIntegridade({ ...(await apiRequest(`/ponto/integridade/${rep.identificador}`)), carregando: false });
+    } catch (e) { setIntegridade({ rep: rep.identificador, erro: e.message }); }
+  };
+
+  return (
+    <div>
+      <div className="nf-section">
+        <h4 className="nf-section-title">Cadastrar um tablet</h4>
+        <div className="nf-grid-3">
+          <div className="field-group">
+            <label className="field-label">Identificação<span className="req">*</span></label>
+            <input value={novo.identificador} placeholder="TABLET-PATIO-01"
+              onChange={e => setNovo(n => ({ ...n, identificador: e.target.value.toUpperCase() }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Descrição</label>
+            <input value={novo.descricao} placeholder="Tablet da portaria"
+              onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Local</label>
+            <input value={novo.localizacao} placeholder="Pátio de cavaco"
+              onChange={e => setNovo(n => ({ ...n, localizacao: e.target.value }))} />
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={cadastrar}>Cadastrar tablet</button>
+        {erro && <p className="error-text">{erro}</p>}
+      </div>
+
+      {tokenNovo && (
+        <div className="nf-section" style={{ background: "#eaf3de", borderRadius: 10, padding: 14 }}>
+          <h4 className="nf-section-title" style={{ marginTop: 0 }}>Token do {tokenNovo.identificador}</h4>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Copie agora e guarde: por segurança, ele não é exibido de novo. É o que se digita na
+            configuração do app do tablet, junto com o endereço do sistema.
+          </p>
+          <code style={{ display: "block", wordBreak: "break-all", background: "#fff", padding: "10px 12px",
+                         borderRadius: 8, fontSize: 13, margin: "8px 0" }}>{tokenNovo.token}</code>
+          <button className="btn" onClick={() => { navigator.clipboard?.writeText(tokenNovo.token); }}>Copiar</button>
+          <button className="btn" onClick={() => setTokenNovo(null)} style={{ marginLeft: 8 }}>Já guardei</button>
+        </div>
+      )}
+
+      {reps === null ? <p className="hint">Carregando…</p> : reps.length === 0 ? (
+        <p className="hint">Nenhum tablet cadastrado. Cadastre um acima para liberar o registro de ponto.</p>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr><th>Identificação</th><th>Local</th><th>Batidas</th><th>Último NSR</th><th>Situação</th><th></th></tr>
+          </thead>
+          <tbody>
+            {reps.map(rep => (
+              <tr key={rep.id} style={rep.ativo ? undefined : { opacity: 0.55 }}>
+                <td><strong>{rep.identificador}</strong>{rep.descricao && <span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{rep.descricao}</span>}</td>
+                <td>{rep.localizacao || "—"}</td>
+                <td>{rep._count?.marcacoes ?? 0}</td>
+                <td>{rep.ultimoNsr}</td>
+                <td>{rep.ativo ? "Ativo" : "Desativado"}</td>
+                <td className="actions-col">
+                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5 }} onClick={() => conferir(rep)}>Conferir integridade</button>
+                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5, marginLeft: 6 }} onClick={() => alternarAtivo(rep)}>
+                    {rep.ativo ? "Desativar" : "Reativar"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {integridade && (
+        <div className="nf-section">
+          <h4 className="nf-section-title">Integridade — {integridade.rep}</h4>
+          {integridade.carregando && <p className="hint">Conferindo a corrente de registros…</p>}
+          {integridade.erro && <p className="error-text">{integridade.erro}</p>}
+          {integridade.integro === true && (
+            <p style={{ color: "#00732F", fontWeight: 600 }}>
+              {integridade.total} marcações conferidas: nenhuma alteração detectada.
+            </p>
+          )}
+          {integridade.integro === false && (
+            <>
+              <p className="error-text">Foram encontrados problemas na corrente de registros:</p>
+              <ul>{integridade.problemas.map((p, i) => <li key={i}>NSR {p.nsr}: {p.problema}</li>)}</ul>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PontoPessoas() {
+  const [pessoas, setPessoas] = useState(null);
+  const [erro, setErro] = useState("");
+
+  const carregar = useCallback(async () => {
+    try { setPessoas(await apiRequest("/ponto/colaboradores")); }
+    catch (e) { setErro(e.message); setPessoas([]); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const definirPin = async (pessoa) => {
+    const pin = window.prompt(`PIN de ponto para ${pessoa.nome} (4 a 6 dígitos):`);
+    if (!pin) return;
+    if (!/^\d{4,6}$/.test(pin)) { alert("O PIN deve ter de 4 a 6 dígitos."); return; }
+    try {
+      await apiRequest(`/ponto/pin/${pessoa.id}`, { method: "PUT", body: JSON.stringify({ pin }) });
+      alert(`PIN definido. Avise ${pessoa.nome} e oriente a não compartilhar — a batida é pessoal.`);
+      carregar();
+    } catch (e) { alert(`Não foi possível: ${e.message}`); }
+  };
+
+  const revogarBiometria = async (pessoa) => {
+    if (!window.confirm(`Remover a biometria facial de ${pessoa.nome}?\n\nEla volta a bater ponto pelo PIN. O colaborador pode pedir isso a qualquer momento.`)) return;
+    try {
+      await apiRequest(`/ponto/biometria/${pessoa.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(`Não foi possível: ${e.message}`); }
+  };
+
+  if (pessoas === null) return <p className="hint">Carregando…</p>;
+  if (erro) return <p className="error-text">{erro}</p>;
+
+  return (
+    <div>
+      <p className="hint">
+        O PIN é a forma garantida de marcar o ponto: quem não tiver rosto cadastrado, ou não quiser
+        fornecer a biometria, precisa ter um. O rosto se cadastra no próprio tablet.
+      </p>
+      <table className="data-table">
+        <thead>
+          <tr><th>Colaborador</th><th>Cargo</th><th>PIN</th><th>Rosto</th><th></th></tr>
+        </thead>
+        <tbody>
+          {pessoas.map(p => (
+            <tr key={p.id}>
+              <td><strong>{p.nome}</strong><span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{p.cpf}</span></td>
+              <td>{p.cargo || "—"}</td>
+              <td>{p.temPin
+                ? <span style={{ color: "#00732F", fontWeight: 600 }}>definido</span>
+                : <span style={{ color: "#b57a12", fontWeight: 600 }}>sem PIN</span>}</td>
+              <td>{p.temBiometria
+                ? <span title={p.consentimentoEm ? `Consentimento em ${new Date(p.consentimentoEm).toLocaleDateString("pt-BR")}` : ""}>cadastrado</span>
+                : "—"}</td>
+              <td className="actions-col">
+                <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5 }} onClick={() => definirPin(p)}>
+                  {p.temPin ? "Trocar PIN" : "Definir PIN"}
+                </button>
+                {p.temBiometria && (
+                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5, marginLeft: 6 }} onClick={() => revogarBiometria(p)}>
+                    Remover rosto
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PontoEspelho() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const primeiroDia = `${hoje.slice(0, 8)}01`;
+
+  const [pessoas, setPessoas] = useState([]);
+  const [filtro, setFiltro] = useState({ colaboradorId: "", de: primeiroDia, ate: hoje });
+  const [marcacoes, setMarcacoes] = useState(null);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    apiRequest("/ponto/colaboradores").then(setPessoas).catch(() => setPessoas([]));
+  }, []);
+
+  const buscar = useCallback(async () => {
+    setErro("");
+    try {
+      const params = new URLSearchParams();
+      if (filtro.colaboradorId) params.set("colaboradorId", filtro.colaboradorId);
+      if (filtro.de) params.set("de", filtro.de);
+      if (filtro.ate) params.set("ate", filtro.ate);
+      setMarcacoes(await apiRequest(`/ponto/marcacoes?${params}`));
+    } catch (e) { setErro(e.message); setMarcacoes([]); }
+  }, [filtro]);
+
+  useEffect(() => { buscar(); }, []);
+
+  // Agrupa por pessoa e dia, que é como o espelho é lido e conferido.
+  const porDia = {};
+  for (const m of (marcacoes || [])) {
+    const dia = diaPonto(m.dataHora);
+    const chave = `${m.colaborador.id}|${dia}`;
+    (porDia[chave] = porDia[chave] || { colaborador: m.colaborador, dia, batidas: [] }).batidas.push(m);
+  }
+  const linhas = Object.values(porDia);
+
+  const registrarTratamento = async (colaboradorId, dia) => {
+    const tipo = window.prompt("Tipo de tratamento: inclusao, desconsideracao ou pre_assinalado", "inclusao");
+    if (!tipo) return;
+    const hora = window.prompt(`Hora do registro no dia ${dia} (formato 08:15):`, "08:00");
+    if (!hora) return;
+    const motivo = window.prompt("Motivo (fica registrado com seu nome):");
+    if (!motivo || motivo.trim().length < 5) { alert("Informe o motivo."); return; }
+
+    const [d, m, a] = dia.split("/");
+    try {
+      await apiRequest("/ponto/tratamentos", {
+        method: "POST",
+        body: JSON.stringify({ tipo, colaboradorId, dataHora: `${a}-${m}-${d}T${hora}:00`, motivo }),
+      });
+      buscar();
+    } catch (e) { alert(`Não foi possível: ${e.message}`); }
+  };
+
+  return (
+    <div>
+      <div className="nf-grid-4" style={{ marginBottom: 16 }}>
+        <div className="field-group">
+          <label className="field-label">Colaborador</label>
+          <select value={filtro.colaboradorId} onChange={e => setFiltro(f => ({ ...f, colaboradorId: e.target.value }))}>
+            <option value="">Todos</option>
+            {pessoas.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+        <div className="field-group">
+          <label className="field-label">De</label>
+          <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
+        </div>
+        <div className="field-group">
+          <label className="field-label">Até</label>
+          <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
+        </div>
+        <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+          <button className="btn btn-primary" onClick={buscar}>Buscar</button>
+        </div>
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+      {marcacoes === null && <p className="hint">Carregando…</p>}
+      {marcacoes?.length === 0 && <p className="hint">Nenhuma marcação no período.</p>}
+
+      {linhas.length > 0 && (
+        <table className="data-table">
+          <thead>
+            <tr><th>Colaborador</th><th>Dia</th><th>Batidas</th><th>Origem</th><th></th></tr>
+          </thead>
+          <tbody>
+            {linhas.map(linha => (
+              <tr key={`${linha.colaborador.id}-${linha.dia}`}>
+                <td><strong>{linha.colaborador.nome}</strong></td>
+                <td>{linha.dia}</td>
+                <td>
+                  {linha.batidas.map(b => {
+                    return (
+                      <span key={b.id} title={`NSR ${b.nsr} · ${b.rep.identificador} · ${b.metodoIdentificacao}`}
+                        style={{ display: "inline-block", marginRight: 10, fontVariantNumeric: "tabular-nums" }}>
+                        {horaPonto(b.dataHora)}
+                        {b.tratamentos?.length > 0 && <span style={{ color: "#b57a12" }} title="Tem tratamento">*</span>}
+                      </span>
+                    );
+                  })}
+                </td>
+                <td className="subtle" style={{ fontSize: 11.5 }}>
+                  {[...new Set(linha.batidas.map(b => b.metodoIdentificacao))].join(", ")}
+                  {linha.batidas.some(b => b.origemOffline) && " · offline"}
+                </td>
+                <td className="actions-col">
+                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5 }}
+                    onClick={() => registrarTratamento(linha.colaborador.id, linha.dia)}>
+                    Tratar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <p className="hint" style={{ marginTop: 14 }}>
+        As batidas não podem ser alteradas nem apagadas — é exigência da Portaria 671/2021. Correções entram
+        como tratamento, ao lado do registro original, com autor e motivo. O asterisco marca o dia que tem
+        tratamento.
+      </p>
     </div>
   );
 }
@@ -4514,6 +4886,8 @@ function ErpBiomassa() {
     { key: "cte", label: "CTe", icon: Truck },
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
+    { key: "ponto", label: "Ponto", icon: Clock },
+    { divider: true },
     ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];
 
@@ -4847,6 +5221,7 @@ function ErpBiomassa() {
         {view === "notasFiscais" && <NotasFiscaisView />}
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
+        {view === "ponto" && <PontoView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>
     </div>

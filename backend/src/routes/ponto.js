@@ -324,8 +324,51 @@ router.get("/reps", asyncHandler(async (req, res) => {
   const reps = await prisma.rep.findMany({
     where: { empresaId: req.usuario.empresaId ?? undefined },
     orderBy: { identificador: "asc" },
+    select: {
+      id: true, identificador: true, descricao: true, localizacao: true,
+      ultimoNsr: true, ativo: true, criadoEm: true,
+      _count: { select: { marcacoes: true } },
+    },
   });
+  // O token só aparece na criação: depois disso ele não é mais exibido,
+  // como qualquer credencial.
   res.json(reps);
+}));
+
+// Situação de cada colaborador no ponto: quem já tem PIN, quem tem rosto
+// cadastrado e desde quando. É a tela de acompanhamento do RH.
+router.get("/colaboradores", asyncHandler(async (req, res) => {
+  const colaboradores = await prisma.colaborador.findMany({
+    where: { ativo: true, empresaId: req.usuario.empresaId ?? undefined },
+    select: {
+      id: true, nome: true, cpf: true, cargo: true, setor: true, pinPontoHash: true,
+      biometriaFacial: { select: { consentimentoEm: true, atualizadoEm: true, versaoModelo: true } },
+    },
+    orderBy: { nome: "asc" },
+  });
+
+  res.json(colaboradores.map((c) => ({
+    id: c.id, nome: c.nome, cpf: c.cpf, cargo: c.cargo, setor: c.setor,
+    temPin: Boolean(c.pinPontoHash),
+    // O vetor em si nunca sai daqui — a tela só precisa saber se existe.
+    temBiometria: Boolean(c.biometriaFacial),
+    biometriaEm: c.biometriaFacial?.atualizadoEm || null,
+    consentimentoEm: c.biometriaFacial?.consentimentoEm || null,
+  })));
+}));
+
+// Ativar ou desativar um tablet (o aparelho sumiu, foi para manutenção...).
+router.put("/reps/:id", asyncHandler(async (req, res) => {
+  const { ativo, descricao, localizacao } = req.body;
+  const rep = await prisma.rep.update({
+    where: { id: Number(req.params.id) },
+    data: {
+      ativo: typeof ativo === "boolean" ? ativo : undefined,
+      descricao: descricao ?? undefined,
+      localizacao: localizacao ?? undefined,
+    },
+  });
+  res.json({ ...rep, token: undefined });
 }));
 
 router.post("/reps", asyncHandler(async (req, res) => {

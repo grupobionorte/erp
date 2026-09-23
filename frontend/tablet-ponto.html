@@ -154,6 +154,14 @@
   <input id="cfgModelos" placeholder="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model">
   <p class="ajuda">Os modelos são baixados uma vez e ficam no cache do navegador. Sem eles, o tablet trabalha só com PIN.</p>
 
+  <label>Resolução da identificação</label>
+  <select id="cfgResolucao">
+    <option value="320">320 — mais rápido</option>
+    <option value="416">416 — equilibrado</option>
+    <option value="512">512 — mais preciso, mais lento</option>
+  </select>
+  <p class="ajuda">Se o registro estiver demorando, baixe para 320 antes de mexer em qualquer outra coisa.</p>
+
   <label>Distância máxima para aceitar o rosto</label>
   <input id="cfgLimiar" type="number" step="0.01" min="0.3" max="0.8" value="0.45">
   <p class="ajuda">Menor = mais rigoroso, mais recusas. Maior = mais fácil confundir pessoas parecidas. Ajuste no local, com gente de verdade.</p>
@@ -248,6 +256,9 @@ const cfgPadrao = {
   modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.3/model",
   limiar: 0.45,
   exigirPiscada: true,
+  // Resolução da identificação. Maior = mais preciso e mais lento. Em
+  // tablet fraco, 320 costuma ser o ponto de equilíbrio.
+  resolucao: 416,
   // Mostra na tela a medida do olho e a distância do rosto. Serve pra
   // ajustar os limites no local, com as pessoas de verdade.
   diagnostico: false,
@@ -261,6 +272,10 @@ const estado = {
   modo: "facial",
   rostoDesde: 0,
   ultimaMedidaOlho: null,
+  candidato: null,
+  msDeteccao: 0,
+  msIdentificacao: 0,
+  backendTf: null,
   modelosProntos: false,
   ocupado: false,
   pin: "",
@@ -431,11 +446,30 @@ let olhosFechadosEm = 0;
 async function carregarModelos() {
   if (typeof faceapi === "undefined") return false;
   try {
+    // Sem GPU o reconhecimento fica dez vezes mais lento. Num tablet, essa
+    // é a diferença entre um segundo e dez.
+    try {
+      await faceapi.tf.setBackend("webgl");
+      await faceapi.tf.ready();
+    } catch { /* sem WebGL, segue no que estiver disponível */ }
+    estado.backendTf = faceapi.tf.getBackend();
+
     const url = estado.cfg.modelos;
     await faceapi.nets.tinyFaceDetector.loadFromUri(url);
     await faceapi.nets.faceLandmark68Net.loadFromUri(url);
     await faceapi.nets.faceRecognitionNet.loadFromUri(url);
     estado.modelosProntos = true;
+
+    // Aquecimento: a primeira inferência é sempre a mais lenta porque
+    // compila os shaders. Melhor pagar esse preço agora que na primeira
+    // pessoa da fila.
+    try {
+      const tela = document.createElement("canvas");
+      tela.width = 320; tela.height = 240;
+      await faceapi.detectSingleFace(tela, new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+        .withFaceLandmarks().withFaceDescriptor();
+    } catch { /* aquecimento é só otimização */ }
+
     return true;
   } catch (e) {
     console.warn("Modelos não carregaram:", e.message);
@@ -504,7 +538,9 @@ function avaliarPiscada(landmarks) {
 
 async function iniciarCamera(elemento) {
   const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+    // 640x480 basta para o reconhecimento e processa bem mais rápido que
+    // 1280x960 num tablet.
+    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
     audio: false,
   });
   elemento.srcObject = stream;
@@ -512,9 +548,16 @@ async function iniciarCamera(elemento) {
   return stream;
 }
 
-// Fase 1 — rápida: só detecta rosto e marcos, para conseguir enxergar a
-// piscada. Sem o cálculo do vetor aqui, o laço roda várias vezes por
-// segundo em vez de 3.
+// Fase 1 — rápida: detecta rosto e marcos para enxergar a piscada, e ao
+// mesmo tempo dispara a identificação em segundo plano.
+//
+// A versão anterior esperava a piscada para só então identificar, em série.
+// Como identificar custa quase um segundo num tablet, o registro demorava.
+// Agora, enquanto a pessoa se posiciona, o candidato já vai sendo calculado;
+// quando a piscada acontece, normalmente ele já está pronto e a batida sai
+// na hora.
+let identificando = false;
+
 async function lacoFacial() {
   const video = $("video");
   const moldura = $("moldura");
@@ -525,68 +568,118 @@ async function lacoFacial() {
   }
 
   try {
+    const inicio = performance.now();
     const deteccao = await faceapi
       .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
       .withFaceLandmarks();
+    estado.msDeteccao = Math.round(performance.now() - inicio);
 
     if (!deteccao) {
       moldura.className = "moldura";
       instrucao.textContent = "Posicione o rosto na moldura";
-      referenciaOlhoAberto = null;   // outro rosto, outra referência
+      referenciaOlhoAberto = null;
       estado.rostoDesde = 0;
+      estado.candidato = null;
     } else {
       if (!estado.rostoDesde) estado.rostoDesde = Date.now();
+
+      // Identificação em paralelo, sem travar a busca pela piscada.
+      if (!identificando && (!estado.candidato || Date.now() - estado.candidato.em > 1200)) {
+        identificando = true;
+        identificarRosto(video).finally(() => { identificando = false; });
+      }
+
       const vivo = estado.cfg.exigirPiscada === false ? true : avaliarPiscada(deteccao.landmarks);
+      const candidatoFresco = estado.candidato && Date.now() - estado.candidato.em < 3000;
 
       if (!vivo) {
         moldura.className = "moldura vivacidade";
         const segundos = Math.floor((Date.now() - estado.rostoDesde) / 1000);
-        instrucao.textContent = segundos > 10
-          ? "Pisque os olhos — se não funcionar, use o PIN"
-          : "Pisque os olhos para confirmar";
-        if (estado.cfg.diagnostico) {
-          const m = estado.ultimaMedidaOlho || {};
-          instrucao.textContent += `  [olho ${m.razao?.toFixed(3)} / normal ${m.referencia?.toFixed(3)}]`;
-        }
+        instrucao.textContent = candidatoFresco
+          ? `${estado.candidato.colaborador.nome.split(" ")[0]} — pisque para confirmar`
+          : (segundos > 10 ? "Pisque os olhos — se não funcionar, use o PIN" : "Pisque os olhos para confirmar");
+      } else if (candidatoFresco) {
+        // Piscou e o candidato já está calculado: registra imediatamente.
+        moldura.className = "moldura detectado";
+        const { colaborador } = estado.candidato;
+        estado.ocupado = true;
+        estado.candidato = null;
+        piscouRecentemente = false;
+        referenciaOlhoAberto = null;
+        estado.rostoDesde = 0;
+        registrarBatida(colaborador, "facial");
       } else {
-        // Fase 2 — só agora calcula o vetor e compara com os cadastrados.
         moldura.className = "moldura detectado";
         instrucao.textContent = "Identificando…";
-        await identificarRosto(video, instrucao);
+      }
+
+      if (estado.cfg.diagnostico) {
+        instrucao.textContent += `  [${estado.backendTf || "?"} · det ${estado.msDeteccao}ms` +
+          (estado.msIdentificacao ? ` · id ${estado.msIdentificacao}ms` : "") +
+          (estado.candidato ? ` · ${estado.candidato.d.toFixed(3)}` : "") + "]";
       }
     }
   } catch (e) {
     console.warn("Falha no reconhecimento:", e.message);
   }
-  // Laço curto: é isso que permite pegar uma piscada de 150 ms.
   setTimeout(lacoFacial, 80);
 }
 
-async function identificarRosto(video, instrucao) {
+// Duas confirmações seguidas da mesma pessoa antes de registrar: um quadro
+// isolado erra bem mais que dois, e o custo é uma fração de segundo.
+let ultimoCandidato = null;
+
+function melhorCorrespondencia(descritor) {
+  // Guarda os dois melhores: se a diferença entre eles for pequena, os
+  // rostos são parecidos demais e é mais seguro não arriscar.
+  let melhor = null, segundo = null;
+  for (const conhecido of (rostosConhecidos || [])) {
+    const d = distancia(descritor, conhecido.vetor);
+    if (!melhor || d < melhor.d) {
+      if (melhor && melhor.colaborador.id !== conhecido.colaborador.id) segundo = melhor;
+      melhor = { d, colaborador: conhecido.colaborador };
+    } else if ((!segundo || d < segundo.d) && conhecido.colaborador.id !== melhor.colaborador.id) {
+      segundo = { d, colaborador: conhecido.colaborador };
+    }
+  }
+  return { melhor, segundo };
+}
+
+// Calcula o vetor do rosto e guarda o candidato. Não registra nada: quem
+// registra é o laço principal, quando a piscada confirma.
+async function identificarRosto(video) {
+  const inicio = performance.now();
   const completa = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+      inputSize: Number(estado.cfg.resolucao) || 416,
+      scoreThreshold: 0.4,
+    }))
     .withFaceLandmarks()
     .withFaceDescriptor();
+  estado.msIdentificacao = Math.round(performance.now() - inicio);
 
-  if (!completa) return;
+  if (!completa) { estado.candidato = null; return; }
 
-  let melhor = null;
-  for (const conhecido of (rostosConhecidos || [])) {
-    const d = distancia(completa.descriptor, conhecido.vetor);
-    if (!melhor || d < melhor.d) melhor = { d, colaborador: conhecido.colaborador };
+  const { melhor, segundo } = melhorCorrespondencia(completa.descriptor);
+
+  if (!melhor || melhor.d > Number(estado.cfg.limiar)) { estado.candidato = null; return; }
+
+  // Rostos parecidos demais: não arrisca registrar na conta de quem não é.
+  if (segundo && (segundo.d - melhor.d) < 0.06) {
+    estado.candidato = null;
+    return;
   }
 
-  if (melhor && melhor.d <= Number(estado.cfg.limiar)) {
-    estado.ocupado = true;
-    piscouRecentemente = false;
-    referenciaOlhoAberto = null;
-    estado.rostoDesde = 0;
-    registrarBatida(melhor.colaborador, "facial");
-  } else {
-    instrucao.textContent = (rostosConhecidos || []).length
-      ? `Rosto não reconhecido — use o PIN${estado.cfg.diagnostico && melhor ? ` [distância ${melhor.d.toFixed(3)}]` : ""}`
-      : "Nenhum rosto cadastrado ainda — use o PIN";
+  // Confirmação dupla só quando o resultado é apertado. Estando bem dentro
+  // do limite, um quadro basta — e o registro sai num piscar de olhos.
+  const folgado = melhor.d < Number(estado.cfg.limiar) - 0.08;
+  if (!folgado && ultimoCandidato !== melhor.colaborador.id) {
+    ultimoCandidato = melhor.colaborador.id;
+    return;
   }
+  ultimoCandidato = null;
+
+  estado.candidato = { colaborador: melhor.colaborador, d: melhor.d, em: Date.now() };
 }
 
 /* ---------- PIN ---------- */
@@ -648,6 +741,7 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgToken").value = estado.cfg.token;
   $("cfgModelos").value = estado.cfg.modelos;
   $("cfgLimiar").value = estado.cfg.limiar;
+  $("cfgResolucao").value = String(estado.cfg.resolucao || 416);
   $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
   $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
   $("painelConfig").classList.remove("oculto");
@@ -660,6 +754,7 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     token: $("cfgToken").value.trim(),
     modelos: $("cfgModelos").value.trim() || cfgPadrao.modelos,
     limiar: Number($("cfgLimiar").value) || cfgPadrao.limiar,
+    resolucao: Number($("cfgResolucao").value) || 416,
     exigirPiscada: $("cfgPiscada").checked,
     diagnostico: $("cfgDiagnostico").checked,
   };
@@ -732,24 +827,68 @@ function desenharListaCadastro() {
     </div>`).join("");
 }
 
+// Um retrato só não representa a pessoa: luz, ângulo e distância mudam o
+// vetor. Capturamos uma sequência e ficamos com a média — e a média de
+// amostras discordantes é descartada, porque significa captura ruim.
+async function capturarAmostras(quantidade = 6) {
+  const amostras = [];
+  for (let i = 0; i < quantidade; i++) {
+    $("statusCadastro").textContent = `Capturando ${i + 1} de ${quantidade}… mexa um pouco a cabeça`;
+    const d = await faceapi
+      .detectSingleFace($("videoCad"), new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.4 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+    if (d) amostras.push(d.descriptor);
+    await new Promise(r => setTimeout(r, 350));
+  }
+  return amostras;
+}
+
+function mediaDosVetores(amostras) {
+  const media = new Float32Array(amostras[0].length);
+  for (const a of amostras) for (let i = 0; i < media.length; i++) media[i] += a[i] / amostras.length;
+  return media;
+}
+
 $("btnCapturar").addEventListener("click", async () => {
   if (!estado.modelosProntos) { $("statusCadastro").textContent = "Modelos de reconhecimento não carregaram."; return; }
-  $("statusCadastro").textContent = "Capturando…";
-  const deteccao = await faceapi
-    .detectSingleFace($("videoCad"), new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks()
-    .withFaceDescriptor();
 
-  if (!deteccao) { $("statusCadastro").textContent = "Nenhum rosto detectado. Melhore a luz e tente de novo."; return; }
+  const amostras = await capturarAmostras();
+  if (amostras.length < 3) {
+    $("statusCadastro").textContent = "Não consegui capturar o suficiente. Melhore a luz, aproxime o rosto e tente de novo.";
+    return;
+  }
+
+  const media = mediaDosVetores(amostras);
+  // Amostras muito diferentes entre si indicam captura ruim (mexeu demais,
+  // luz péssima, duas pessoas no quadro). Melhor recusar do que cadastrar
+  // um rosto que não vai ser reconhecido depois.
+  const dispersao = Math.max(...amostras.map(a => distancia(a, media)));
+  if (dispersao > 0.35) {
+    $("statusCadastro").textContent =
+      `Captura inconsistente (variação ${dispersao.toFixed(2)}). Fique parado, melhore a luz e repita.`;
+    return;
+  }
 
   const colaboradorId = $("selColaborador").value;
+  const pessoa = estado.colaboradores.find(c => String(c.id) === String(colaboradorId));
+  // Perfis anteriores são mantidos: é assim que se cadastra a mesma pessoa
+  // com e sem óculos, ou na luz da manhã e na da tarde.
+  const anteriores = (() => {
+    const v = pessoa?.vetorFacial;
+    if (!Array.isArray(v) || !v.length) return [];
+    return Array.isArray(v[0]) ? v : [v];
+  })();
+  const adicionar = anteriores.length > 0 &&
+    window.confirm(`${pessoa.nome} já tem ${anteriores.length} perfil(is) de rosto.\n\nOK = adicionar este como perfil novo (ex.: com óculos)\nCancelar = substituir tudo pelo novo`);
+  const perfis = (adicionar ? anteriores : []).concat([Array.from(media)]).slice(-5);
   try {
     const resposta = await fetch(`${estado.cfg.api}/ponto/biometria/${colaboradorId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${estado.tokenAdmin}` },
       body: JSON.stringify({
-        // Só o vetor sai daqui. A imagem fica no aparelho e é descartada.
-        vetor: Array.from(deteccao.descriptor),
+        // Só os vetores saem daqui. A imagem fica no aparelho e é descartada.
+        vetor: perfis,
         versaoModelo: "face-api/tiny+landmark68+recognition",
         consentimentoTexto: $("cadConsentimento").value.trim(),
       }),
@@ -762,7 +901,9 @@ $("btnCapturar").addEventListener("click", async () => {
       throw new Error("A sessão de administrador expirou. Entre de novo.");
     }
     if (!resposta.ok) throw new Error(dados.detalhe || dados.erro || "Erro ao salvar");
-    $("statusCadastro").textContent = "Rosto cadastrado. Sincronizando a lista…";
+    $("statusCadastro").textContent =
+      `Rosto cadastrado com ${amostras.length} amostras (variação ${dispersao.toFixed(2)}). ` +
+      `${perfis.length} perfil(is) guardado(s). Sincronizando…`;
     await sincronizarCarga();
     desenharListaCadastro();
   } catch (e) {

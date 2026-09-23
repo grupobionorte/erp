@@ -605,7 +605,11 @@ const MODULES = {
       cteProximoNumero: r.cteProximoNumero,
       mdfeSerie: r.mdfeSerie,
       mdfeProximoNumero: r.mdfeProximoNumero,
+      ativo: r.ativo !== false,
     }),
+    // Exclusão de empresa é só uma marca: dá pra ver as inativas e trazer
+    // de volta a que foi excluída por engano.
+    permiteReativar: true,
   },
 };
 
@@ -669,17 +673,25 @@ function useApiCollection(moduleKey) {
   const [items, setItems] = useState(null);
   const [erro, setErro] = useState(null);
 
+  const [mostrarInativas, setMostrarInativas] = useState(false);
+
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      const query = config.listQuery ? `?${config.listQuery}` : "";
+      const partes = [config.listQuery, mostrarInativas ? "inativas=1" : null].filter(Boolean);
+      const query = partes.length ? `?${partes.join("&")}` : "";
       const dados = await apiRequest(`${config.apiPath}${query}`);
       setItems(dados.map(config.fromApi));
     } catch (e) {
       setErro(e.message);
       setItems([]);
     }
-  }, [moduleKey]);
+  }, [moduleKey, mostrarInativas]);
+
+  const reativar = useCallback(async (id) => {
+    await apiRequest(`${config.apiPath}/${id}/reativar`, { method: "POST" });
+    await carregar();
+  }, [moduleKey, carregar]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -706,7 +718,7 @@ function useApiCollection(moduleKey) {
     setItems((atual) => atual.filter((it) => it.id !== id));
   }, [moduleKey]);
 
-  return { items, erro, recarregar: carregar, criar, editar, remover };
+  return { items, erro, recarregar: carregar, criar, editar, remover, reativar, mostrarInativas, setMostrarInativas };
 }
 
 // ---------- UI helpers ----------
@@ -1753,7 +1765,7 @@ function ModuleView({ moduleKey }) {
   const config = MODULES[moduleKey];
   const Icon = config.icon;
   const colors = COLOR_MAP[config.color];
-  const { items, erro, recarregar, criar, editar, remover } = useApiCollection(moduleKey);
+  const { items, erro, recarregar, criar, editar, remover, reativar, mostrarInativas, setMostrarInativas } = useApiCollection(moduleKey);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -1782,7 +1794,9 @@ function ModuleView({ moduleKey }) {
     try {
       await remover(id);
     } catch (e) {
-      alert(`Não foi possível excluir: ${e.message}`);
+      // O servidor explica o motivo em "detalhe" (ex.: a empresa tem
+      // lançamentos vinculados e por isso não pode ser excluída).
+      alert([`Não foi possível excluir: ${e.message}`, e.detalhe].filter(Boolean).join("\n\n"));
     }
   };
 
@@ -1795,7 +1809,22 @@ function ModuleView({ moduleKey }) {
           </div>
           <div>
             <h2>{config.label}</h2>
-            <p className="subtle">{items.length} cadastro{items.length !== 1 ? "s" : ""}</p>
+            <p className="subtle">
+              {items.length} cadastro{items.length !== 1 ? "s" : ""}
+              {config.permiteReativar && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    onClick={() => setMostrarInativas(!mostrarInativas)}
+                    style={{ border: "none", background: "none", padding: 0, cursor: "pointer",
+                             color: "#00732F", font: "inherit", textDecoration: "underline" }}
+                  >
+                    {mostrarInativas ? "ocultar excluídas" : "mostrar excluídas"}
+                  </button>
+                </>
+              )}
+            </p>
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
@@ -1837,13 +1866,26 @@ function ModuleView({ moduleKey }) {
           </thead>
           <tbody>
             {filtered.map(item => (
-              <tr key={item.id}>
+              <tr key={item.id} style={item.ativo === false ? { opacity: 0.5 } : undefined}>
                 {config.columns.map(col => (
                   <td key={col}>{COLUNAS_MOEDA.has(col)
                     ? (getPath(item, col) != null && getPath(item, col) !== "" ? `R$ ${formatarMoeda(getPath(item, col))}` : "—")
                     : getPath(item, col) || "—"}</td>
                 ))}
                 <td className="actions-col">
+                  {config.permiteReativar && item.ativo === false && (
+                    <button
+                      className="icon-btn"
+                      title="Trazer de volta"
+                      onClick={async () => {
+                        if (!window.confirm(`Reativar ${item.nome}?`)) return;
+                        try { await reativar(item.id); }
+                        catch (e) { alert(`Não foi possível reativar: ${e.message}`); }
+                      }}
+                    >
+                      ↺
+                    </button>
+                  )}
                   <button className="icon-btn" onClick={() => { setEditing(item); setShowForm(true); }} aria-label="Editar">
                     <Pencil size={15} />
                   </button>

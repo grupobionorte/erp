@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Ponto — Biomassa</title>
+<style>
+  :root {
+    --azul: #1F3B57; --azul-escuro: #16293C;
+    --verde: #00923F; --verde-escuro: #00732F;
+    --amarelo: #E0A800; --vermelho: #C62828;
+    --claro: #F2F1EC; --texto-claro: #EAF1F6;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--azul-escuro); color: var(--texto-claro);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+    padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+    user-select: none;
+  }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: var(--azul); flex-shrink: 0;
+  }
+  .marca { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+  .relogio { font-size: 30px; font-weight: 300; font-variant-numeric: tabular-nums; }
+  .estado { display: flex; align-items: center; gap: 14px; font-size: 12.5px; }
+  .bolinha { width: 9px; height: 9px; border-radius: 50%; background: var(--verde); display: inline-block; margin-right: 6px; }
+  .bolinha.off { background: var(--amarelo); }
+  .bolinha.erro { background: var(--vermelho); }
+  .config-btn { background: none; border: none; color: #9FB4C7; font-size: 20px; cursor: pointer; padding: 6px 10px; }
+
+  main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 18px; min-height: 0; }
+
+  .camera-area { position: relative; width: min(74vh, 92vw); aspect-ratio: 4/3; border-radius: 18px; overflow: hidden; background: #000; }
+  video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  .moldura {
+    position: absolute; inset: 8%; border: 3px solid rgba(255,255,255,0.25); border-radius: 50% / 38%;
+    pointer-events: none; transition: border-color .2s;
+  }
+  .moldura.detectado { border-color: var(--verde); }
+  .moldura.vivacidade { border-color: var(--amarelo); }
+
+  .instrucao {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 20px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.75)); font-size: 19px; text-align: center;
+  }
+
+  .acoes { display: flex; gap: 12px; padding: 0 18px 18px; flex-shrink: 0; }
+  .btn {
+    flex: 1; padding: 20px; border-radius: 14px; border: none; font-size: 19px; font-weight: 600;
+    font-family: inherit; cursor: pointer; background: #2A4763; color: var(--texto-claro);
+  }
+  .btn-verde { background: var(--verde); color: #fff; }
+  .btn:active { transform: scale(0.99); }
+
+  /* Teclado do PIN */
+  .teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: min(420px, 90vw); }
+  .tecla {
+    padding: 22px; font-size: 26px; border-radius: 14px; border: none; background: #2A4763;
+    color: var(--texto-claro); font-family: inherit; cursor: pointer; font-variant-numeric: tabular-nums;
+  }
+  .visor { font-size: 40px; letter-spacing: 14px; text-align: center; margin-bottom: 18px; min-height: 52px; }
+
+  /* Confirmação */
+  .confirmacao {
+    position: fixed; inset: 0; background: var(--verde-escuro); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 30px; z-index: 40;
+  }
+  .confirmacao.erro { background: #8E2020; }
+  .confirmacao .icone { font-size: 68px; }
+  .confirmacao .nome { font-size: 33px; font-weight: 600; }
+  .confirmacao .hora { font-size: 54px; font-weight: 300; font-variant-numeric: tabular-nums; }
+  .confirmacao .detalhe { font-size: 14.5px; opacity: 0.85; max-width: 560px; }
+
+  /* Configuração / cadastro */
+  .painel {
+    position: fixed; inset: 0; background: var(--claro); color: #23231F; z-index: 50;
+    overflow-y: auto; padding: 24px; padding-top: calc(24px + env(safe-area-inset-top, 0px));
+  }
+  .painel h2 { margin: 0 0 4px; color: var(--azul); font-size: 19px; }
+  .painel p.ajuda { font-size: 13px; color: #6B6B68; margin: 4px 0 16px; }
+  .painel label { display: block; font-size: 12.5px; color: #6B6B68; margin: 14px 0 5px; font-weight: 500; }
+  .painel input, .painel select {
+    width: 100%; padding: 12px; border-radius: 9px; border: 1px solid #C9C6BA; font-size: 15px; background: #fff;
+  }
+  .painel .linha { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+  .painel .btn { flex: 0 0 auto; padding: 13px 22px; font-size: 15px; background: #fff; color: var(--azul); border: 1px solid #C9C6BA; }
+  .painel .btn-verde { background: var(--verde); color: #fff; border-color: var(--verde); }
+  .aviso-lgpd { background: #FBF3E2; color: #7A5205; border-radius: 9px; padding: 12px 14px; font-size: 12.5px; margin-top: 16px; }
+  .lista-colab { border: 1px solid #E5E3DA; border-radius: 10px; margin-top: 10px; background: #fff; }
+  .linha-colab { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #F0EFE9; font-size: 14px; }
+  .linha-colab:last-child { border-bottom: none; }
+  .tag { font-size: 11.5px; padding: 2px 9px; border-radius: 20px; background: #EAF3DE; color: var(--verde-escuro); }
+  .tag.sem { background: #F2F1EC; color: #8A887F; }
+  .oculto { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="marca">Registro de ponto</div>
+    <div class="estado">
+      <span><span class="bolinha" id="luzRede"></span><span id="txtRede">verificando…</span></span>
+      <span id="txtFila">fila: 0</span>
+    </div>
+  </div>
+  <div class="relogio" id="relogio">--:--:--</div>
+  <button class="config-btn" id="btnConfig" title="Configurações">⚙</button>
+</header>
+
+<main id="palco">
+  <div class="camera-area" id="areaCamera">
+    <video id="video" autoplay muted playsinline></video>
+    <div class="moldura" id="moldura"></div>
+    <div class="instrucao" id="instrucao">Iniciando câmera…</div>
+  </div>
+
+  <div id="areaPin" class="oculto" style="text-align:center">
+    <div class="visor" id="visorPin"></div>
+    <div class="teclado" id="teclado"></div>
+  </div>
+</main>
+
+<div class="acoes">
+  <button class="btn" id="btnAlternar">Usar PIN</button>
+  <button class="btn btn-verde oculto" id="btnConfirmarPin">Confirmar</button>
+</div>
+
+<!-- Confirmação da batida -->
+<div class="confirmacao oculto" id="confirmacao">
+  <div class="icone" id="confIcone">✓</div>
+  <div class="nome" id="confNome"></div>
+  <div class="hora" id="confHora"></div>
+  <div class="detalhe" id="confDetalhe"></div>
+</div>
+
+<!-- Configuração do aparelho -->
+<div class="painel oculto" id="painelConfig">
+  <h2>Configuração do tablet</h2>
+  <p class="ajuda">Preencha uma vez, na instalação. Depois o aparelho funciona sozinho, inclusive sem internet.</p>
+
+  <label>Endereço do sistema (API)</label>
+  <input id="cfgApi" placeholder="https://erp-biomassa-api.onrender.com">
+
+  <label>Token do REP</label>
+  <input id="cfgToken" placeholder="gerado ao cadastrar o tablet no ERP">
+
+  <label>Endereço dos modelos de reconhecimento facial</label>
+  <input id="cfgModelos" placeholder="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model">
+  <p class="ajuda">Os modelos são baixados uma vez e ficam no cache do navegador. Sem eles, o tablet trabalha só com PIN.</p>
+
+  <label>Distância máxima para aceitar o rosto</label>
+  <input id="cfgLimiar" type="number" step="0.01" min="0.3" max="0.8" value="0.45">
+  <p class="ajuda">Menor = mais rigoroso, mais recusas. Maior = mais fácil confundir pessoas parecidas. Ajuste no local, com gente de verdade.</p>
+
+  <div class="aviso-lgpd">
+    Biometria facial é dado pessoal sensível. Este aparelho calcula o vetor do rosto e envia só ele — a imagem
+    não é gravada nem transmitida. Cada colaborador precisa ter assinado o termo de consentimento, e quem não
+    assinar usa PIN, que sempre fica disponível.
+  </div>
+
+  <div class="linha">
+    <button class="btn btn-verde" id="btnSalvarCfg">Salvar e sincronizar</button>
+    <button class="btn" id="btnCadastroFacial">Cadastrar rostos</button>
+    <button class="btn" id="btnFecharCfg">Fechar</button>
+  </div>
+  <p class="ajuda" id="statusCfg"></p>
+</div>
+
+<!-- Cadastro facial (exige login de um administrador) -->
+<div class="painel oculto" id="painelCadastro">
+  <h2>Cadastro de rostos</h2>
+  <p class="ajuda">Só um administrador do ERP pode cadastrar. O login não fica guardado no tablet.</p>
+
+  <div id="loginCadastro">
+    <label>E-mail</label>
+    <input id="cadEmail" type="email" autocomplete="off">
+    <label>Senha</label>
+    <input id="cadSenha" type="password" autocomplete="off">
+    <div class="linha">
+      <button class="btn btn-verde" id="btnEntrarCadastro">Entrar</button>
+      <button class="btn" id="btnFecharCadastro">Fechar</button>
+    </div>
+  </div>
+
+  <div id="areaCadastro" class="oculto">
+    <div class="camera-area" style="width: 100%; max-width: 420px; margin: 10px 0;">
+      <video id="videoCad" autoplay muted playsinline></video>
+      <div class="moldura" id="molduraCad"></div>
+    </div>
+    <label>Colaborador</label>
+    <select id="selColaborador"></select>
+    <label>Texto do consentimento assinado</label>
+    <input id="cadConsentimento" value="Autorizo o uso da minha biometria facial exclusivamente para registro de ponto, nos termos da LGPD.">
+    <div class="linha">
+      <button class="btn btn-verde" id="btnCapturar">Capturar rosto</button>
+      <button class="btn" id="btnFecharCadastro2">Fechar</button>
+    </div>
+    <p class="ajuda" id="statusCadastro"></p>
+    <div class="lista-colab" id="listaColaboradores"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<script>
+/* ===========================================================================
+   App de ponto — tablet de operação
+
+   Princípios que guiaram o código:
+   - A batida nunca depende da internet. Ela é gravada localmente primeiro e
+     só depois sincronizada. Se o tablet ficar dias offline, nada se perde.
+   - O relógio do tablet não é confiável. Na sincronização guardamos a
+     diferença para o relógio do servidor e corrigimos a hora de cada batida.
+   - O rosto é conveniência; o PIN é garantia. A portaria não permite que o
+     sistema impeça alguém de marcar o ponto, então o PIN está sempre a um
+     toque de distância.
+   - A imagem do rosto não é gravada nem enviada: só o vetor numérico.
+   =========================================================================== */
+
+const cfgPadrao = {
+  api: "",
+  token: "",
+  modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model",
+  limiar: 0.45,
+};
+
+const estado = {
+  cfg: { ...cfgPadrao },
+  colaboradores: [],
+  deslocamentoRelogio: 0,   // ms entre o relógio do servidor e o do tablet
+  fila: [],
+  modo: "facial",
+  modelosProntos: false,
+  ocupado: false,
+  pin: "",
+  tokenAdmin: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const CHAVE_CFG = "ponto.cfg";
+const CHAVE_COLAB = "ponto.colaboradores";
+const CHAVE_FILA = "ponto.fila";
+const CHAVE_RELOGIO = "ponto.deslocamento";
+
+/* ---------- persistência local ---------- */
+function carregarLocal() {
+  try {
+    estado.cfg = { ...cfgPadrao, ...JSON.parse(localStorage.getItem(CHAVE_CFG) || "{}") };
+    estado.colaboradores = JSON.parse(localStorage.getItem(CHAVE_COLAB) || "[]");
+    estado.fila = JSON.parse(localStorage.getItem(CHAVE_FILA) || "[]");
+    estado.deslocamentoRelogio = Number(localStorage.getItem(CHAVE_RELOGIO) || 0);
+  } catch (e) {
+    console.warn("Não consegui ler os dados locais:", e);
+  }
+}
+const salvarFila = () => localStorage.setItem(CHAVE_FILA, JSON.stringify(estado.fila));
+
+/* ---------- hora corrigida ---------- */
+// O tablet pode estar com a hora errada. Usamos o relógio do servidor como
+// referência — numa marcação de ponto, minuto errado vira problema real.
+const agora = () => new Date(Date.now() + estado.deslocamentoRelogio);
+
+function horaLocalIso(d = agora()) {
+  const p = (n) => String(n).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sinal = off < 0 ? "-" : "+";
+  const abs = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+         `${sinal}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
+}
+
+function tique() {
+  const d = agora();
+  const p = (n) => String(n).padStart(2, "0");
+  $("relogio").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+setInterval(tique, 1000);
+
+/* ---------- comunicação ---------- */
+async function chamarApi(caminho, opcoes = {}) {
+  const resposta = await fetch(`${estado.cfg.api}${caminho}`, {
+    ...opcoes,
+    headers: {
+      "Content-Type": "application/json",
+      "x-rep-token": estado.cfg.token,
+      ...(opcoes.headers || {}),
+    },
+  });
+  const texto = await resposta.text();
+  const dados = texto ? JSON.parse(texto) : {};
+  if (!resposta.ok) throw new Error(dados.erro || `Erro ${resposta.status}`);
+  return dados;
+}
+
+async function sincronizarCarga() {
+  const dados = await chamarApi("/ponto/tablet/carga");
+  estado.colaboradores = dados.colaboradores;
+  localStorage.setItem(CHAVE_COLAB, JSON.stringify(dados.colaboradores));
+
+  estado.deslocamentoRelogio = new Date(dados.servidorEm).getTime() - Date.now();
+  localStorage.setItem(CHAVE_RELOGIO, String(estado.deslocamentoRelogio));
+
+  await prepararRostosConhecidos();
+  return dados;
+}
+
+async function enviarFila() {
+  if (!estado.fila.length || !estado.cfg.api || !navigator.onLine) return;
+  const lote = estado.fila.slice(0, 50);
+  try {
+    const resposta = await chamarApi("/ponto/tablet/marcacoes", {
+      method: "POST",
+      body: JSON.stringify({ marcacoes: lote }),
+    });
+    // Sai da fila o que o servidor confirmou (gravada ou já existente).
+    const resolvidos = new Set(
+      resposta.resultados.filter(r => r.situacao === "gravada" || r.situacao === "duplicada").map(r => r.idLocal)
+    );
+    estado.fila = estado.fila.filter(m => !resolvidos.has(m.idLocal));
+    salvarFila();
+    atualizarEstado();
+  } catch (e) {
+    console.warn("Sincronização adiada:", e.message);
+  }
+}
+
+function atualizarEstado() {
+  const online = navigator.onLine && Boolean(estado.cfg.api);
+  $("luzRede").className = "bolinha" + (online ? "" : " off");
+  $("txtRede").textContent = online ? "conectado" : "offline — registrando no aparelho";
+  $("txtFila").textContent = `fila: ${estado.fila.length}`;
+}
+window.addEventListener("online", () => { atualizarEstado(); enviarFila(); });
+window.addEventListener("offline", atualizarEstado);
+setInterval(enviarFila, 30000);
+
+/* ---------- registro da batida ---------- */
+// Grava primeiro, envia depois. É esta ordem que faz o ponto funcionar sem
+// internet — e que impede uma queda de rede de engolir uma batida.
+function registrarBatida(colaborador, metodo) {
+  const marcacao = {
+    idLocal: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
+    colaboradorId: colaborador.id,
+    dataHora: horaLocalIso(),
+    metodoIdentificacao: metodo,
+    origemOffline: !navigator.onLine,
+  };
+  estado.fila.push(marcacao);
+  salvarFila();
+  atualizarEstado();
+  mostrarConfirmacao(colaborador, marcacao);
+  enviarFila();
+}
+
+function mostrarConfirmacao(colaborador, marcacao) {
+  const d = new Date(marcacao.dataHora);
+  const p = (n) => String(n).padStart(2, "0");
+  $("confIcone").textContent = "✓";
+  $("confNome").textContent = colaborador.nome;
+  $("confHora").textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  $("confDetalhe").textContent =
+    `${d.toLocaleDateString("pt-BR")} · comprovante ${marcacao.idLocal.slice(0, 8).toUpperCase()}` +
+    (navigator.onLine ? "" : " · será enviado quando a internet voltar");
+  $("confirmacao").classList.remove("oculto", "erro");
+  bipar(true);
+  setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 4000);
+}
+
+function mostrarFalha(mensagem) {
+  $("confIcone").textContent = "!";
+  $("confNome").textContent = "Não identificado";
+  $("confHora").textContent = "";
+  $("confDetalhe").textContent = mensagem;
+  $("confirmacao").classList.remove("oculto");
+  $("confirmacao").classList.add("erro");
+  bipar(false);
+  setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 3000);
+}
+
+// Confirmação sonora: no pátio, nem sempre se olha a tela.
+function bipar(sucesso) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const ganho = ctx.createGain();
+    osc.connect(ganho); ganho.connect(ctx.destination);
+    osc.frequency.value = sucesso ? 880 : 220;
+    ganho.gain.value = 0.15;
+    osc.start();
+    setTimeout(() => { osc.stop(); ctx.close(); }, sucesso ? 160 : 420);
+  } catch { /* tablet sem áudio, a tela já confirma */ }
+}
+
+/* ---------- reconhecimento facial ---------- */
+let rostosConhecidos = null;
+let piscouRecentemente = false;
+let olhosFechadosEm = 0;
+
+async function carregarModelos() {
+  if (typeof faceapi === "undefined") return false;
+  try {
+    const url = estado.cfg.modelos;
+    await faceapi.nets.tinyFaceDetector.loadFromUri(url);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(url);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(url);
+    estado.modelosProntos = true;
+    return true;
+  } catch (e) {
+    console.warn("Modelos não carregaram:", e.message);
+    estado.modelosProntos = false;
+    return false;
+  }
+}
+
+async function prepararRostosConhecidos() {
+  const comVetor = estado.colaboradores.filter(c => Array.isArray(c.vetorFacial) && c.vetorFacial.length);
+  rostosConhecidos = comVetor.map(c => ({ colaborador: c, vetor: Float32Array.from(c.vetorFacial) }));
+}
+
+function distancia(a, b) {
+  let soma = 0;
+  for (let i = 0; i < a.length; i++) soma += (a[i] - b[i]) ** 2;
+  return Math.sqrt(soma);
+}
+
+// Vivacidade: exige uma piscada antes de aceitar. Não resolve tudo, mas
+// derruba o truque mais comum, que é mostrar a foto do colega no celular.
+function proporcaoOlho(pontos) {
+  const d = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
+  return (d(pontos[1], pontos[5]) + d(pontos[2], pontos[4])) / (2 * d(pontos[0], pontos[3]));
+}
+
+function avaliarPiscada(landmarks) {
+  const razao = (proporcaoOlho(landmarks.getLeftEye()) + proporcaoOlho(landmarks.getRightEye())) / 2;
+  const agoraMs = Date.now();
+  if (razao < 0.22) {
+    olhosFechadosEm = agoraMs;
+  } else if (olhosFechadosEm && agoraMs - olhosFechadosEm < 800) {
+    piscouRecentemente = true;
+    olhosFechadosEm = 0;
+    setTimeout(() => { piscouRecentemente = false; }, 4000);
+  }
+  return piscouRecentemente;
+}
+
+async function iniciarCamera(elemento) {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 960 } },
+    audio: false,
+  });
+  elemento.srcObject = stream;
+  await elemento.play();
+  return stream;
+}
+
+async function lacoFacial() {
+  const video = $("video");
+  const moldura = $("moldura");
+  const instrucao = $("instrucao");
+
+  if (estado.ocupado || estado.modo !== "facial" || !estado.modelosProntos) {
+    return setTimeout(lacoFacial, 400);
+  }
+
+  try {
+    const deteccao = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!deteccao) {
+      moldura.className = "moldura";
+      instrucao.textContent = "Posicione o rosto na moldura";
+    } else {
+      const vivo = avaliarPiscada(deteccao.landmarks);
+      if (!vivo) {
+        moldura.className = "moldura vivacidade";
+        instrucao.textContent = "Pisque os olhos para confirmar";
+      } else {
+        moldura.className = "moldura detectado";
+        let melhor = null;
+        for (const conhecido of (rostosConhecidos || [])) {
+          const d = distancia(deteccao.descriptor, conhecido.vetor);
+          if (!melhor || d < melhor.d) melhor = { d, colaborador: conhecido.colaborador };
+        }
+        if (melhor && melhor.d <= Number(estado.cfg.limiar)) {
+          estado.ocupado = true;
+          piscouRecentemente = false;
+          registrarBatida(melhor.colaborador, "facial");
+        } else {
+          instrucao.textContent = "Rosto não reconhecido — use o PIN";
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Falha no reconhecimento:", e.message);
+  }
+  setTimeout(lacoFacial, 250);
+}
+
+/* ---------- PIN ---------- */
+function montarTeclado() {
+  const teclado = $("teclado");
+  teclado.innerHTML = "";
+  ["1","2","3","4","5","6","7","8","9","apagar","0","ok"].forEach(t => {
+    const b = document.createElement("button");
+    b.className = "tecla";
+    b.textContent = t === "apagar" ? "←" : t === "ok" ? "✓" : t;
+    b.addEventListener("click", () => {
+      if (t === "apagar") estado.pin = estado.pin.slice(0, -1);
+      else if (t === "ok") return conferirPin();
+      else if (estado.pin.length < 6) estado.pin += t;
+      $("visorPin").textContent = "•".repeat(estado.pin.length);
+    });
+    teclado.appendChild(b);
+  });
+}
+
+// A conferência do PIN acontece no próprio tablet, com o hash que veio na
+// carga — por isso funciona offline.
+function conferirPin() {
+  if (estado.pin.length < 4) return;
+  const digitado = estado.pin;
+  estado.pin = "";
+  $("visorPin").textContent = "";
+
+  const encontrado = estado.colaboradores.find(c => {
+    if (!c.pinHash) return false;
+    try { return dcodeIO.bcrypt.compareSync(digitado, c.pinHash); } catch { return false; }
+  });
+
+  if (encontrado) {
+    estado.ocupado = true;
+    registrarBatida(encontrado, "pin");
+    alternarModo("facial");
+  } else {
+    mostrarFalha("PIN não confere. Tente de novo ou procure o encarregado.");
+  }
+}
+
+function alternarModo(novo) {
+  estado.modo = novo;
+  const facial = novo === "facial";
+  $("areaCamera").classList.toggle("oculto", !facial);
+  $("areaPin").classList.toggle("oculto", facial);
+  $("btnAlternar").textContent = facial ? "Usar PIN" : "Usar reconhecimento facial";
+  $("btnConfirmarPin").classList.toggle("oculto", facial);
+  if (facial) lacoFacial();
+}
+
+$("btnAlternar").addEventListener("click", () => alternarModo(estado.modo === "facial" ? "pin" : "facial"));
+$("btnConfirmarPin").addEventListener("click", conferirPin);
+
+/* ---------- configuração ---------- */
+$("btnConfig").addEventListener("click", () => {
+  $("cfgApi").value = estado.cfg.api;
+  $("cfgToken").value = estado.cfg.token;
+  $("cfgModelos").value = estado.cfg.modelos;
+  $("cfgLimiar").value = estado.cfg.limiar;
+  $("painelConfig").classList.remove("oculto");
+});
+$("btnFecharCfg").addEventListener("click", () => $("painelConfig").classList.add("oculto"));
+
+$("btnSalvarCfg").addEventListener("click", async () => {
+  estado.cfg = {
+    api: $("cfgApi").value.trim().replace(/\/$/, ""),
+    token: $("cfgToken").value.trim(),
+    modelos: $("cfgModelos").value.trim() || cfgPadrao.modelos,
+    limiar: Number($("cfgLimiar").value) || cfgPadrao.limiar,
+  };
+  localStorage.setItem(CHAVE_CFG, JSON.stringify(estado.cfg));
+  $("statusCfg").textContent = "Sincronizando…";
+  try {
+    const dados = await sincronizarCarga();
+    const comRosto = dados.colaboradores.filter(c => c.vetorFacial).length;
+    $("statusCfg").textContent =
+      `${dados.colaboradores.length} colaboradores · ${comRosto} com rosto cadastrado · REP ${dados.rep.identificador}`;
+    if (!estado.modelosProntos) await carregarModelos();
+  } catch (e) {
+    $("statusCfg").textContent = `Falhou: ${e.message}`;
+  }
+});
+
+/* ---------- cadastro de rostos ---------- */
+$("btnCadastroFacial").addEventListener("click", () => $("painelCadastro").classList.remove("oculto"));
+$("btnFecharCadastro").addEventListener("click", () => $("painelCadastro").classList.add("oculto"));
+$("btnFecharCadastro2").addEventListener("click", () => location.reload());
+
+$("btnEntrarCadastro").addEventListener("click", async () => {
+  try {
+    const resposta = await fetch(`${estado.cfg.api}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: $("cadEmail").value.trim(), senha: $("cadSenha").value }),
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) throw new Error(dados.erro || "Login recusado");
+    // Fica só em memória: se o tablet for roubado, não há credencial salva.
+    estado.tokenAdmin = dados.token;
+    $("cadSenha").value = "";
+    $("loginCadastro").classList.add("oculto");
+    $("areaCadastro").classList.remove("oculto");
+    await iniciarCamera($("videoCad"));
+    desenharListaCadastro();
+  } catch (e) {
+    alert(`Não foi possível entrar: ${e.message}`);
+  }
+});
+
+function desenharListaCadastro() {
+  $("selColaborador").innerHTML = estado.colaboradores
+    .map(c => `<option value="${c.id}">${c.nome}</option>`).join("");
+  $("listaColaboradores").innerHTML = estado.colaboradores.map(c => `
+    <div class="linha-colab">
+      <span>${c.nome}</span>
+      <span class="tag ${c.vetorFacial ? "" : "sem"}">${c.vetorFacial ? "rosto cadastrado" : "sem rosto"}</span>
+    </div>`).join("");
+}
+
+$("btnCapturar").addEventListener("click", async () => {
+  if (!estado.modelosProntos) { $("statusCadastro").textContent = "Modelos de reconhecimento não carregaram."; return; }
+  $("statusCadastro").textContent = "Capturando…";
+  const deteccao = await faceapi
+    .detectSingleFace($("videoCad"), new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!deteccao) { $("statusCadastro").textContent = "Nenhum rosto detectado. Melhore a luz e tente de novo."; return; }
+
+  const colaboradorId = $("selColaborador").value;
+  try {
+    const resposta = await fetch(`${estado.cfg.api}/ponto/biometria/${colaboradorId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${estado.tokenAdmin}` },
+      body: JSON.stringify({
+        // Só o vetor sai daqui. A imagem fica no aparelho e é descartada.
+        vetor: Array.from(deteccao.descriptor),
+        versaoModelo: "face-api/tiny+landmark68+recognition",
+        consentimentoTexto: $("cadConsentimento").value.trim(),
+      }),
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) throw new Error(dados.detalhe || dados.erro || "Erro ao salvar");
+    $("statusCadastro").textContent = "Rosto cadastrado. Sincronizando a lista…";
+    await sincronizarCarga();
+    desenharListaCadastro();
+  } catch (e) {
+    $("statusCadastro").textContent = `Falhou: ${e.message}`;
+  }
+});
+
+/* ---------- partida ---------- */
+(async function iniciar() {
+  carregarLocal();
+  montarTeclado();
+  atualizarEstado();
+  tique();
+
+  if (!estado.cfg.api || !estado.cfg.token) {
+    $("instrucao").textContent = "Tablet não configurado — toque na engrenagem";
+    $("painelConfig").classList.remove("oculto");
+    return;
+  }
+
+  try {
+    await iniciarCamera($("video"));
+    $("instrucao").textContent = "Carregando reconhecimento…";
+  } catch {
+    $("instrucao").textContent = "Câmera indisponível — use o PIN";
+    alternarModo("pin");
+  }
+
+  await carregarModelos();
+  await prepararRostosConhecidos();
+
+  if (!estado.modelosProntos) {
+    $("instrucao").textContent = "Reconhecimento indisponível — use o PIN";
+    alternarModo("pin");
+  } else {
+    $("instrucao").textContent = "Posicione o rosto na moldura";
+    lacoFacial();
+  }
+
+  // Atualiza a lista de pessoas de tempos em tempos, quando houver rede.
+  sincronizarCarga().catch(() => {});
+  setInterval(() => { if (navigator.onLine) sincronizarCarga().catch(() => {}); }, 15 * 60 * 1000);
+  enviarFila();
+})();
+</script>
+</body>
+</html>

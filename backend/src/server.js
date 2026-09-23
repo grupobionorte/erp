@@ -14,6 +14,7 @@ const municipiosRouter = require("./routes/municipios");
 const authRouter = require("./routes/auth");
 const usuariosRouter = require("./routes/usuarios");
 const empresasRouter = require("./routes/empresas");
+const { router: pontoRouter, routerTablet: pontoTabletRouter } = require("./routes/ponto");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -42,6 +43,10 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 // primeiro usuário). Tudo abaixo disso exige token válido.
 app.use("/auth", authRouter);
 
+// O tablet de ponto também fica fora do login de usuário: ele se autentica
+// com o token do próprio REP (cabeçalho x-rep-token).
+app.use("/ponto/tablet", pontoTabletRouter);
+
 app.use(autenticar);
 
 // Clientes e fornecedores compartilham a rota /pessoas (use ?papel=cliente
@@ -57,6 +62,7 @@ app.use("/cfops", cfopsRouter);
 app.use("/municipios", municipiosRouter);
 app.use("/usuarios", usuariosRouter);
 app.use("/empresas", empresasRouter);
+app.use("/ponto", pontoRouter);
 
 // Handler de erro. Antes tudo virava 500 "Erro interno" e o motivo real só
 // aparecia no log do Render — quem estava na tela não tinha como saber o que

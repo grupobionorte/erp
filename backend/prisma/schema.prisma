@@ -61,6 +61,7 @@ model Usuario {
   // máximo um login, daí o índice único.
   colaboradorId Int?         @unique @map("colaborador_id")
   colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+  tratamentosPonto TratamentoPonto[]
 
   @@map("usuarios")
 }
@@ -164,6 +165,8 @@ model Empresa {
 
   usuarios Usuario[] @relation("UsuarioEmpresas")
 
+  reps Rep[]
+
   @@map("empresas")
 }
 
@@ -222,6 +225,14 @@ model Colaborador {
 
   documentosComoResponsavel DocumentoFiscal[]
   usuario                   Usuario?
+  marcacoesPonto            MarcacaoPonto[]
+  tratamentosPonto          TratamentoPonto[]
+  biometriaFacial           BiometriaFacial?
+
+  // PIN de marcação de ponto: alternativa sempre disponível ao rosto, como
+  // exige a portaria (o sistema não pode impedir a marcação). Guardado com
+  // hash, nunca em texto puro.
+  pinPontoHash String? @map("pin_ponto_hash")
 
   @@unique([cpf, empresaId])
   @@map("colaboradores")
@@ -568,4 +579,109 @@ model DocumentoEvento {
   documento   DocumentoFiscal @relation(fields: [documentoId], references: [id])
 
   @@map("documento_eventos")
+}
+
+// ---------------------------------------------------------------------------
+// Controle de ponto — Portaria MTP 671/2021
+//
+// Regra que governa este bloco: marcação de ponto NÃO se altera nem se apaga.
+// A tabela de marcações é somente-inserção; qualquer correção vira um
+// registro de tratamento, que fica ao lado da marcação original sem
+// substituí-la. Por isso não existe rota de PUT/DELETE para marcações.
+// ---------------------------------------------------------------------------
+
+// Cada tablet em operação é um REP (registrador). O NSR é sequencial por
+// REP, o que permite o tablet numerar suas marcações mesmo offline.
+model Rep {
+  id            Int       @id @default(autoincrement())
+  identificador String    @unique                      // ex.: "TABLET-PATIO-01"
+  // Credencial do aparelho: o tablet não faz login de usuário, ele se
+  // identifica com este token. Se o tablet sumir, revoga-se o REP.
+  token         String    @unique
+  descricao     String?
+  localizacao   String?
+  ultimoNsr     Int       @default(0) @map("ultimo_nsr")
+  ativo         Boolean   @default(true)
+  criadoEm      DateTime  @default(now()) @map("criado_em")
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  marcacoes MarcacaoPonto[]
+
+  @@map("reps")
+}
+
+model MarcacaoPonto {
+  id Int @id @default(autoincrement())
+
+  // Identificação exigida no AFD.
+  nsr       Int                                        // sequencial dentro do REP
+  repId     Int      @map("rep_id")
+  rep       Rep      @relation(fields: [repId], references: [id])
+  cpf       String                                     // gravado junto: o AFD usa o CPF
+  dataHora  DateTime @map("data_hora")                 // momento da batida, com fuso
+
+  colaboradorId Int         @map("colaborador_id")
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+
+  // Como a pessoa foi identificada e onde a batida nasceu.
+  metodoIdentificacao String  @map("metodo_identificacao") // facial | pin
+  origemOffline       Boolean @default(false) @map("origem_offline")
+  sincronizadoEm      DateTime? @map("sincronizado_em")
+
+  // Identificador gerado no tablet: garante que reenviar o lote não duplica
+  // a batida quando a conexão cai no meio do envio.
+  idLocal String @unique @map("id_local")
+
+  // Integridade: cada marcação carrega o hash da anterior do mesmo REP.
+  // Alterar ou remover uma marcação antiga quebra a corrente e fica visível.
+  hashAnterior String? @map("hash_anterior")
+  hash         String
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  tratamentos TratamentoPonto[]
+
+  @@unique([repId, nsr])
+  @@index([colaboradorId, dataHora])
+  @@map("marcacoes_ponto")
+}
+
+// Correções e inclusões do fechamento (o "tratamento" da portaria). Nunca
+// tocam na marcação original — ficam ao lado dela, com autor e motivo.
+model TratamentoPonto {
+  id            Int      @id @default(autoincrement())
+  tipo          String                                  // inclusao | desconsideracao | pre_assinalado
+  dataHora      DateTime @map("data_hora")
+  motivo        String
+  criadoEm      DateTime @default(now()) @map("criado_em")
+
+  colaboradorId Int         @map("colaborador_id")
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+
+  marcacaoId Int?           @map("marcacao_id")
+  marcacao   MarcacaoPonto? @relation(fields: [marcacaoId], references: [id])
+
+  autorId Int?     @map("autor_id")
+  autor   Usuario? @relation(fields: [autorId], references: [id])
+
+  @@index([colaboradorId, dataHora])
+  @@map("tratamentos_ponto")
+}
+
+// Biometria facial: guardamos o vetor (embedding) gerado no tablet, nunca a
+// foto. Dado sensível pela LGPD — daí o registro de consentimento junto.
+model BiometriaFacial {
+  id            Int      @id @default(autoincrement())
+  colaboradorId Int      @unique @map("colaborador_id")
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])
+
+  vetor           Json                                  // embedding do rosto
+  versaoModelo    String   @map("versao_modelo")
+  consentimentoEm DateTime @map("consentimento_em")
+  consentimentoTexto String @map("consentimento_texto")
+  atualizadoEm    DateTime @updatedAt @map("atualizado_em")
+
+  @@map("biometrias_faciais")
 }

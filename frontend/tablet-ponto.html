@@ -120,7 +120,7 @@
 
 <header>
   <div>
-    <div class="marca">Registro de ponto</div>
+    <div class="marca">Registro de ponto <span id="marcaRep" style="opacity:.75; font-weight:400;"></span></div>
     <div class="estado">
       <span><span class="bolinha" id="luzRede"></span><span id="txtRede">verificando…</span></span>
       <span id="txtFila">fila: 0</span>
@@ -377,6 +377,7 @@ const cfgPadrao = {
 const estado = {
   cfg: { ...cfgPadrao },
   colaboradores: [],
+  rep: null,
   deslocamentoRelogio: 0,   // ms entre o relógio do servidor e o do tablet
   fila: [],
   modo: "facial",
@@ -401,6 +402,13 @@ const CHAVE_CFG = "ponto.cfg";
 const CHAVE_COLAB = "ponto.colaboradores";
 const CHAVE_FILA = "ponto.fila";
 const CHAVE_RELOGIO = "ponto.deslocamento";
+const CHAVE_REP = "ponto.rep";
+
+function mostrarRep() {
+  const marca = $("marcaRep");
+  if (!marca) return;
+  marca.textContent = estado.rep?.identificador ? `· ${estado.rep.identificador}` : "";
+}
 
 /* ---------- persistência local ---------- */
 function carregarLocal() {
@@ -409,6 +417,7 @@ function carregarLocal() {
     estado.colaboradores = JSON.parse(localStorage.getItem(CHAVE_COLAB) || "[]");
     estado.fila = JSON.parse(localStorage.getItem(CHAVE_FILA) || "[]");
     estado.deslocamentoRelogio = Number(localStorage.getItem(CHAVE_RELOGIO) || 0);
+    estado.rep = JSON.parse(localStorage.getItem(CHAVE_REP) || "null");
   } catch (e) {
     console.warn("Não consegui ler os dados locais:", e);
   }
@@ -456,6 +465,14 @@ async function chamarApi(caminho, opcoes = {}) {
 
 async function sincronizarCarga() {
   const dados = await chamarApi("/ponto/tablet/carga");
+
+  // Qual REP este token representa. Fica à vista no cabeçalho porque já
+  // aconteceu de um tablet registrar em nome de outro por causa de token
+  // repetido — e sem isso na tela, ninguém percebe.
+  estado.rep = dados.rep;
+  localStorage.setItem(CHAVE_REP, JSON.stringify(dados.rep));
+  mostrarRep();
+
   estado.colaboradores = dados.colaboradores;
   localStorage.setItem(CHAVE_COLAB, JSON.stringify(dados.colaboradores));
 
@@ -1176,8 +1193,12 @@ $("btnSalvarCfg").addEventListener("click", async () => {
   try {
     const dados = await sincronizarCarga();
     const comRosto = dados.colaboradores.filter(c => c.vetorFacial).length;
-    $("statusCfg").textContent =
-      `${dados.colaboradores.length} colaboradores · ${comRosto} com rosto cadastrado · REP ${dados.rep.identificador}`;
+    // Deixa evidente em qual tablet as batidas vão cair.
+    $("statusCfg").innerHTML =
+      `<strong>Este aparelho está registrando como: ${dados.rep.identificador}` +
+      `${dados.rep.descricao ? ` (${dados.rep.descricao})` : ""}.</strong><br>` +
+      `Se não for esse o tablet, o token está errado — pegue o token certo no ERP, em Ponto, Tablets.<br>` +
+      `${dados.colaboradores.length} colaboradores · ${comRosto} com rosto cadastrado`;
     if (!estado.modelosProntos) await carregarModelos();
     if (estado.cfg.voz) { liberarVoz(); falar("Voz ativada.", { repetirApos: 0, interromper: true }); }
   } catch (e) {
@@ -1403,6 +1424,7 @@ $("btnTestar").addEventListener("click", async () => {
 (async function iniciar() {
   carregarLocal();
   montarTeclado();
+  mostrarRep();
   atualizarEstado();
   tique();
   manterTelaAcesa();

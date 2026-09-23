@@ -507,6 +507,17 @@ router.put("/reps/:id", asyncHandler(async (req, res) => {
   res.json({ ...rep, token: undefined });
 }));
 
+// Gera um token novo para o tablet. Serve para quando o token se perdeu,
+// quando o aparelho foi trocado, ou quando dois tablets acabaram com a
+// mesma credencial — o antigo para de funcionar na hora.
+router.post("/reps/:id/novo-token", asyncHandler(async (req, res) => {
+  const rep = await prisma.rep.update({
+    where: { id: Number(req.params.id) },
+    data: { token: crypto.randomBytes(24).toString("hex") },
+  });
+  res.json({ identificador: rep.identificador, token: rep.token });
+}));
+
 router.post("/reps", asyncHandler(async (req, res) => {
   const { identificador, descricao, localizacao } = req.body;
   if (!identificador) return res.status(400).json({ erro: "identificador é obrigatório" });

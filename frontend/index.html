@@ -2122,6 +2122,15 @@ function PontoTablets() {
                 <td>{rep.ativo ? "Ativo" : "Desativado"}</td>
                 <td className="actions-col">
                   <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5 }} onClick={() => conferir(rep)}>Conferir integridade</button>
+                  <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5, marginLeft: 6 }}
+                    onClick={async () => {
+                      if (!window.confirm(`Gerar um token novo para ${rep.identificador}?\n\nO token atual para de funcionar na hora, e o tablet precisa ser reconfigurado com o novo.`)) return;
+                      try {
+                        setTokenNovo(await apiRequest(`/ponto/reps/${rep.id}/novo-token`, { method: "POST" }));
+                      } catch (e) { alert(`Não foi possível: ${e.message}`); }
+                    }}>
+                    Novo token
+                  </button>
                   <button className="btn" style={{ padding: "5px 12px", fontSize: 12.5, marginLeft: 6 }} onClick={() => alternarAtivo(rep)}>
                     {rep.ativo ? "Desativar" : "Reativar"}
                   </button>

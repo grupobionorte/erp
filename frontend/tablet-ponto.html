@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Ponto — Biomassa</title>
+<link rel="manifest" href="/ponto-manifest.webmanifest">
+<meta name="theme-color" content="#1F3B57">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/ponto-icone-192.png">
+<link rel="icon" href="/ponto-icone-192.png">
 <style>
   :root {
     --azul: #1F3B57; --azul-escuro: #16293C;
@@ -118,6 +125,10 @@
     <video id="video" autoplay muted playsinline></video>
     <div class="moldura" id="moldura"></div>
     <div class="instrucao" id="instrucao">Iniciando câmera…</div>
+    <div id="avisoVoz" style="position:absolute; top:10px; left:0; right:0; text-align:center;
+         font-size:13px; background:rgba(0,0,0,0.45); padding:6px 10px;">
+      Toque na tela uma vez para ligar a voz
+    </div>
   </div>
 
   <div id="areaPin" class="oculto" style="text-align:center">
@@ -172,6 +183,18 @@
   <p class="ajuda">
     Desligar acelera o registro, mas o tablet passa a aceitar uma foto do colega na tela de um celular.
   </p>
+
+  <label style="display:flex; align-items:center; gap:10px;">
+    <input type="checkbox" id="cfgVoz" style="width:auto;"> Falar as instruções em voz alta
+  </label>
+  <p class="ajuda">
+    Usa a voz do Android. Funciona sem internet, desde que o pacote de português esteja instalado
+    (Configurações do aparelho, Idioma e entrada, Saída de conversão de texto em voz). A voz é reforço:
+    a tela continua mostrando tudo.
+  </p>
+
+  <label>Velocidade da voz</label>
+  <input id="cfgVozVelocidade" type="number" step="0.1" min="0.6" max="1.6" value="1">
 
   <label>Movimento necessário para confirmar</label>
   <input id="cfgLimiarMovimento" type="number" step="0.01" min="0.05" max="0.4" value="0.12">
@@ -262,6 +285,8 @@ const cfgPadrao = {
   modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.3/model",
   limiar: 0.45,
   exigirPiscada: true,
+  voz: true,
+  vozVelocidade: 1,
   // Quanto o rosto precisa girar para contar como pessoa viva. Menor =
   // confirma mais fácil, aceita mais movimento involuntário.
   limiarMovimento: 0.12,
@@ -282,6 +307,7 @@ const estado = {
   rostoDesde: 0,
   ultimaMedidaOlho: null,
   candidato: null,
+  fase: null,
   msDeteccao: 0,
   msIdentificacao: 0,
   backendTf: null,
@@ -419,6 +445,10 @@ function mostrarConfirmacao(colaborador, marcacao) {
     (navigator.onLine ? "" : " · será enviado quando a internet voltar");
   $("confirmacao").classList.remove("oculto", "erro");
   bipar(true);
+  estado.fase = null;
+  // O que mais importa ouvir: quem registrou e a que horas.
+  falar(`Ponto registrado. ${colaborador.nome.split(" ")[0]}, ${p(d.getHours())} e ${p(d.getMinutes())}.`,
+        { repetirApos: 0, interromper: true });
   setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 4000);
 }
 
@@ -430,8 +460,57 @@ function mostrarFalha(mensagem) {
   $("confirmacao").classList.remove("oculto");
   $("confirmacao").classList.add("erro");
   bipar(false);
+  estado.fase = null;
+  falar(mensagem, { repetirApos: 0, interromper: true });
   setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 3000);
 }
+
+/* ---------- voz ---------- */
+// Usa a voz do próprio Android (Web Speech API). Funciona offline desde que
+// o pacote de português esteja instalado no aparelho — e é por isso que ela
+// é um reforço da tela, nunca a única forma de orientar.
+let vozLiberada = false;
+let ultimaFala = { texto: "", em: 0 };
+
+function escolherVozPtBr() {
+  const vozes = window.speechSynthesis?.getVoices?.() || [];
+  return vozes.find(v => /pt[-_]BR/i.test(v.lang)) || vozes.find(v => /^pt/i.test(v.lang)) || null;
+}
+
+function falar(texto, { repetirApos = 8000, interromper = false } = {}) {
+  if (!estado.cfg.voz || !("speechSynthesis" in window) || !vozLiberada || !texto) return;
+
+  // Não fica repetindo a mesma frase a cada volta do laço.
+  const agoraMs = Date.now();
+  if (texto === ultimaFala.texto && agoraMs - ultimaFala.em < repetirApos) return;
+  ultimaFala = { texto, em: agoraMs };
+
+  try {
+    if (interromper) window.speechSynthesis.cancel();
+    const fala = new SpeechSynthesisUtterance(texto);
+    fala.lang = "pt-BR";
+    fala.rate = Number(estado.cfg.vozVelocidade) || 1;
+    fala.volume = 1;
+    const voz = escolherVozPtBr();
+    if (voz) fala.voice = voz;
+    window.speechSynthesis.speak(fala);
+  } catch (e) {
+    console.warn("Voz indisponível:", e.message);
+  }
+}
+
+// Navegador só deixa falar depois de um toque. No quiosque, o primeiro
+// toque do dia libera — e a partir daí funciona sozinho.
+function liberarVoz() {
+  if (vozLiberada || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
+    vozLiberada = true;
+    $("avisoVoz")?.classList.add("oculto");
+  } catch { /* segue sem voz */ }
+}
+document.addEventListener("pointerdown", liberarVoz);
+window.speechSynthesis?.addEventListener?.("voiceschanged", () => {});
 
 // Confirmação sonora: no pátio, nem sempre se olha a tela.
 function bipar(sucesso) {
@@ -627,6 +706,11 @@ async function lacoFacial() {
     if (!deteccao) {
       moldura.className = "moldura";
       instrucao.textContent = "Posicione o rosto na moldura";
+      // Só fala quando muda de fase: falar a cada volta seria insuportável.
+      if (estado.fase !== "sem-rosto") {
+        estado.fase = "sem-rosto";
+        falar("Posicione o rosto na moldura", { repetirApos: 20000 });
+      }
       limparVivacidade();
       estado.rostoDesde = 0;
       estado.candidato = null;
@@ -651,6 +735,16 @@ async function lacoFacial() {
         instrucao.textContent = segundos > 8
           ? `${nome}vire a cabeça devagar para um lado e volte`
           : `${nome}balance levemente a cabeça para confirmar`;
+
+        if (estado.fase !== "confirmar") {
+          estado.fase = "confirmar";
+          falar(candidatoFresco
+            ? `${estado.candidato.colaborador.nome.split(" ")[0]}, balance a cabeça para confirmar`
+            : "Balance a cabeça para confirmar");
+        } else if (segundos > 8) {
+          // Insistindo há um tempo: troca a instrução por uma mais explícita.
+          falar("Vire a cabeça devagar para um lado e volte", { repetirApos: 12000 });
+        }
       } else if (candidatoFresco) {
         // Piscou e o candidato já está calculado: registra imediatamente.
         moldura.className = "moldura detectado";
@@ -798,6 +892,8 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgResolucao").value = String(estado.cfg.resolucao || 416);
   $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
   $("cfgLimiarMovimento").value = estado.cfg.limiarMovimento || 0.12;
+  $("cfgVoz").checked = estado.cfg.voz !== false;
+  $("cfgVozVelocidade").value = estado.cfg.vozVelocidade || 1;
   $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
   $("painelConfig").classList.remove("oculto");
 });
@@ -812,6 +908,8 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     resolucao: Number($("cfgResolucao").value) || 416,
     exigirPiscada: $("cfgPiscada").checked,
     limiarMovimento: Number($("cfgLimiarMovimento").value) || 0.12,
+    voz: $("cfgVoz").checked,
+    vozVelocidade: Number($("cfgVozVelocidade").value) || 1,
     diagnostico: $("cfgDiagnostico").checked,
   };
   localStorage.setItem(CHAVE_CFG, JSON.stringify(estado.cfg));
@@ -822,6 +920,7 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     $("statusCfg").textContent =
       `${dados.colaboradores.length} colaboradores · ${comRosto} com rosto cadastrado · REP ${dados.rep.identificador}`;
     if (!estado.modelosProntos) await carregarModelos();
+    if (estado.cfg.voz) { liberarVoz(); falar("Voz ativada.", { repetirApos: 0, interromper: true }); }
   } catch (e) {
     $("statusCfg").textContent = `Falhou: ${e.message}`;
   }
@@ -967,12 +1066,38 @@ $("btnCapturar").addEventListener("click", async () => {
   }
 });
 
+/* ---------- aplicativo instalado ---------- */
+// Registrado sem alarde: se falhar, o app continua funcionando como página.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/ponto-sw.js")
+      .then(reg => { estado.swPronto = true; reg.update?.(); })
+      .catch(e => console.warn("Service worker não registrou:", e.message));
+  });
+}
+
+// Tela sempre acesa enquanto o app está aberto: um tablet de portaria que
+// apaga a cada dois minutos atrasa a fila inteira.
+let travaTela = null;
+async function manterTelaAcesa() {
+  try {
+    if ("wakeLock" in navigator && document.visibilityState === "visible") {
+      travaTela = await navigator.wakeLock.request("screen");
+      travaTela.addEventListener("release", () => { travaTela = null; });
+    }
+  } catch { /* alguns aparelhos não permitem; a configuração do Android resolve */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") manterTelaAcesa();
+});
+
 /* ---------- partida ---------- */
 (async function iniciar() {
   carregarLocal();
   montarTeclado();
   atualizarEstado();
   tique();
+  manterTelaAcesa();
 
   if (!estado.cfg.api || !estado.cfg.token) {
     $("instrucao").textContent = "Tablet não configurado — toque na engrenagem";

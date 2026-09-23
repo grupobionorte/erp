@@ -1,0 +1,17 @@
+{
+  "name": "Ponto — Biomassa",
+  "short_name": "Ponto",
+  "description": "Registro de ponto dos colaboradores nas operações",
+  "start_url": "/tablet-ponto.html",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#16293C",
+  "theme_color": "#1F3B57",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/ponto-icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/ponto-icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/ponto-icone-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

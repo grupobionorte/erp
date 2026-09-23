@@ -2186,11 +2186,19 @@ function PontoPessoas() {
   if (pessoas === null) return <p className="hint">Carregando…</p>;
   if (erro) return <p className="error-text">{erro}</p>;
 
+  const semPin = pessoas.filter(p => !p.temPin);
+
   return (
     <div>
+      {semPin.length > 0 && (
+        <p className="hint" style={{ background: "#fbf3e2", color: "#7a5205", padding: "11px 13px", borderRadius: 8 }}>
+          <strong>{semPin.length} colaborador(es) sem PIN:</strong> {semPin.map(p => p.nome).join(", ")}.
+          Sem PIN essas pessoas não conseguem registrar ponto se o tablet estiver em modo somente PIN.
+        </p>
+      )}
       <p className="hint">
-        O PIN é a forma garantida de marcar o ponto: quem não tiver rosto cadastrado, ou não quiser
-        fornecer a biometria, precisa ter um. O rosto se cadastra no próprio tablet.
+        O PIN é a forma garantida de marcar o ponto: funciona com óculos escuros, com poeira na lente e
+        sob sol forte. O rosto, quando usado, se cadastra no próprio tablet.
       </p>
       <table className="data-table">
         <thead>

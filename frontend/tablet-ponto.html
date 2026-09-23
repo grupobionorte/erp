@@ -191,6 +191,15 @@
   <label>Token do REP</label>
   <input id="cfgToken" placeholder="gerado ao cadastrar o tablet no ERP">
 
+  <label style="display:flex; align-items:center; gap:10px; margin-top:16px;">
+    <input type="checkbox" id="cfgSomentePin" style="width:auto;"> Trabalhar somente com PIN
+  </label>
+  <p class="ajuda">
+    Desliga o reconhecimento facial por completo: o tablet abre direto no teclado, não baixa os modelos e
+    não gasta processamento com a câmera. Mais rápido, mais previsível e esquenta menos — indicado para
+    ambiente com poeira, sol forte ou uso de óculos escuros. Todo mundo precisa ter PIN cadastrado.
+  </p>
+
   <label>Endereço dos modelos de reconhecimento facial</label>
   <input id="cfgModelos" placeholder="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model">
   <p class="ajuda">Os modelos são baixados uma vez e ficam no cache do navegador. Sem eles, o tablet trabalha só com PIN.</p>
@@ -309,9 +318,12 @@
     <input id="cadConsentimento" value="Autorizo o uso da minha biometria facial exclusivamente para registro de ponto, nos termos da LGPD.">
     <div class="linha">
       <button class="btn btn-verde" id="btnCapturar">Capturar rosto</button>
+      <button class="btn" id="btnTestar">Testar reconhecimento</button>
       <button class="btn" id="btnFecharCadastro2">Fechar</button>
     </div>
     <p class="ajuda" id="statusCadastro"></p>
+    <pre id="resultadoTeste" class="oculto" style="background:#fff; border:1px solid #E5E3DA; border-radius:9px;
+         padding:12px; font-size:13px; white-space:pre-wrap; margin-top:10px;"></pre>
     <div class="lista-colab" id="listaColaboradores"></div>
   </div>
 </div>
@@ -338,6 +350,10 @@ const cfgPadrao = {
   token: "",
   modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.3/model",
   limiar: 0.45,
+  // Operação só com PIN: não carrega os modelos de reconhecimento nem roda
+  // inferência. A câmera continua aberta, mas só para perceber a tampa da
+  // caixa fechando — o que custa quase nada.
+  somentePin: false,
   exigirPiscada: true,
   voz: true,
   vozVelocidade: 1,
@@ -740,6 +756,16 @@ function avaliarLuz(video) {
   return estado.repouso;
 }
 
+// Em modo somente PIN não há laço de reconhecimento, mas a tampa da caixa
+// continua valendo: este laço só olha a luz, uma vez por segundo.
+async function lacoRepouso() {
+  if (estado.cfg.somentePin) {
+    const emRepouso = avaliarLuz($("video"));
+    if (emRepouso) atualizarRepouso();
+    setTimeout(lacoRepouso, 1000);
+  }
+}
+
 /* ---------- reconhecimento facial ---------- */
 let rostosConhecidos = null;
 let piscouRecentemente = false;
@@ -1092,8 +1118,10 @@ function conferirPin() {
 }
 
 function alternarModo(novo) {
-  estado.modo = novo;
-  const facial = novo === "facial";
+  // Em modo somente PIN não existe alternância: o teclado é a tela.
+  estado.modo = estado.cfg.somentePin ? "pin" : novo;
+  const facial = estado.modo === "facial";
+  $("btnAlternar").classList.toggle("oculto", Boolean(estado.cfg.somentePin));
   $("areaCamera").classList.toggle("oculto", !facial);
   $("areaPin").classList.toggle("oculto", facial);
   $("btnAlternar").textContent = facial ? "Usar PIN" : "Usar reconhecimento facial";
@@ -1110,6 +1138,7 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgToken").value = estado.cfg.token;
   $("cfgModelos").value = estado.cfg.modelos;
   $("cfgLimiar").value = estado.cfg.limiar;
+  $("cfgSomentePin").checked = Boolean(estado.cfg.somentePin);
   $("cfgResolucao").value = String(estado.cfg.resolucao || 416);
   $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
   $("cfgLimiarMovimento").value = estado.cfg.limiarMovimento || 0.12;
@@ -1130,6 +1159,7 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     token: $("cfgToken").value.trim(),
     modelos: $("cfgModelos").value.trim() || cfgPadrao.modelos,
     limiar: Number($("cfgLimiar").value) || cfgPadrao.limiar,
+    somentePin: $("cfgSomentePin").checked,
     resolucao: Number($("cfgResolucao").value) || 416,
     exigirPiscada: $("cfgPiscada").checked,
     limiarMovimento: Number($("cfgLimiarMovimento").value) || 0.12,
@@ -1204,11 +1234,15 @@ $("btnEntrarCadastro").addEventListener("click", async () => {
 function desenharListaCadastro() {
   $("selColaborador").innerHTML = estado.colaboradores
     .map(c => `<option value="${c.id}">${c.nome}</option>`).join("");
-  $("listaColaboradores").innerHTML = estado.colaboradores.map(c => `
+  $("listaColaboradores").innerHTML = estado.colaboradores.map(c => {
+    const v = c.vetorFacial;
+    const perfis = Array.isArray(v) && v.length ? (Array.isArray(v[0]) ? v.length : 1) : 0;
+    return `
     <div class="linha-colab">
       <span>${c.nome}</span>
-      <span class="tag ${c.vetorFacial ? "" : "sem"}">${c.vetorFacial ? "rosto cadastrado" : "sem rosto"}</span>
-    </div>`).join("");
+      <span class="tag ${perfis ? "" : "sem"}">${perfis ? `${perfis} perfil(is) de rosto` : "sem rosto"}</span>
+    </div>`;
+  }).join("");
 }
 
 // Um retrato só não representa a pessoa: luz, ângulo e distância mudam o
@@ -1320,6 +1354,51 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") manterTelaAcesa();
 });
 
+/* ---------- teste de reconhecimento ---------- */
+// Mostra o que o tablet realmente enxerga: quem ele acha que é a pessoa na
+// frente da câmera e a distância até cada rosto cadastrado. Sem isso, um
+// "não reconhece" vira adivinhação.
+let testando = false;
+
+$("btnTestar").addEventListener("click", async () => {
+  if (testando) { testando = false; $("btnTestar").textContent = "Testar reconhecimento"; return; }
+  if (!estado.modelosProntos) { $("statusCadastro").textContent = "Modelos não carregaram."; return; }
+
+  testando = true;
+  $("btnTestar").textContent = "Parar teste";
+  $("resultadoTeste").classList.remove("oculto");
+
+  while (testando) {
+    const d = await faceapi
+      .detectSingleFace($("videoCad"), new faceapi.TinyFaceDetectorOptions({ inputSize: 512, scoreThreshold: 0.4 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!d) {
+      $("resultadoTeste").textContent = "Nenhum rosto detectado na câmera.";
+    } else {
+      // Agrupa por pessoa, ficando com o melhor perfil de cada uma.
+      const porPessoa = new Map();
+      for (const c of (rostosConhecidos || [])) {
+        const dist = distancia(d.descriptor, c.vetor);
+        const atual = porPessoa.get(c.colaborador.id);
+        if (!atual || dist < atual.dist) porPessoa.set(c.colaborador.id, { nome: c.colaborador.nome, dist });
+      }
+      const ordenado = [...porPessoa.values()].sort((a, b) => a.dist - b.dist).slice(0, 5);
+      const limiar = Number(estado.cfg.limiar);
+
+      $("resultadoTeste").textContent = ordenado.length
+        ? `Rostos carregados no tablet: ${rostosConhecidos.length} perfis de ${porPessoa.size} pessoas\n` +
+          `Limiar atual: ${limiar.toFixed(2)} (aceita abaixo disso)\n\n` +
+          ordenado.map((o, i) =>
+            `${i + 1}. ${o.nome.padEnd(32)} ${o.dist.toFixed(3)}  ${o.dist <= limiar ? "ACEITA" : "recusa"}`
+          ).join("\n")
+        : "Nenhum rosto cadastrado chegou a este tablet. Toque em Salvar e sincronizar na configuração.";
+    }
+    await new Promise(r => setTimeout(r, 700));
+  }
+});
+
 /* ---------- partida ---------- */
 (async function iniciar() {
   carregarLocal();
@@ -1334,23 +1413,33 @@ document.addEventListener("visibilitychange", () => {
     return;
   }
 
-  try {
-    await iniciarCamera($("video"));
-    $("instrucao").textContent = "Carregando reconhecimento…";
-  } catch {
-    $("instrucao").textContent = "Câmera indisponível — use o PIN";
+  if (estado.cfg.somentePin) {
+    // A câmera segue aberta só para enxergar a tampa da caixa fechando.
+    // Sem modelos carregados, o custo disso é irrelevante.
+    try { await iniciarCamera($("video")); } catch { /* sem câmera, sem repouso automático */ }
     alternarModo("pin");
-  }
-
-  await carregarModelos();
-  await prepararRostosConhecidos();
-
-  if (!estado.modelosProntos) {
-    $("instrucao").textContent = "Reconhecimento indisponível — use o PIN";
-    alternarModo("pin");
+    $("visorPin").textContent = "";
+    falar("Digite seu PIN para registrar o ponto", { repetirApos: 30000 });
+    if (estado.cfg.repousoAutomatico !== false) lacoRepouso();
   } else {
-    $("instrucao").textContent = "Posicione o rosto na moldura";
-    lacoFacial();
+    try {
+      await iniciarCamera($("video"));
+      $("instrucao").textContent = "Carregando reconhecimento…";
+    } catch {
+      $("instrucao").textContent = "Câmera indisponível — use o PIN";
+      alternarModo("pin");
+    }
+
+    await carregarModelos();
+    await prepararRostosConhecidos();
+
+    if (!estado.modelosProntos) {
+      $("instrucao").textContent = "Reconhecimento indisponível — use o PIN";
+      alternarModo("pin");
+    } else {
+      $("instrucao").textContent = "Posicione o rosto na moldura";
+      lacoFacial();
+    }
   }
 
   // Atualiza a lista de pessoas de tempos em tempos, quando houver rede.

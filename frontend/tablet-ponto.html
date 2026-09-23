@@ -384,7 +384,10 @@ const estado = {
   fila: [],
   modo: "facial",
   pausado: false,
+  telaOculta: false,
   rostoDesde: 0,
+  semRostoDesde: 0,
+  tinhaAlguem: false,
   ultimaMedidaOlho: null,
   candidato: null,
   fase: null,
@@ -655,7 +658,10 @@ function retomarReconhecimento() {
 // o pacote de português esteja instalado no aparelho — e é por isso que ela
 // é um reforço da tela, nunca a única forma de orientar.
 let vozLiberada = false;
-let ultimaFala = { texto: "", em: 0 };
+// Uma marca de tempo POR frase. Guardar só a última não bastava: quando o
+// rosto oscilava entre detectado e não detectado, as frases se alternavam e
+// cada troca liberava a outra de novo — o tablet falava sem parar.
+const ultimasFalas = new Map();
 
 function escolherVozPtBr() {
   const vozes = window.speechSynthesis?.getVoices?.() || [];
@@ -664,15 +670,18 @@ function escolherVozPtBr() {
 
 function falar(texto, { repetirApos = 8000, interromper = false, mesmoPausado = false } = {}) {
   if (!estado.cfg.voz || !("speechSynthesis" in window) || !vozLiberada || !texto) return;
-  // Com um painel aberto (configuração, cadastro de rostos), o app fica em
-  // silêncio: quem está mexendo ali não precisa ouvir o tablet pedindo pra
-  // balançar a cabeça.
-  if (estado.pausado && !mesmoPausado) return;
+  // Com um painel aberto (configuração, cadastro de rostos), em repouso, ou
+  // com a tela do aparelho apagada, o app fica em silêncio.
+  if ((estado.pausado || estado.repouso || document.visibilityState === "hidden") && !mesmoPausado) return;
 
   // Não fica repetindo a mesma frase a cada volta do laço.
   const agoraMs = Date.now();
-  if (texto === ultimaFala.texto && agoraMs - ultimaFala.em < repetirApos) return;
-  ultimaFala = { texto, em: agoraMs };
+  if (agoraMs - (ultimasFalas.get(texto) || 0) < repetirApos) return;
+  ultimasFalas.set(texto, agoraMs);
+  // A tabela não cresce sem limite num tablet que fica dias ligado.
+  if (ultimasFalas.size > 40) {
+    for (const [t, em] of ultimasFalas) if (agoraMs - em > 300000) ultimasFalas.delete(t);
+  }
 
   try {
     if (interromper) window.speechSynthesis.cancel();
@@ -744,7 +753,11 @@ function entrarEmRepouso() {
   if (estado.repouso) return;
   estado.repouso = true;
   estado.candidato = null;
+  estado.fase = null;
   limparVivacidade();
+  // A fila de voz continua tocando sozinha depois que a tela apaga — daí a
+  // sensação de que a captura não parou.
+  try { window.speechSynthesis?.cancel(); } catch { /* sem voz, tudo bem */ }
   $("repouso").classList.remove("oculto");
   atualizarRepouso();
 }
@@ -802,7 +815,7 @@ function avaliarLuz(video) {
 // continua valendo: este laço só olha a luz, uma vez por segundo.
 async function lacoRepouso() {
   if (estado.cfg.somentePin) {
-    if (estado.pausado) return setTimeout(lacoRepouso, 1000);
+    if (estado.pausado || estado.telaOculta) return setTimeout(lacoRepouso, 1000);
     const emRepouso = avaliarLuz($("video"));
     if (emRepouso) atualizarRepouso();
     setTimeout(lacoRepouso, 1000);
@@ -1014,6 +1027,8 @@ async function lacoFacial() {
   const moldura = $("moldura");
   const instrucao = $("instrucao");
 
+  if (estado.telaOculta) return setTimeout(lacoFacial, 1000);
+
   if (estado.pausado || estado.ocupado || estado.modo !== "facial" || !estado.modelosProntos) {
     if (estado.pausado) {
       $("moldura").className = "moldura";
@@ -1038,15 +1053,29 @@ async function lacoFacial() {
     if (!deteccao) {
       moldura.className = "moldura";
       instrucao.textContent = "Posicione o rosto na moldura";
-      // Só fala quando muda de fase: falar a cada volta seria insuportável.
-      if (estado.fase !== "sem-rosto") {
+
+      // Espera uns segundos antes de considerar que não tem ninguém: a
+      // detecção pisca com facilidade (pessoa vira o rosto, muda a luz), e
+      // sem essa espera o app ficava alternando de fase o tempo todo.
+      if (!estado.semRostoDesde) estado.semRostoDesde = Date.now();
+      const semNinguem = Date.now() - estado.semRostoDesde > 2500;
+
+      if (semNinguem && estado.fase !== "sem-rosto") {
         estado.fase = "sem-rosto";
-        falar("Posicione o rosto na moldura", { repetirApos: 20000 });
+        // Só convida quem acabou de chegar: se ninguém aparece, o tablet
+        // fica quieto em vez de ficar chamando o pátio inteiro.
+        if (estado.tinhaAlguem) falar("Posicione o rosto na moldura", { repetirApos: 60000 });
+        estado.tinhaAlguem = false;
       }
-      limparVivacidade();
-      estado.rostoDesde = 0;
-      estado.candidato = null;
+
+      if (semNinguem) {
+        limparVivacidade();
+        estado.rostoDesde = 0;
+        estado.candidato = null;
+      }
     } else {
+      estado.semRostoDesde = 0;
+      estado.tinhaAlguem = true;
       if (!estado.rostoDesde) estado.rostoDesde = Date.now();
 
       // Identificação em paralelo, sem travar a busca pela piscada.
@@ -1485,8 +1514,21 @@ async function manterTelaAcesa() {
     }
   } catch { /* alguns aparelhos não permitem; a configuração do Android resolve */ }
 }
+// Tela apagada pelo Android (ímã na tampa, tempo de tela, aparelho
+// bloqueado): a página continua viva por baixo e seguiria capturando e
+// falando. Aqui o app percebe e para de verdade.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") manterTelaAcesa();
+  if (document.visibilityState === "hidden") {
+    estado.telaOculta = true;
+    estado.fase = null;
+    estado.candidato = null;
+    try { window.speechSynthesis?.cancel(); } catch { /* sem voz, tudo bem */ }
+  } else {
+    estado.telaOculta = false;
+    estado.fase = null;
+    limparVivacidade();
+    manterTelaAcesa();
+  }
 });
 
 /* ---------- teste de reconhecimento ---------- */

@@ -167,11 +167,17 @@
   <p class="ajuda">Menor = mais rigoroso, mais recusas. Maior = mais fácil confundir pessoas parecidas. Ajuste no local, com gente de verdade.</p>
 
   <label style="display:flex; align-items:center; gap:10px; margin-top:16px;">
-    <input type="checkbox" id="cfgPiscada" style="width:auto;"> Exigir piscada antes de aceitar o rosto
+    <input type="checkbox" id="cfgPiscada" style="width:auto;"> Exigir prova de que é uma pessoa (movimento ou piscada)
   </label>
   <p class="ajuda">
     Desligar acelera o registro, mas o tablet passa a aceitar uma foto do colega na tela de um celular.
-    Só desligue se a piscada não estiver funcionando e o PIN não der conta do movimento.
+  </p>
+
+  <label>Movimento necessário para confirmar</label>
+  <input id="cfgLimiarMovimento" type="number" step="0.01" min="0.05" max="0.4" value="0.12">
+  <p class="ajuda">
+    Menor confirma mais rápido, e aceita movimento involuntário. Com o diagnóstico ligado, a tela mostra
+    "mov" — peça para a pessoa virar a cabeça e veja até quanto esse número sobe.
   </p>
 
   <label style="display:flex; align-items:center; gap:10px;">
@@ -256,6 +262,9 @@ const cfgPadrao = {
   modelos: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.3/model",
   limiar: 0.45,
   exigirPiscada: true,
+  // Quanto o rosto precisa girar para contar como pessoa viva. Menor =
+  // confirma mais fácil, aceita mais movimento involuntário.
+  limiarMovimento: 0.12,
   // Resolução da identificação. Maior = mais preciso e mais lento. Em
   // tablet fraco, 320 costuma ser o ponto de equilíbrio.
   resolucao: 416,
@@ -489,51 +498,92 @@ function distancia(a, b) {
   return Math.sqrt(soma);
 }
 
-// Vivacidade: exige uma piscada antes de aceitar. Não resolve tudo, mas
-// derruba o truque mais comum, que é mostrar a foto do colega no celular.
+// ---------- Vivacidade ----------
+// Serve para o tablet não aceitar uma foto do colega na tela de um celular.
 //
-// Duas lições da primeira versão, que não funcionava:
-//  - limiar fixo não serve. A abertura do olho muda com a pessoa, com a
-//    distância da câmera e com a luz. Agora comparamos com a abertura
-//    normal daquele rosto, medida nos últimos segundos.
-//  - de nada adianta a conta certa se o app só olha 3 quadros por segundo.
-//    Uma piscada dura menos que isso, então a detecção de piscada roda num
-//    laço rápido, sem calcular o vetor do rosto (que é a parte lenta).
+// A piscada era a escolha óbvia e não funcionou: num tablet, cada leitura
+// da câmera leva de 200 a 400 ms, e uma piscada dura menos que isso. O
+// aparelho quase nunca olha no instante em que o olho está fechado.
+//
+// Movimento da cabeça resolve isso: virar o rosto e voltar leva mais de um
+// segundo, então aparece em várias leituras seguidas mesmo num aparelho
+// lento. A piscada continua valendo como atalho para quem tiver um tablet
+// rápido — o que vier primeiro confirma.
 function proporcaoOlho(pontos) {
   const d = (p, q) => Math.hypot(p.x - q.x, p.y - q.y);
   return (d(pontos[1], pontos[5]) + d(pontos[2], pontos[4])) / (2 * d(pontos[0], pontos[3]));
 }
 
-let referenciaOlhoAberto = null;   // abertura normal deste rosto
+let referenciaOlhoAberto = null;
 let olhoFechadoDesde = 0;
+let historicoGiro = [];
+
+function centro(pontos) {
+  return {
+    x: pontos.reduce((t, p) => t + p.x, 0) / pontos.length,
+    y: pontos.reduce((t, p) => t + p.y, 0) / pontos.length,
+  };
+}
+
+// Quanto o rosto está virado, medido pela diferença de distância do nariz
+// até cada olho. Não precisa ser exato: o que importa é a variação.
+function giroDoRosto(landmarks) {
+  const olhoE = centro(landmarks.getLeftEye());
+  const olhoD = centro(landmarks.getRightEye());
+  const nariz = centro(landmarks.getNose());
+  const largura = Math.hypot(olhoE.x - olhoD.x, olhoE.y - olhoD.y) || 1;
+  return (Math.hypot(nariz.x - olhoE.x, nariz.y - olhoE.y)
+        - Math.hypot(nariz.x - olhoD.x, nariz.y - olhoD.y)) / largura;
+}
 
 function avaliarPiscada(landmarks) {
   const razao = (proporcaoOlho(landmarks.getLeftEye()) + proporcaoOlho(landmarks.getRightEye())) / 2;
   const agoraMs = Date.now();
 
-  // Vai aprendendo a abertura normal: sobe rápido, desce devagar, para uma
-  // piscada não virar a nova referência.
   if (referenciaOlhoAberto === null) referenciaOlhoAberto = razao;
   else if (razao > referenciaOlhoAberto) referenciaOlhoAberto = razao * 0.3 + referenciaOlhoAberto * 0.7;
   else referenciaOlhoAberto = razao * 0.02 + referenciaOlhoAberto * 0.98;
 
-  estado.ultimaMedidaOlho = { razao, referencia: referenciaOlhoAberto };
-
-  // Fechou quando cai bem abaixo da própria referência.
-  const limite = referenciaOlhoAberto * 0.72;
-  if (razao < limite) {
+  if (razao < referenciaOlhoAberto * 0.72) {
     if (!olhoFechadoDesde) olhoFechadoDesde = agoraMs;
   } else if (olhoFechadoDesde) {
     const duracao = agoraMs - olhoFechadoDesde;
     olhoFechadoDesde = 0;
-    // Piscada de verdade: fecha e abre rápido. Olho fechado por muito tempo
-    // é pessoa de olhos fechados, não piscada.
     if (duracao >= 60 && duracao <= 900) {
       piscouRecentemente = true;
       setTimeout(() => { piscouRecentemente = false; }, 6000);
     }
   }
-  return piscouRecentemente;
+  return { razao, referencia: referenciaOlhoAberto };
+}
+
+// Amplitude do giro nos últimos segundos. Rosto parado fica perto de zero;
+// quem vira a cabeça e volta produz uma amplitude bem maior.
+function avaliarMovimento(landmarks) {
+  const agoraMs = Date.now();
+  const giro = giroDoRosto(landmarks);
+  historicoGiro.push({ giro, em: agoraMs });
+  historicoGiro = historicoGiro.filter(h => agoraMs - h.em < 4000);
+
+  const valores = historicoGiro.map(h => h.giro);
+  const amplitude = valores.length > 2 ? Math.max(...valores) - Math.min(...valores) : 0;
+  return { giro, amplitude };
+}
+
+function limparVivacidade() {
+  referenciaOlhoAberto = null;
+  olhoFechadoDesde = 0;
+  historicoGiro = [];
+  piscouRecentemente = false;
+}
+
+// Confirma por movimento OU por piscada, o que acontecer primeiro.
+function avaliarVivacidade(landmarks) {
+  const olho = avaliarPiscada(landmarks);
+  const mov = avaliarMovimento(landmarks);
+  estado.ultimaMedidaOlho = { razao: olho.razao, referencia: olho.referencia, amplitude: mov.amplitude };
+  const limiteMov = Number(estado.cfg.limiarMovimento) || 0.12;
+  return { vivo: piscouRecentemente || mov.amplitude >= limiteMov, amplitude: mov.amplitude };
 }
 
 async function iniciarCamera(elemento) {
@@ -577,7 +627,7 @@ async function lacoFacial() {
     if (!deteccao) {
       moldura.className = "moldura";
       instrucao.textContent = "Posicione o rosto na moldura";
-      referenciaOlhoAberto = null;
+      limparVivacidade();
       estado.rostoDesde = 0;
       estado.candidato = null;
     } else {
@@ -589,23 +639,25 @@ async function lacoFacial() {
         identificarRosto(video).finally(() => { identificando = false; });
       }
 
-      const vivo = estado.cfg.exigirPiscada === false ? true : avaliarPiscada(deteccao.landmarks);
+      const vivacidade = estado.cfg.exigirPiscada === false
+        ? { vivo: true, amplitude: 0 }
+        : avaliarVivacidade(deteccao.landmarks);
       const candidatoFresco = estado.candidato && Date.now() - estado.candidato.em < 3000;
 
-      if (!vivo) {
+      if (!vivacidade.vivo) {
         moldura.className = "moldura vivacidade";
         const segundos = Math.floor((Date.now() - estado.rostoDesde) / 1000);
-        instrucao.textContent = candidatoFresco
-          ? `${estado.candidato.colaborador.nome.split(" ")[0]} — pisque para confirmar`
-          : (segundos > 10 ? "Pisque os olhos — se não funcionar, use o PIN" : "Pisque os olhos para confirmar");
+        const nome = candidatoFresco ? estado.candidato.colaborador.nome.split(" ")[0] + " — " : "";
+        instrucao.textContent = segundos > 8
+          ? `${nome}vire a cabeça devagar para um lado e volte`
+          : `${nome}balance levemente a cabeça para confirmar`;
       } else if (candidatoFresco) {
         // Piscou e o candidato já está calculado: registra imediatamente.
         moldura.className = "moldura detectado";
         const { colaborador } = estado.candidato;
         estado.ocupado = true;
         estado.candidato = null;
-        piscouRecentemente = false;
-        referenciaOlhoAberto = null;
+        limparVivacidade();
         estado.rostoDesde = 0;
         registrarBatida(colaborador, "facial");
       } else {
@@ -614,8 +666,10 @@ async function lacoFacial() {
       }
 
       if (estado.cfg.diagnostico) {
+        const m = estado.ultimaMedidaOlho || {};
         instrucao.textContent += `  [${estado.backendTf || "?"} · det ${estado.msDeteccao}ms` +
           (estado.msIdentificacao ? ` · id ${estado.msIdentificacao}ms` : "") +
+          (m.amplitude !== undefined ? ` · mov ${m.amplitude.toFixed(3)}` : "") +
           (estado.candidato ? ` · ${estado.candidato.d.toFixed(3)}` : "") + "]";
       }
     }
@@ -743,6 +797,7 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgLimiar").value = estado.cfg.limiar;
   $("cfgResolucao").value = String(estado.cfg.resolucao || 416);
   $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
+  $("cfgLimiarMovimento").value = estado.cfg.limiarMovimento || 0.12;
   $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
   $("painelConfig").classList.remove("oculto");
 });
@@ -756,6 +811,7 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     limiar: Number($("cfgLimiar").value) || cfgPadrao.limiar,
     resolucao: Number($("cfgResolucao").value) || 416,
     exigirPiscada: $("cfgPiscada").checked,
+    limiarMovimento: Number($("cfgLimiarMovimento").value) || 0.12,
     diagnostico: $("cfgDiagnostico").checked,
   };
   localStorage.setItem(CHAVE_CFG, JSON.stringify(estado.cfg));

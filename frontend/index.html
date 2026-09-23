@@ -1403,8 +1403,6 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
   const editando = !!record?.id;
   const rotuloSingular = config.label.replace(/es$/, "").replace(/s$/, "");
 
-  const [aba, setAba] = useState("dados");
-  const temJornada = moduleKey === "colaboradores";
   const [data, setData] = useState(() => record || { tipo: "Pessoa Jurídica", contribuinte: "Contribuinte", endereco: emptyEndereco });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -1497,19 +1495,7 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
-        {temJornada && (
-          <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
-            <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
-            <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
-              Horários de trabalho
-            </button>
-          </div>
-        )}
-
         <div className="modal-body">
-          {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
-
-          <div hidden={temJornada && aba !== "dados"}>
           <section className="pf-secao">
             <h4 className="pf-secao-titulo">Identificação</h4>
             <div className="pf-grade">
@@ -1635,7 +1621,6 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
             </div>
             {erro && <p className="pf-aviso">{erro}</p>}
           </section>
-          </div>
         </div>
 
         <div className="modal-footer pf-rodape">
@@ -1669,6 +1654,9 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   const [data, setData] = useState(() => record || {});
   const [error, setError] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [aba, setAba] = useState("dados");
+  // Colaborador tem jornada de trabalho; os outros cadastros, não.
+  const temJornada = moduleKey === "colaboradores";
 
   const setField = (key, value) => setData(d => ({ ...d, [key]: value }));
 
@@ -1698,8 +1686,20 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
+
+        {temJornada && (
+          <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
+            <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
+            <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
+              Horários de trabalho
+            </button>
+          </div>
+        )}
+
         <div className="modal-body">
-          <div className="cadastro-fields-grid">
+          {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
+
+          <div className="cadastro-fields-grid" hidden={temJornada && aba !== "dados"}>
             {camposVisiveis.map(f => (
               <div
                 key={f.key}
@@ -1717,10 +1717,14 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           {error && <p className="error-text">{error}</p>}
         </div>
         <div className="modal-footer">
-          <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={salvando}>
-            {salvando ? "Salvando…" : "Salvar"}
+          <button className="btn" onClick={onCancel} disabled={salvando}>
+            {temJornada && aba === "jornada" ? "Fechar" : "Cancelar"}
           </button>
+          {!(temJornada && aba === "jornada") && (
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={salvando}>
+              {salvando ? "Salvando…" : "Salvar"}
+            </button>
+          )}
         </div>
       </div>
     </div>

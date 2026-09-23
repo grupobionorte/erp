@@ -2016,11 +2016,93 @@ function PontoView() {
         <button type="button" className="cte-aba" aria-selected={aba === "espelho"} onClick={() => setAba("espelho")}>Espelho de ponto</button>
         <button type="button" className="cte-aba" aria-selected={aba === "pessoas"} onClick={() => setAba("pessoas")}>Pessoas</button>
         <button type="button" className="cte-aba" aria-selected={aba === "tablets"} onClick={() => setAba("tablets")}>Tablets</button>
+        <button type="button" className="cte-aba" aria-selected={aba === "email"} onClick={() => setAba("email")}>E-mail</button>
       </div>
 
       {aba === "espelho" && <PontoEspelho />}
       {aba === "pessoas" && <PontoPessoas />}
       {aba === "tablets" && <PontoTablets />}
+      {aba === "email" && <PontoEmail />}
+    </div>
+  );
+}
+
+// Diagnóstico do envio de comprovantes. O envio real é silencioso de
+// propósito (não pode travar a batida), então sem esta tela o motivo de uma
+// falha ficaria só no log do servidor.
+function PontoEmail() {
+  const [situacao, setSituacao] = useState(null);
+  const [destino, setDestino] = useState("");
+  const [resultado, setResultado] = useState(null);
+  const [testando, setTestando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    try { setSituacao(await apiRequest("/ponto/email/situacao")); }
+    catch (e) { setSituacao({ erro: e.message }); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const testar = async () => {
+    setTestando(true); setResultado(null);
+    try {
+      const r = await apiRequest("/ponto/email/teste", { method: "POST", body: JSON.stringify({ para: destino }) });
+      setResultado({ ok: true, texto: `Enviado. ${r.aviso}` });
+    } catch (e) {
+      setResultado({ ok: false, texto: [e.message, e.detalhe].filter(Boolean).join("\n\n") });
+    } finally { setTestando(false); carregar(); }
+  };
+
+  if (!situacao) return <p className="hint">Verificando…</p>;
+
+  const conexaoOk = situacao.conexao?.ok;
+
+  return (
+    <div>
+      <div className="nf-section">
+        <h4 className="nf-section-title">Situação do servidor de e-mail</h4>
+        <table className="data-table">
+          <tbody>
+            <tr><td>Variáveis configuradas</td><td>{situacao.configurado
+              ? <span style={{ color: "#00732F", fontWeight: 600 }}>sim</span>
+              : <span style={{ color: "#c62828", fontWeight: 600 }}>não — falta SMTP_HOST, SMTP_USUARIO ou SMTP_SENHA no Render</span>}</td></tr>
+            <tr><td>Servidor</td><td>{situacao.host || "—"}:{situacao.porta}</td></tr>
+            <tr><td>Usuário</td><td>{situacao.usuario || "—"}</td></tr>
+            <tr><td>Remetente</td><td>{situacao.remetente || "—"}</td></tr>
+            <tr><td>Comprovante por batida</td><td>{situacao.comprovanteLigado ? "ligado" : "desligado"}</td></tr>
+            <tr>
+              <td>Conexão com o servidor</td>
+              <td>{conexaoOk
+                ? <span style={{ color: "#00732F", fontWeight: 600 }}>respondendo</span>
+                : <span style={{ color: "#c62828" }}>{situacao.conexao?.erro || "sem resposta"}</span>}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="nf-section">
+        <h4 className="nf-section-title">Enviar um teste</h4>
+        <div className="nf-grid-3">
+          <div className="field-group">
+            <label className="field-label">Endereço de destino</label>
+            <input type="email" value={destino} placeholder="seu@email.com" onChange={e => setDestino(e.target.value)} />
+          </div>
+          <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+            <button className="btn btn-primary" onClick={testar} disabled={testando || !destino}>
+              {testando ? "Enviando…" : "Enviar teste"}
+            </button>
+          </div>
+        </div>
+        {resultado && (
+          <pre style={{
+            whiteSpace: "pre-wrap", fontSize: 13, padding: "12px 14px", borderRadius: 9, marginTop: 10,
+            background: resultado.ok ? "#eaf3de" : "#faece7", color: resultado.ok ? "#00732F" : "#791f1f",
+          }}>{resultado.texto}</pre>
+        )}
+        <p className="hint">
+          O teste separa os dois tipos de problema: se a conexão falha, é host, porta, usuário ou senha; se
+          a conexão passa e o envio é recusado, costuma ser bloqueio do provedor ou remetente não autorizado.
+        </p>
+      </div>
     </div>
   );
 }

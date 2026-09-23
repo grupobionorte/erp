@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { apurarPeriodo } = require("../lib/jornada");
-const { enviarComprovantePonto } = require("../lib/email");
+const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
 
 // Router separado para o aparelho: fica fora do login de usuário, porque
@@ -463,6 +463,47 @@ router.get("/espelho", asyncHandler(async (req, res) => {
 
   const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada });
   res.json({ colaborador, jornada, ...apuracao });
+}));
+
+// ---------------------------------------------------------------------------
+// Diagnóstico de e-mail
+// ---------------------------------------------------------------------------
+router.get("/email/situacao", asyncHandler(async (req, res) => {
+  const config = situacao();
+  // Só testa a conexão se houver o que testar.
+  const conexao = config.configurado ? await verificarConexao() : { ok: false, erro: "SMTP não configurado" };
+  res.json({ ...config, conexao });
+}));
+
+router.post("/email/teste", asyncHandler(async (req, res) => {
+  const { para } = req.body;
+  if (!para) return res.status(400).json({ erro: "Informe o endereço de destino" });
+
+  const conexao = await verificarConexao();
+  if (!conexao.ok) {
+    return res.status(502).json({
+      erro: "Não consegui conversar com o servidor de e-mail",
+      detalhe: [conexao.erro, conexao.codigo, conexao.resposta].filter(Boolean).join(" · "),
+    });
+  }
+
+  const resultado = await enviarEmail({
+    para,
+    assunto: "Teste de envio — Ponto Biomassa",
+    texto: "Se você recebeu esta mensagem, o envio de comprovantes de ponto está funcionando.",
+    html: `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif">
+      <h2 style="color:#1F3B57;font-size:16px;margin:0 0 8px;">Teste de envio</h2>
+      <p style="font-size:14px;">Se você recebeu esta mensagem, o envio de comprovantes de ponto está funcionando.</p>
+    </div>`,
+  });
+
+  if (!resultado.enviado) {
+    return res.status(502).json({
+      erro: "O servidor de e-mail aceitou a conexão mas recusou o envio",
+      detalhe: [resultado.motivo, resultado.codigo, resultado.resposta].filter(Boolean).join(" · "),
+    });
+  }
+  res.json({ enviado: true, id: resultado.id, aviso: "Confira também a caixa de spam." });
 }));
 
 // ---------------------------------------------------------------------------

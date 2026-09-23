@@ -54,7 +54,7 @@ async function enviarEmail({ para, assunto, texto, html }) {
     return { enviado: true, id: info.messageId };
   } catch (erro) {
     console.error(`[email] falha ao enviar para ${para}: ${erro.message}`);
-    return { enviado: false, motivo: erro.message };
+    return { enviado: false, motivo: erro.message, codigo: erro.code, resposta: erro.response };
   }
 }
 
@@ -117,4 +117,36 @@ async function enviarComprovantePonto({ colaborador, marcacao, rep, empresa, fus
   });
 }
 
-module.exports = { enviarEmail, enviarComprovantePonto, configurado };
+/**
+ * Conta o que está configurado, sem revelar a senha. Serve para a tela de
+ * diagnóstico responder "o servidor tem as variáveis?" antes de investigar
+ * qualquer outra coisa.
+ */
+function situacao() {
+  const mascarar = (v) => (v ? `${String(v).slice(0, 3)}***${String(v).slice(-8)}` : null);
+  return {
+    configurado: configurado(),
+    host: process.env.SMTP_HOST || null,
+    porta: Number(process.env.SMTP_PORTA || 587),
+    usuario: mascarar(process.env.SMTP_USUARIO),
+    remetente: process.env.EMAIL_REMETENTE || process.env.SMTP_USUARIO || null,
+    comprovanteLigado: process.env.EMAIL_COMPROVANTE_PONTO !== "false",
+  };
+}
+
+/**
+ * Conversa com o servidor de e-mail sem enviar nada. Separa os dois tipos de
+ * problema: credencial e conexão de um lado, endereço e entrega do outro.
+ */
+async function verificarConexao() {
+  const transporte = obterTransportador();
+  if (!transporte) return { ok: false, erro: "SMTP não configurado no servidor" };
+  try {
+    await transporte.verify();
+    return { ok: true };
+  } catch (erro) {
+    return { ok: false, erro: erro.message, codigo: erro.code, resposta: erro.response };
+  }
+}
+
+module.exports = { enviarEmail, enviarComprovantePonto, configurado, situacao, verificarConexao };

@@ -72,6 +72,16 @@
   }
   .visor { font-size: 40px; letter-spacing: 14px; text-align: center; margin-bottom: 18px; min-height: 52px; }
 
+  /* Repouso — tampa fechada. Tela quase apagada e nenhum processamento. */
+  .repouso {
+    position: fixed; inset: 0; background: #000; color: #2A4763; z-index: 45;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  .repouso-texto { opacity: 0.35; }
+  .repouso-texto #repousoRelogio { font-size: 46px; font-weight: 300; font-variant-numeric: tabular-nums; }
+  .repouso-texto p { font-size: 15px; margin: 8px 0 0; }
+  .repouso-texto span { font-size: 12.5px; }
+
   /* Confirmação */
   .confirmacao {
     position: fixed; inset: 0; background: var(--verde-escuro); display: flex; flex-direction: column;
@@ -142,6 +152,26 @@
   <button class="btn btn-verde oculto" id="btnConfirmarPin">Confirmar</button>
 </div>
 
+<!-- Batida recente do mesmo colaborador -->
+<div class="confirmacao oculto" id="jaRegistrou" style="background:#8A6A12;">
+  <div class="icone">!</div>
+  <div class="nome" id="jrNome"></div>
+  <div class="detalhe" id="jrDetalhe" style="font-size:19px;"></div>
+  <div style="display:flex; gap:14px; margin-top:22px; flex-wrap:wrap; justify-content:center;">
+    <button class="btn" id="jrCancelar" style="min-width:200px;">Era só conferir</button>
+    <button class="btn btn-verde" id="jrConfirmar" style="min-width:260px;">Registrar mesmo assim</button>
+  </div>
+</div>
+
+<!-- Repouso: tampa da caixa fechada -->
+<div class="repouso oculto" id="repouso">
+  <div class="repouso-texto">
+    <div id="repousoRelogio">--:--</div>
+    <p>Abra a tampa para registrar o ponto</p>
+    <span id="repousoFila"></span>
+  </div>
+</div>
+
 <!-- Confirmação da batida -->
 <div class="confirmacao oculto" id="confirmacao">
   <div class="icone" id="confIcone">✓</div>
@@ -183,6 +213,30 @@
   <p class="ajuda">
     Desligar acelera o registro, mas o tablet passa a aceitar uma foto do colega na tela de um celular.
   </p>
+
+  <label>Minutos entre batidas da mesma pessoa</label>
+  <input id="cfgMinutosEntreBatidas" type="number" step="1" min="0" max="30" value="1">
+  <p class="ajuda">
+    Dentro desse tempo o tablet não registra sozinho a mesma pessoa de novo — evita a batida repetida
+    de quem ficou parado na frente da câmera. Ele mostra a hora do registro anterior e, se a pessoa
+    realmente precisar bater outra vez, ela confirma no botão. Zero desliga a janela.
+  </p>
+
+  <label style="display:flex; align-items:center; gap:10px;">
+    <input type="checkbox" id="cfgRepouso" style="width:auto;"> Descansar quando a câmera ficar no escuro
+  </label>
+  <p class="ajuda">
+    Para tablet dentro de caixa com tampa: fechou, a tela apaga e o reconhecimento para — o que evita o
+    aparelho esquentar à toa. Abriu, volta sozinho. Não desliga a tela do Android; para isso, um ímã na
+    tampa costuma funcionar nos tablets com sensor de capa.
+  </p>
+
+  <label>Luz abaixo da qual considera fechado (0 a 255)</label>
+  <input id="cfgLimiarEscuro" type="number" step="1" min="2" max="60" value="12">
+  <p class="ajuda">Com o diagnóstico ligado aparece "luz" na tela: feche a tampa e veja até quanto ele cai.</p>
+
+  <label>Segundos de escuro até descansar</label>
+  <input id="cfgSegundosRepouso" type="number" step="1" min="2" max="30" value="4">
 
   <label style="display:flex; align-items:center; gap:10px;">
     <input type="checkbox" id="cfgVoz" style="width:auto;"> Falar as instruções em voz alta
@@ -287,6 +341,12 @@ const cfgPadrao = {
   exigirPiscada: true,
   voz: true,
   vozVelocidade: 1,
+  // Repouso quando a câmera fica no escuro (tampa da caixa fechada).
+  // Janela em que o app não registra sozinho a mesma pessoa de novo.
+  minutosEntreBatidas: 1,
+  repousoAutomatico: true,
+  limiarEscuro: 12,
+  segundosRepouso: 4,
   // Quanto o rosto precisa girar para contar como pessoa viva. Menor =
   // confirma mais fácil, aceita mais movimento involuntário.
   limiarMovimento: 0.12,
@@ -308,6 +368,9 @@ const estado = {
   ultimaMedidaOlho: null,
   candidato: null,
   fase: null,
+  repouso: false,
+  escuroDesde: 0,
+  ultimoBrilho: null,
   msDeteccao: 0,
   msIdentificacao: 0,
   backendTf: null,
@@ -355,6 +418,7 @@ function tique() {
   const d = agora();
   const p = (n) => String(n).padStart(2, "0");
   $("relogio").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  if (estado.repouso) atualizarRepouso();
 }
 setInterval(tique, 1000);
 
@@ -416,10 +480,76 @@ window.addEventListener("online", () => { atualizarEstado(); enviarFila(); });
 window.addEventListener("offline", atualizarEstado);
 setInterval(enviarFila, 30000);
 
+/* ---------- batidas recentes ---------- */
+// O problema real não é a pessoa querer bater duas vezes: é o
+// reconhecimento disparar de novo enquanto ela ainda está parada na frente
+// da câmera. Isso é ruído do sensor, e é o que esta janela filtra.
+//
+// Importante: não é um bloqueio. A Portaria 671/2021 proíbe o sistema
+// impedir a marcação, então dentro da janela o app deixa de registrar
+// SOZINHO, mas oferece o botão para registrar assim mesmo — quem decide
+// continua sendo o colaborador.
+const CHAVE_ULTIMAS = "ponto.ultimasBatidas";
+
+function ultimasBatidas() {
+  try { return JSON.parse(localStorage.getItem(CHAVE_ULTIMAS) || "{}"); } catch { return {}; }
+}
+
+function anotarBatida(colaboradorId, quando) {
+  const mapa = ultimasBatidas();
+  mapa[colaboradorId] = quando;
+  try { localStorage.setItem(CHAVE_ULTIMAS, JSON.stringify(mapa)); } catch { /* sem espaço, segue */ }
+}
+
+// Devolve a hora da última batida se ela estiver dentro da janela.
+function batidaRecente(colaboradorId) {
+  const minutos = Number(estado.cfg.minutosEntreBatidas);
+  if (!minutos) return null;
+  const anterior = ultimasBatidas()[colaboradorId];
+  if (!anterior) return null;
+  const quando = new Date(anterior);
+  const decorrido = agora().getTime() - quando.getTime();
+  return decorrido >= 0 && decorrido < minutos * 60000 ? quando : null;
+}
+
+function mostrarJaRegistrou(colaborador, quando, metodo) {
+  const p = (n) => String(n).padStart(2, "0");
+  estado.ocupado = true;
+  $("jrNome").textContent = colaborador.nome;
+  $("jrDetalhe").textContent = `Você já registrou às ${p(quando.getHours())}:${p(quando.getMinutes())}`;
+  $("jaRegistrou").classList.remove("oculto");
+  bipar(false);
+  falar(`${colaborador.nome.split(" ")[0]}, você já registrou às ${p(quando.getHours())} e ${p(quando.getMinutes())}. Se precisar registrar de novo, toque no botão verde.`,
+        { repetirApos: 0, interromper: true });
+
+  const fechar = () => {
+    $("jaRegistrou").classList.add("oculto");
+    estado.ocupado = false;
+    estado.candidato = null;
+    limparVivacidade();
+    clearTimeout(estado.timerJaRegistrou);
+  };
+  // Se ninguém tocar, some sozinho — a fila não pode travar por causa disso.
+  estado.timerJaRegistrou = setTimeout(fechar, 12000);
+
+  $("jrCancelar").onclick = fechar;
+  $("jrConfirmar").onclick = () => {
+    fechar();
+    registrarBatida(colaborador, metodo, { ignorarJanela: true });
+  };
+}
+
 /* ---------- registro da batida ---------- */
 // Grava primeiro, envia depois. É esta ordem que faz o ponto funcionar sem
 // internet — e que impede uma queda de rede de engolir uma batida.
-function registrarBatida(colaborador, metodo) {
+function registrarBatida(colaborador, metodo, { ignorarJanela = false } = {}) {
+  // Bateu há pouco: em vez de registrar de novo por conta própria,
+  // pergunta. Quem confirma é a pessoa.
+  if (!ignorarJanela) {
+    const recente = batidaRecente(colaborador.id);
+    if (recente) return mostrarJaRegistrou(colaborador, recente, metodo);
+  }
+
   const marcacao = {
     idLocal: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
     colaboradorId: colaborador.id,
@@ -429,6 +559,7 @@ function registrarBatida(colaborador, metodo) {
   };
   estado.fila.push(marcacao);
   salvarFila();
+  anotarBatida(colaborador.id, marcacao.dataHora);
   atualizarEstado();
   mostrarConfirmacao(colaborador, marcacao);
   enviarFila();
@@ -524,6 +655,89 @@ function bipar(sucesso) {
     osc.start();
     setTimeout(() => { osc.stop(); ctx.close(); }, sucesso ? 160 : 420);
   } catch { /* tablet sem áudio, a tela já confirma */ }
+}
+
+/* ---------- repouso: tampa da caixa fechada ---------- */
+// Com a tampa fechada a câmera enxerga preto. Isso serve de interruptor:
+// o app apaga o conteúdo da tela e — o que mais importa num tablet dentro
+// de caixa em lugar quente — para o processamento. Reconhecimento rodando
+// sem ninguém na frente só esquenta o aparelho e gasta bateria, e tablet
+// quente reduz o próprio desempenho.
+const telaBrilho = document.createElement("canvas");
+telaBrilho.width = 32; telaBrilho.height = 24;
+const ctxBrilho = telaBrilho.getContext("2d", { willReadFrequently: true });
+
+function medirBrilho(video) {
+  if (!video?.videoWidth) return null;
+  try {
+    ctxBrilho.drawImage(video, 0, 0, telaBrilho.width, telaBrilho.height);
+    const dados = ctxBrilho.getImageData(0, 0, telaBrilho.width, telaBrilho.height).data;
+    let soma = 0;
+    for (let i = 0; i < dados.length; i += 4) {
+      soma += 0.299 * dados[i] + 0.587 * dados[i + 1] + 0.114 * dados[i + 2];
+    }
+    return soma / (dados.length / 4);   // 0 = escuro total, 255 = branco
+  } catch {
+    return null;
+  }
+}
+
+function entrarEmRepouso() {
+  if (estado.repouso) return;
+  estado.repouso = true;
+  estado.candidato = null;
+  limparVivacidade();
+  $("repouso").classList.remove("oculto");
+  atualizarRepouso();
+}
+
+function sairDoRepouso() {
+  if (!estado.repouso) return;
+  estado.repouso = false;
+  estado.escuroDesde = 0;
+  $("repouso").classList.add("oculto");
+  falar("Pronto para registrar o ponto", { repetirApos: 0, interromper: true });
+  enviarFila();   // aproveita a abertura para tentar sincronizar
+}
+
+function atualizarRepouso() {
+  const d = agora();
+  const p = (n) => String(n).padStart(2, "0");
+  $("repousoRelogio").textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  $("repousoFila").textContent = estado.fila.length
+    ? `${estado.fila.length} registro(s) aguardando envio`
+    : "";
+}
+
+// Acompanha a luz e decide entrar ou sair do repouso. Os dois limites são
+// diferentes de propósito: assim uma variação de luz na fronteira não fica
+// ligando e desligando a tela.
+function avaliarLuz(video) {
+  if (estado.cfg.repousoAutomatico === false) return false;
+
+  const brilho = medirBrilho(video);
+  if (brilho === null) return estado.repouso;
+  estado.ultimoBrilho = brilho;
+
+  const limiar = Number(estado.cfg.limiarEscuro) || 12;
+  const agoraMs = Date.now();
+
+  if (estado.repouso) {
+    if (brilho > limiar * 2.5) sairDoRepouso();
+    return estado.repouso;
+  }
+
+  if (brilho < limiar) {
+    if (!estado.escuroDesde) estado.escuroDesde = agoraMs;
+    // Alguns segundos de escuro seguido: passar a mão na frente da câmera
+    // não pode apagar a tela no meio de uma batida.
+    else if (agoraMs - estado.escuroDesde > (Number(estado.cfg.segundosRepouso) || 4) * 1000) {
+      entrarEmRepouso();
+    }
+  } else {
+    estado.escuroDesde = 0;
+  }
+  return estado.repouso;
 }
 
 /* ---------- reconhecimento facial ---------- */
@@ -696,6 +910,12 @@ async function lacoFacial() {
     return setTimeout(lacoFacial, 400);
   }
 
+  // Tampa fechada: mede a luz devagar e não gasta nada com reconhecimento.
+  if (avaliarLuz(video)) {
+    atualizarRepouso();
+    return setTimeout(lacoFacial, 1200);
+  }
+
   try {
     const inicio = performance.now();
     const deteccao = await faceapi
@@ -764,6 +984,7 @@ async function lacoFacial() {
         instrucao.textContent += `  [${estado.backendTf || "?"} · det ${estado.msDeteccao}ms` +
           (estado.msIdentificacao ? ` · id ${estado.msIdentificacao}ms` : "") +
           (m.amplitude !== undefined ? ` · mov ${m.amplitude.toFixed(3)}` : "") +
+          (estado.ultimoBrilho !== null ? ` · luz ${Math.round(estado.ultimoBrilho)}` : "") +
           (estado.candidato ? ` · ${estado.candidato.d.toFixed(3)}` : "") + "]";
       }
     }
@@ -892,6 +1113,10 @@ $("btnConfig").addEventListener("click", () => {
   $("cfgResolucao").value = String(estado.cfg.resolucao || 416);
   $("cfgPiscada").checked = estado.cfg.exigirPiscada !== false;
   $("cfgLimiarMovimento").value = estado.cfg.limiarMovimento || 0.12;
+  $("cfgMinutosEntreBatidas").value = estado.cfg.minutosEntreBatidas ?? 1;
+  $("cfgRepouso").checked = estado.cfg.repousoAutomatico !== false;
+  $("cfgLimiarEscuro").value = estado.cfg.limiarEscuro || 12;
+  $("cfgSegundosRepouso").value = estado.cfg.segundosRepouso || 4;
   $("cfgVoz").checked = estado.cfg.voz !== false;
   $("cfgVozVelocidade").value = estado.cfg.vozVelocidade || 1;
   $("cfgDiagnostico").checked = Boolean(estado.cfg.diagnostico);
@@ -908,6 +1133,10 @@ $("btnSalvarCfg").addEventListener("click", async () => {
     resolucao: Number($("cfgResolucao").value) || 416,
     exigirPiscada: $("cfgPiscada").checked,
     limiarMovimento: Number($("cfgLimiarMovimento").value) || 0.12,
+    minutosEntreBatidas: Number($("cfgMinutosEntreBatidas").value) || 0,
+    repousoAutomatico: $("cfgRepouso").checked,
+    limiarEscuro: Number($("cfgLimiarEscuro").value) || 12,
+    segundosRepouso: Number($("cfgSegundosRepouso").value) || 4,
     voz: $("cfgVoz").checked,
     vozVelocidade: Number($("cfgVozVelocidade").value) || 1,
     diagnostico: $("cfgDiagnostico").checked,

@@ -182,6 +182,10 @@
     <input id="cadEmail" type="email" autocomplete="off">
     <label>Senha</label>
     <input id="cadSenha" type="password" autocomplete="off">
+    <div id="blocoEmpresa" class="oculto">
+      <label>Empresa</label>
+      <select id="cadEmpresa"></select>
+    </div>
     <div class="linha">
       <button class="btn btn-verde" id="btnEntrarCadastro">Entrar</button>
       <button class="btn" id="btnFecharCadastro">Fechar</button>
@@ -595,13 +599,33 @@ $("btnFecharCadastro2").addEventListener("click", () => location.reload());
 
 $("btnEntrarCadastro").addEventListener("click", async () => {
   try {
+    const empresaEscolhida = $("cadEmpresa").value;
     const resposta = await fetch(`${estado.cfg.api}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: $("cadEmail").value.trim(), senha: $("cadSenha").value }),
+      body: JSON.stringify({
+        email: $("cadEmail").value.trim(),
+        senha: $("cadSenha").value,
+        // Quem tem acesso a mais de uma empresa precisa dizer qual — sem
+        // isso o servidor devolve a lista em vez do token.
+        empresaId: empresaEscolhida ? Number(empresaEscolhida) : undefined,
+      }),
     });
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.erro || "Login recusado");
+
+    // Usuário com várias empresas: o servidor pede para escolher e ainda
+    // não emite token. Mostra o seletor e espera o segundo clique.
+    if (dados.requerEmpresa) {
+      $("cadEmpresa").innerHTML = dados.empresas
+        .map(e => `<option value="${e.id}">${e.razaoSocial}</option>`).join("");
+      $("blocoEmpresa").classList.remove("oculto");
+      alert("Escolha a empresa e toque em Entrar de novo.");
+      return;
+    }
+
+    if (!dados.token) throw new Error("O servidor não devolveu credencial de acesso.");
+
     // Fica só em memória: se o tablet for roubado, não há credencial salva.
     estado.tokenAdmin = dados.token;
     $("cadSenha").value = "";
@@ -647,6 +671,12 @@ $("btnCapturar").addEventListener("click", async () => {
       }),
     });
     const dados = await resposta.json();
+    if (resposta.status === 401) {
+      estado.tokenAdmin = null;
+      $("areaCadastro").classList.add("oculto");
+      $("loginCadastro").classList.remove("oculto");
+      throw new Error("A sessão de administrador expirou. Entre de novo.");
+    }
     if (!resposta.ok) throw new Error(dados.detalhe || dados.erro || "Erro ao salvar");
     $("statusCadastro").textContent = "Rosto cadastrado. Sincronizando a lista…";
     await sincronizarCarga();

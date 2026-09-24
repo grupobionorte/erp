@@ -858,10 +858,11 @@ function CfopField({ value, onChange, onDescricao }) {
   const [aberto, setAberto] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const [descricao, setDescricao] = useState("");
+  const [editando, setEditando] = useState(false);
 
   // Código sozinho não diz nada pra quem não decorou a tabela. Assim que o
-  // código está completo, buscamos a descrição e mostramos embaixo — e
-  // avisamos quem usa o campo, porque é ela que vira a natureza da operação.
+  // código está completo, buscamos a descrição — ela aparece no campo junto
+  // do código e também vira a natureza da operação do documento.
   useEffect(() => {
     const codigo = String(value || "").replace(/\D/g, "");
     if (codigo.length !== 4) {
@@ -901,13 +902,19 @@ function CfopField({ value, onChange, onDescricao }) {
     return () => clearTimeout(espera);
   }, [value]);
 
+  // Fora de edição o campo mostra "5352 - Prestação de serviço…", que é
+  // como se lê um CFOP. Ao clicar, volta ao código puro para digitar ou
+  // buscar sem apagar texto à mão.
+  const textoExibido = !editando && descricao ? `${value} - ${descricao}` : (value ?? "");
+
   return (
     <div className="ncm-field">
       <input
-        value={value ?? ""}
+        value={textoExibido}
+        title={descricao ? `${value} - ${descricao}` : undefined}
         onChange={e => { onChange(e.target.value); setAberto(true); }}
-        onFocus={() => setAberto(true)}
-        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        onFocus={e => { setEditando(true); setAberto(true); setTimeout(() => e.target.select(), 0); }}
+        onBlur={() => { setEditando(false); setTimeout(() => setAberto(false), 150); }}
         placeholder="Digite o código ou parte da descrição"
       />
       {aberto && (buscando || sugestoes.length > 0 || (value || "").length >= 2) && (
@@ -923,16 +930,13 @@ function CfopField({ value, onChange, onDescricao }) {
               key={s.codigo}
               type="button"
               className="ncm-suggestion"
-              onMouseDown={() => { onChange(s.codigo); setAberto(false); }}
+              onMouseDown={() => { onChange(s.codigo); setDescricao(s.descricao); onDescricao?.(s.descricao); setAberto(false); }}
             >
               <span className="ncm-codigo">{s.codigo}</span>
               <span className="ncm-descricao">{s.descricao}</span>
             </button>
           ))}
         </div>
-      )}
-      {!aberto && descricao && (
-        <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>{descricao}</p>
       )}
     </div>
   );

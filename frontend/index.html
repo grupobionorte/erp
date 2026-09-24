@@ -17,7 +17,7 @@
 
 <script type="text/babel">
 // ---------- Ícones (equivalentes simples, sem depender de pacotes externos) ----------
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 
 function IconBase({ children, size = 16, ...rest }) {
   return (
@@ -4117,6 +4117,27 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   const [origemPercurso, setOrigemPercurso] = useState(cte?.origemPercurso || "");
   const [ufFim, setUfFim] = useState(cte?.ufFim || "");
   const [destinoPercurso, setDestinoPercurso] = useState(cte?.destinoPercurso || "");
+
+  // O trajeto é preenchido a partir do endereço do remetente e do
+  // destinatário, mas para de ser assim que alguém digita ali: coleta que
+  // sai de um pátio ou entrega num armazém de terceiros têm trajeto
+  // diferente do endereço cadastrado.
+  const [trajetoManual, setTrajetoManual] = useState({ inicio: false, fim: false });
+
+  const enderecoDe = (id) => (clientes || []).find(c => String(c.id) === String(id))?.endereco;
+
+  const preencherTrajeto = (ponta, pessoaId) => {
+    const endereco = enderecoDe(pessoaId);
+    if (!endereco?.uf || !endereco?.cidade) return;
+    if (ponta === "inicio" && !trajetoManual.inicio) {
+      setUfInicio(endereco.uf);
+      setOrigemPercurso(endereco.cidade);
+    }
+    if (ponta === "fim" && !trajetoManual.fim) {
+      setUfFim(endereco.uf);
+      setDestinoPercurso(endereco.cidade);
+    }
+  };
   const [distanciaKm, setDistanciaKm] = useState(cte?.distanciaKm ?? "");
 
   const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
@@ -4229,6 +4250,21 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
   const [aba, setAba] = useState("rota");
 
+  // Foco no primeiro campo da aba aberta. Vale na abertura do formulário —
+  // sem isso o TAB começava nos botões da tela de trás — e a cada troca de
+  // aba, para quem preenche pelo teclado não precisar pegar o mouse.
+  const corpo = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const painel = corpo.current?.querySelector(`[data-painel="${aba}"]`);
+      const campo = painel?.querySelector(
+        'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])'
+      );
+      campo?.focus();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [aba]);
+
   const interestadual = Boolean(ufInicio && ufFim && ufInicio !== ufFim);
   const cfopSugerido = interestadual ? "6353" : "5353";
   const cfopIncompativel = Boolean(cfopPrestacao && ufInicio && ufFim && cfopPrestacao.startsWith("6") !== interestadual);
@@ -4254,8 +4290,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </button>
           </div>
         </div>
-        <div className="modal-body">
-          <div hidden={aba !== "carga"}>
+        <div className="modal-body" ref={corpo}>
+          <div data-painel="carga" hidden={aba !== "carga"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
             {documentosTransportados.length > 0 ? (
@@ -4440,7 +4476,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
           </div>
 
-          <div hidden={aba !== "rota"}>
+          <div data-painel="rota" hidden={aba !== "rota"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
             <div className="nf-grid-4">
@@ -4518,10 +4554,12 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </p>
             <div className="cte-papeis">
               {[
-                { papel: "Remetente", descricao: "quem despacha", valor: remetenteId, setter: setRemetenteId, vazio: "Nenhum" },
+                { papel: "Remetente", descricao: "quem despacha", valor: remetenteId,
+                  setter: (v) => { setRemetenteId(v); preencherTrajeto("inicio", v); }, vazio: "Nenhum" },
                 { papel: "Expedidor", descricao: "opcional", valor: expedidorId, setter: setExpedidorId, vazio: "Nenhum" },
                 { papel: "Recebedor", descricao: "opcional", valor: recebedorId, setter: setRecebedorId, vazio: "Nenhum" },
-                { papel: "Destinatário", descricao: "quem recebe", valor: tomadorId, setter: setTomadorId, vazio: "Selecione…", obrigatorio: true },
+                { papel: "Destinatário", descricao: "quem recebe", valor: tomadorId,
+                  setter: (v) => { setTomadorId(v); preencherTrajeto("fim", v); }, vazio: "Selecione…", obrigatorio: true },
               ].map(({ papel, descricao, valor, setter, vazio, obrigatorio }) => (
                 <div className="cte-papel-linha" key={papel}>
                   <span className="cte-papel-nome">
@@ -4552,25 +4590,39 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             <div className="nf-grid-4" style={{ marginTop: 14 }}>
               <div className="field-group">
                 <label className="field-label">UF início<span className="req">*</span></label>
-                <select value={ufInicio} onChange={e => { setUfInicio(e.target.value); setOrigemPercurso(""); }}>
+                <select value={ufInicio} onChange={e => {
+                  setUfInicio(e.target.value); setOrigemPercurso("");
+                  setTrajetoManual(t => ({ ...t, inicio: true }));
+                }}>
                   <option value="">Selecione…</option>
                   {UFS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
               <div className="field-group">
                 <label className="field-label">Município início<span className="req">*</span></label>
-                <MunicipioField uf={ufInicio} value={origemPercurso} onChange={setOrigemPercurso} />
+                <MunicipioField uf={ufInicio} value={origemPercurso}
+                  onChange={v => { setOrigemPercurso(v); setTrajetoManual(t => ({ ...t, inicio: true })); }} />
+                {!trajetoManual.inicio && origemPercurso && (
+                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>do endereço do remetente</p>
+                )}
               </div>
               <div className="field-group">
                 <label className="field-label">UF fim<span className="req">*</span></label>
-                <select value={ufFim} onChange={e => { setUfFim(e.target.value); setDestinoPercurso(""); }}>
+                <select value={ufFim} onChange={e => {
+                  setUfFim(e.target.value); setDestinoPercurso("");
+                  setTrajetoManual(t => ({ ...t, fim: true }));
+                }}>
                   <option value="">Selecione…</option>
                   {UFS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
               <div className="field-group">
                 <label className="field-label">Município fim<span className="req">*</span></label>
-                <MunicipioField uf={ufFim} value={destinoPercurso} onChange={setDestinoPercurso} />
+                <MunicipioField uf={ufFim} value={destinoPercurso}
+                  onChange={v => { setDestinoPercurso(v); setTrajetoManual(t => ({ ...t, fim: true })); }} />
+                {!trajetoManual.fim && destinoPercurso && (
+                  <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>do endereço do destinatário</p>
+                )}
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0, maxWidth: 200 }}>
@@ -4625,7 +4677,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
           </div>
 
-          <div hidden={aba !== "valores"}>
+          <div data-painel="valores" hidden={aba !== "valores"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Prestação e impostos</h4>
             <div className="nf-grid-3">

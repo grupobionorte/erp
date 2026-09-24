@@ -4290,7 +4290,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
             </button>
           </div>
         </div>
-        <div className="modal-body" ref={corpo}>
+        <div className="modal-body cte-corpo" ref={corpo}>
           <div data-painel="carga" hidden={aba !== "carga"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
@@ -5345,6 +5345,11 @@ function ErpBiomassa() {
         .modal-header h3 { margin: 0; font-size: 16px; font-weight: 500; }
         .modal-body { padding: 1rem 1.25rem; overflow-y: auto; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 1rem 1.25rem; border-top: 0.5px solid var(--border, #e5e3da); }
+        /* Altura fixa no corpo: cada aba tem uma quantidade diferente de
+           campos, e sem isso o modal encolhia e crescia a cada troca, com os
+           botões do rodapé pulando de lugar. */
+        .cte-corpo { height: 60vh; }
+
         /* Formulário de CT-e: resumo, abas, papéis e conferência */
         .cte-resumo { display: flex; gap: 22px; flex-wrap: wrap; margin: 12px 0 14px; }
         .cte-resumo-rotulo { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #8a887f; }

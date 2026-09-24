@@ -149,31 +149,29 @@ function moedaParaNumero(texto) {
 // formando da direita pra esquerda (centavos primeiro), como em caixa de
 // supermercado. onChange devolve o número como string com ponto decimal,
 // pra não mudar nada de quem consome esse valor.
-function InputMoeda({ value, onChange, placeholder = "0,00", ...resto }) {
+function InputMoeda({ value, onChange, placeholder = "0,00", casas = 2, ...resto }) {
   const [texto, setTexto] = useState(() => formatarMoeda(value));
+  const [editando, setEditando] = useState(false);
 
-  // Quando o valor muda por fora (escolher um produto preenche o preço,
-  // abrir um registro pra editar), o texto acompanha.
+  // Fora de edição mostra formatado (5.000,00); ao focar, mostra o número
+  // puro para digitar por cima.
   useEffect(() => {
-    if (value === "" || value === null || value === undefined) {
-      setTexto("");
-      return;
-    }
-    if (Math.abs(Number(value) - moedaParaNumero(texto)) > 0.004) {
-      setTexto(formatarMoeda(value));
-    }
-  }, [value]);
+    if (!editando) setTexto(formatarMoeda(value));
+  }, [value, editando]);
 
   const digitar = (e) => {
-    const digitos = e.target.value.replace(/\D/g, "").slice(0, 15);
-    if (!digitos) {
-      setTexto("");
-      onChange("");
-      return;
+    // Só dígitos e uma vírgula. Digitar 5000 vale cinco mil, e os centavos
+    // só entram quando se digita a vírgula — como se escreve à mão, e não
+    // como caixa de supermercado.
+    let limpo = e.target.value.replace(/[^\d,]/g, "");
+    const partes = limpo.split(",");
+    if (partes.length > 2) limpo = `${partes[0]},${partes.slice(1).join("")}`;
+    const [inteiro, decimais] = limpo.split(",");
+    if (decimais !== undefined && decimais.length > casas) {
+      limpo = `${inteiro},${decimais.slice(0, casas)}`;
     }
-    const numero = Number(digitos) / 100;
-    setTexto(formatarMoeda(numero));
-    onChange(String(numero));
+    setTexto(limpo);
+    onChange(limpo === "" || limpo === "," ? "" : String(decimalParaNumero(limpo)));
   };
 
   return (
@@ -181,9 +179,14 @@ function InputMoeda({ value, onChange, placeholder = "0,00", ...resto }) {
       inputMode="decimal"
       value={texto}
       placeholder={placeholder}
+      onFocus={() => {
+        setEditando(true);
+        setTexto(value === "" || value === null || value === undefined ? "" : String(value).replace(".", ","));
+      }}
+      onBlur={() => setEditando(false)}
       onChange={digitar}
-      style={{ textAlign: "right", ...(resto.style || {}) }}
       {...resto}
+      style={{ textAlign: "right", ...(resto.style || {}) }}
     />
   );
 }
@@ -4133,6 +4136,48 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   const [docEmEdicao, setDocEmEdicao] = useState({ ...DOCUMENTO_VAZIO });
   const setDocCampo = (campo, valor) => setDocEmEdicao(prev => ({ ...prev, [campo]: valor }));
 
+  // A chave de acesso costuma ser copiada do DANFE, onde vem separada em
+  // blocos de quatro. Tiramos tudo que não é número e, quando os 44 dígitos
+  // estão completos, preenchemos o que a própria chave já informa —
+  // modelo, série e número do documento vivem dentro dela.
+  const preencherPelaChave = (digitado) => {
+    const chave = String(digitado || "").replace(/\D/g, "").slice(0, 44);
+
+    setDocEmEdicao(prev => {
+      const atualizado = { ...prev, chaveAcesso: chave };
+      if (chave.length !== 44) return atualizado;
+
+      // Posições fixas do layout da chave:
+      // UF(2) AAMM(4) CNPJ(14) modelo(2) série(3) número(9) ...
+      const modelo = chave.slice(20, 22);
+      const serie = String(Number(chave.slice(22, 25)));
+      const numero = String(Number(chave.slice(25, 34)));
+
+      return {
+        ...atualizado,
+        modelo: modelo || prev.modelo,
+        serie: serie || prev.serie,
+        // Não sobrescreve o que já foi digitado à mão.
+        numeroDocumento: prev.numeroDocumento || numero,
+      };
+    });
+  };
+
+  // Dígito verificador da chave (módulo 11): chave digitada errado é a
+  // causa mais comum de rejeição do CT-e.
+  const chaveConfere = (chave) => {
+    const d = String(chave || "").replace(/\D/g, "");
+    if (d.length !== 44) return null;
+    const pesos = [2, 3, 4, 5, 6, 7, 8, 9];
+    let soma = 0;
+    for (let i = d.length - 2, p = 0; i >= 0; i--, p++) {
+      soma += Number(d[i]) * pesos[p % 8];
+    }
+    const resto = soma % 11;
+    const dv = resto === 0 || resto === 1 ? 0 : 11 - resto;
+    return dv === Number(d[43]);
+  };
+
   const selecionarNfeParaDocumento = (nota) => {
     const primeiroItem = nota.itens?.[0];
     setDocEmEdicao({
@@ -4164,8 +4209,21 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   };
 
   const novoDocumento = () => setDocEmEdicao({ ...DOCUMENTO_VAZIO });
+  const [erroDocumento, setErroDocumento] = useState("");
+
   const adicionarDocumento = () => {
-    if (!docEmEdicao.numeroDocumento && !docEmEdicao.chaveAcesso) return;
+    // Os valores da nota alimentam o valor da carga e a averbação do
+    // seguro no CT-e — sem eles o documento sai com carga zerada.
+    const faltando = [];
+    if (!docEmEdicao.numeroDocumento && !docEmEdicao.chaveAcesso) faltando.push("número do documento ou chave de acesso");
+    if (!docEmEdicao.valorTotalProdutos) faltando.push("valor total dos produtos");
+    if (!docEmEdicao.valorTotalNota) faltando.push("valor total da nota fiscal");
+
+    if (faltando.length) {
+      setErroDocumento(`Preencha ${faltando.join(", ")}.`);
+      return;
+    }
+    setErroDocumento("");
     setDocumentosTransportados(prev => [...prev, { ...docEmEdicao, _key: `novo-${Date.now()}-${Math.random()}` }]);
     novoDocumento();
   };
@@ -4534,7 +4592,20 @@ naturezaOperacao: naturezaOperacao || undefined,
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Chave de acesso</label>
-                <input value={docEmEdicao.chaveAcesso} onChange={e => setDocCampo("chaveAcesso", e.target.value)} />
+                <input
+                  value={docEmEdicao.chaveAcesso}
+                  inputMode="numeric"
+                  placeholder="44 dígitos — pode colar com espaços"
+                  onChange={e => preencherPelaChave(e.target.value)}
+                />
+                {docEmEdicao.chaveAcesso?.length > 0 && docEmEdicao.chaveAcesso.length < 44 && (
+                  <p className="hint">{docEmEdicao.chaveAcesso.length} de 44 dígitos</p>
+                )}
+                {docEmEdicao.chaveAcesso?.length === 44 && (
+                  chaveConfere(docEmEdicao.chaveAcesso)
+                    ? <p className="hint" style={{ color: "#00732F" }}>Chave válida — modelo, série e número preenchidos</p>
+                    : <p className="hint" style={{ color: "#c62828" }}>Dígito verificador não confere. Confira a chave na nota.</p>
+                )}
               </div>
               <div className="field-group">
                 <label className="field-label">Número do documento</label>
@@ -4613,11 +4684,11 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <InputMoeda value={docEmEdicao.valorIcmsSt} onChange={v => setDocCampo("valorIcmsSt", v)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Valor total dos produtos</label>
+                <label className="field-label">Valor total dos produtos<span className="req">*</span></label>
                 <InputMoeda value={docEmEdicao.valorTotalProdutos} onChange={v => setDocCampo("valorTotalProdutos", v)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Valor total da nota fiscal</label>
+                <label className="field-label">Valor total da nota fiscal<span className="req">*</span></label>
                 <InputMoeda value={docEmEdicao.valorTotalNota} onChange={v => setDocCampo("valorTotalNota", v)} />
               </div>
             </div>
@@ -4662,6 +4733,7 @@ naturezaOperacao: naturezaOperacao || undefined,
               </div>
             </div>
 
+            {erroDocumento && <p className="error-text">{erroDocumento}</p>}
             <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
               <button type="button" className="btn" onClick={novoDocumento}>Novo</button>
               <button type="button" className="btn btn-primary" onClick={adicionarDocumento}>Adicionar à lista</button>

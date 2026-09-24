@@ -4106,7 +4106,7 @@ function NfeCteField({ onSelecionar }) {
   );
 }
 
-function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
+function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
@@ -4468,7 +4468,7 @@ naturezaOperacao: naturezaOperacao || undefined,
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
             {documentosTransportados.length > 0 ? (
               <div className="nf-itens-table" style={{ marginBottom: 14 }}>
-                <div className="nf-itens-header" style={{ gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px" }}>
+                <div className="nf-itens-header" style={{ gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px" }}>
                   <span>Número</span>
                   <span>Modelo</span>
                   <span>Série</span>
@@ -4476,11 +4476,12 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <span>Emissão</span>
                   <span>Peso bruto</span>
                   <span>Peso líq.</span>
+                  <span>m³</span>
                   <span style={{ textAlign: "right" }}>Valor</span>
                   <span></span>
                 </div>
                 {documentosTransportados.map(d => (
-                  <div key={d._key} className="nf-item-row" style={{ gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px" }}>
+                  <div key={d._key} className="nf-item-row" style={{ gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px" }}>
                     <span>{d.numeroDocumento || "—"}</span>
                     <span>{d.modelo || "—"}</span>
                     <span>{d.serie || "—"}</span>
@@ -4488,18 +4489,22 @@ naturezaOperacao: naturezaOperacao || undefined,
                     <span>{d.dataEmissao ? new Date(d.dataEmissao).toLocaleDateString("pt-BR") : "—"}</span>
                     <span>{d.pesoBruto || "0"}</span>
                     <span>{d.pesoLiquido || "0"}</span>
+                    <span>{d.m3 || "0"}</span>
                     <span className="nf-item-total">R$ {formatarMoeda(Number(d.valorTotalNota || 0))}</span>
                     <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerDocumento(d._key)} aria-label="Remover">
                       <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
-                <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.7fr 0.5fr 1.1fr 0.9fr 0.8fr 0.8fr 1fr 28px", padding: "8px 10px", borderTop: "1px solid #e5e3da", fontSize: 12, fontWeight: 600, color: "#55534c" }}>
+                {/* Estes totais são o que vai para o DACTe quando os campos
+                    de carga são deixados em branco. */}
+                <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px", padding: "8px 10px", borderTop: "1px solid #e5e3da", fontSize: 12, fontWeight: 600, color: "#55534c" }}>
                   <span style={{ gridColumn: "1 / 5" }}>Total ({documentosTransportados.length})</span>
                   <span></span>
-                  <span>{formatarDecimal(documentosTransportados.reduce((s, d) => s + (Number(d.pesoBruto) || 0), 0), 3)}</span>
-                  <span>{formatarDecimal(documentosTransportados.reduce((s, d) => s + (Number(d.pesoLiquido) || 0), 0), 3)}</span>
-                  <span style={{ textAlign: "right" }}>R$ {formatarMoeda(documentosTransportados.reduce((s, d) => s + (Number(d.valorTotalNota) || 0), 0))}</span>
+                  <span>{formatarDecimal(somaPesoBruto, 3)}</span>
+                  <span>{formatarDecimal(somaPesoLiquido, 3)}</span>
+                  <span>{formatarDecimal(somaM3, 3)}</span>
+                  <span style={{ textAlign: "right" }}>R$ {formatarMoeda(somaNotas)}</span>
                   <span></span>
                 </div>
               </div>
@@ -4562,7 +4567,24 @@ naturezaOperacao: naturezaOperacao || undefined,
             <div className="endereco-grid">
               <div className="field-group">
                 <label className="field-label">Natureza da mercadoria</label>
-                <input value={docEmEdicao.naturezaMercadoria} onChange={e => setDocCampo("naturezaMercadoria", e.target.value)} />
+                {/* É o produto que está sendo transportado: vem do cadastro
+                    de produtos, com a lista filtrando conforme se digita. */}
+                <input
+                  list="produtos-natureza-mercadoria"
+                  value={docEmEdicao.naturezaMercadoria}
+                  placeholder="Busque no cadastro de produtos"
+                  onChange={e => setDocCampo("naturezaMercadoria", e.target.value)}
+                />
+                <datalist id="produtos-natureza-mercadoria">
+                  {(produtos || []).map(p => (
+                    <option key={p.id} value={p.descricao}>{[p.codigo, p.unidade].filter(Boolean).join(" · ")}</option>
+                  ))}
+                </datalist>
+                <p className="hint">
+                  {(produtos || []).length
+                    ? "Escolha um produto cadastrado ou escreva livremente."
+                    : "Nenhum produto cadastrado ainda — pode escrever livremente."}
+                </p>
               </div>
               <div className="field-group">
                 <label className="field-label">Outras características da carga</label>
@@ -4948,6 +4970,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
 function CteView({ onIrParaMdfe }) {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
+  const { items: produtos } = useApiCollection("produtos");
   const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
   const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
   const { items: colaboradores } = useApiCollection("colaboradores");
@@ -5336,6 +5359,7 @@ function CteView({ onIrParaMdfe }) {
         <CteForm
           cte={editando}
           clientes={clientes}
+          produtos={produtos}
           transportadoras={transportadoras}
           veiculos={veiculos}
           colaboradores={colaboradores}

@@ -381,6 +381,11 @@ model DocumentoFiscal {
   especieVolumes      String?  @map("especie_volumes")
   pesoBrutoTotal      Float?   @map("peso_bruto_total")
   pesoLiquidoTotal    Float?   @map("peso_liquido_total")
+  // Como a carga é medida nesse documento: M3, KG ou TON. É o que decide
+  // quais medidas saem no DACTe — cavaco vendido por metro cúbico precisa
+  // do volume; vendido por peso, do peso líquido.
+  unidadeMedidaCarga  String?  @map("unidade_medida_carga")
+  volumeM3Total       Float?   @map("volume_m3_total")
 
   // Impostos — só ICMS/ICMS ST são informativos (já embutidos no valor
   // do produto); IPI e outras despesas somam no total da nota.

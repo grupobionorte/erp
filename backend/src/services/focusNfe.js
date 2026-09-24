@@ -302,6 +302,31 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     (documento.documentosTransportados || []).reduce((t, d) => t + (Number(d[campo]) || 0), 0);
   const valorDaCarga = Number(documento.valorTotalCarga) || somar("valorTotalNota") || somar("valorTotalProdutos") || undefined;
   const pesoDaCarga = Number(documento.pesoBrutoTotal) || somar("pesoBruto") || undefined;
+  const pesoLiquidoDaCarga = Number(documento.pesoLiquidoTotal) || somar("pesoLiquido") || undefined;
+  const volumeDaCarga = Number(documento.volumeM3Total) || somar("m3") || undefined;
+
+  // Códigos da unidade de medida no CT-e: 00 M3, 01 KG, 02 TON, 03 UNIDADE.
+  const UNIDADE = { M3: "00", KG: "01", TON: "02", UNIDADE: "03" };
+  const unidadeCarga = String(documento.unidadeMedidaCarga || "KG").toUpperCase();
+  // Vendido por metro cúbico o peso continua em quilo — o volume é que
+  // entra como medida da negociação.
+  const codigoPeso = unidadeCarga === "TON" ? UNIDADE.TON : UNIDADE.KG;
+
+  const medidasDaCarga = [];
+  if (pesoDaCarga) {
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: "PESO BRUTO", quantidade: dec(pesoDaCarga, 4) });
+  }
+  if (unidadeCarga === "M3" && volumeDaCarga) {
+    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.M3, tipo_medida: "VOLUME", quantidade: dec(volumeDaCarga, 4) });
+  }
+  if (unidadeCarga !== "M3" && pesoLiquidoDaCarga) {
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: "PESO LIQUIDO", quantidade: dec(pesoLiquidoDaCarga, 4) });
+  }
+  // O schema exige ao menos uma medida; sem peso nenhum, sobra a contagem
+  // de volumes.
+  if (!medidasDaCarga.length) {
+    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.UNIDADE, tipo_medida: "UNIDADE", quantidade: documento.quantidadeVolumes || 1 });
+  }
 
   return {
     cfop: documento.cfopPrestacao || undefined,
@@ -368,13 +393,11 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
       || "Carga geral",
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
 
-    // O schema exige pelo menos uma medida. Peso é o que importa em
-    // biomassa; só cai para contagem de volumes se não houver peso nenhum.
-    quantidades: [{
-      codigo_unidade_medida: pesoDaCarga ? "01" : "03",
-      tipo_medida: pesoDaCarga ? "PESO BRUTO" : "UNIDADE",
-      quantidade: pesoDaCarga ? dec(pesoDaCarga, 4) : (documento.quantidadeVolumes || 1),
-    }],
+    // Medidas da carga no DACTe. O peso bruto vai sempre — é o que a
+    // balança e a fiscalização de estrada conferem. Além dele, entra o que
+    // corresponde à forma como o produto é vendido: volume, quando a
+    // negociação é por metro cúbico; peso líquido, quando é por peso.
+    quantidades: medidasDaCarga,
 
     informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,
 

@@ -4328,6 +4328,10 @@ naturezaOperacao: naturezaOperacao || undefined,
         valorTotal: Number(valorTotal),
         produtoPredominante: produtoPredominante || sugestaoProduto || undefined,
         valorTotalCarga: valorTotalCarga !== "" ? Number(valorTotalCarga) : null,
+        unidadeMedidaCarga,
+        pesoBrutoTotal: pesoBrutoTotal !== "" ? Number(pesoBrutoTotal) : null,
+        pesoLiquidoTotal: pesoLiquidoTotal !== "" ? Number(pesoLiquidoTotal) : null,
+        volumeM3Total: volumeM3Total !== "" ? Number(volumeM3Total) : null,
       });
     } catch (e) {
       setErro(e.message || "Erro ao salvar o CTe");
@@ -4340,10 +4344,19 @@ naturezaOperacao: naturezaOperacao || undefined,
 
   const [produtoPredominante, setProdutoPredominante] = useState(cte?.produtoPredominante || "");
   const [valorTotalCarga, setValorTotalCarga] = useState(cte?.valorTotalCarga ?? "");
+  // Como o produto é negociado: decide quais medidas saem no DACTe.
+  const [unidadeMedidaCarga, setUnidadeMedidaCarga] = useState(cte?.unidadeMedidaCarga || "KG");
+  const [pesoBrutoTotal, setPesoBrutoTotal] = useState(cte?.pesoBrutoTotal ?? "");
+  const [pesoLiquidoTotal, setPesoLiquidoTotal] = useState(cte?.pesoLiquidoTotal ?? "");
+  const [volumeM3Total, setVolumeM3Total] = useState(cte?.volumeM3Total ?? "");
 
   // A carga vem das notas vinculadas; os campos acima só existem para
   // corrigir quando a soma não representa o que está no caminhão.
-  const somaNotas = documentosTransportados.reduce((t, d) => t + (Number(d.valorTotalNota) || 0), 0);
+  const somarNotas = (campo) => documentosTransportados.reduce((t, d) => t + (Number(d[campo]) || 0), 0);
+  const somaNotas = somarNotas("valorTotalNota");
+  const somaPesoBruto = somarNotas("pesoBruto");
+  const somaPesoLiquido = somarNotas("pesoLiquido");
+  const somaM3 = somarNotas("m3");
   const sugestaoProduto = documentosTransportados.find(d => d.naturezaMercadoria)?.naturezaMercadoria || "";
 
   const [aba, setAba] = useState("rota");
@@ -4408,6 +4421,46 @@ naturezaOperacao: naturezaOperacao || undefined,
                     : "Valor da mercadoria transportada, não do frete."}
                 </p>
               </div>
+              <div className="field-group">
+                <label className="field-label">Produto vendido por</label>
+                <select value={unidadeMedidaCarga} onChange={e => setUnidadeMedidaCarga(e.target.value)}>
+                  <option value="KG">Quilo (kg)</option>
+                  <option value="TON">Tonelada</option>
+                  <option value="M3">Metro cúbico (m³)</option>
+                </select>
+                <p className="hint">
+                  {unidadeMedidaCarga === "M3"
+                    ? "O DACTe sai com peso bruto e volume em m³."
+                    : "O DACTe sai com peso bruto e peso líquido."}
+                </p>
+              </div>
+            </div>
+
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Peso bruto total (kg)</label>
+                <InputDecimal value={pesoBrutoTotal} onChange={setPesoBrutoTotal} />
+                <p className="hint">
+                  {somaPesoBruto > 0 ? `Soma das notas: ${formatarDecimal(somaPesoBruto, 3)}` : "Sempre sai no DACTe."}
+                </p>
+              </div>
+              {unidadeMedidaCarga === "M3" ? (
+                <div className="field-group">
+                  <label className="field-label">Volume total (m³)</label>
+                  <InputDecimal value={volumeM3Total} onChange={setVolumeM3Total} />
+                  <p className="hint">
+                    {somaM3 > 0 ? `Soma das notas: ${formatarDecimal(somaM3, 3)}` : "Volume da carga transportada."}
+                  </p>
+                </div>
+              ) : (
+                <div className="field-group">
+                  <label className="field-label">Peso líquido total (kg)</label>
+                  <InputDecimal value={pesoLiquidoTotal} onChange={setPesoLiquidoTotal} />
+                  <p className="hint">
+                    {somaPesoLiquido > 0 ? `Soma das notas: ${formatarDecimal(somaPesoLiquido, 3)}` : "Carga sem a tara da embalagem."}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 

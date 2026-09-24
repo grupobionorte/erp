@@ -428,6 +428,7 @@ const MODULES = {
       { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
       { key: "taraKg", label: "Tara (kg)", type: "number" },
       { key: "capacidadeKg", label: "Capacidade (kg)", type: "number" },
+      { key: "capacidadeM3", label: "Capacidade (m³)", type: "number" },
       // Motorista habitual, vindo do cadastro de colaboradores: é daqui que
       // o CT-e preenche nome e CPF.
       {
@@ -451,6 +452,7 @@ const MODULES = {
       tipoCarroceria: data.tipoCarroceria || undefined,
       taraKg: data.taraKg ? Number(data.taraKg) : undefined,
       capacidadeKg: data.capacidadeKg ? Number(data.capacidadeKg) : undefined,
+      capacidadeM3: data.capacidadeM3 ? Number(data.capacidadeM3) : undefined,
       motoristaId: data.motoristaId ?? null,
     }),
     fromApi: (r) => ({
@@ -466,6 +468,7 @@ const MODULES = {
       tipoCarroceria: r.tipoCarroceria,
       taraKg: r.taraKg,
       capacidadeKg: r.capacidadeKg,
+      capacidadeM3: r.capacidadeM3,
       motoristaId: r.motoristaId ?? null,
       motoristaNome: r.motorista?.nome || "—",
       motoristaCpf: r.motorista?.cpf || "",

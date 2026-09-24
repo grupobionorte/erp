@@ -587,6 +587,7 @@ function montarPayloadMdfe({
         renavam: somenteDigitos(veiculo?.renavam),
         tara: veiculo?.taraKg ? Math.round(veiculo.taraKg) : undefined,
         capacidade_kg: veiculo?.capacidadeKg ? Math.round(veiculo.capacidadeKg) : undefined,
+        capacidade_m3: veiculo?.capacidadeM3 ? Math.round(veiculo.capacidadeM3) : undefined,
         tipo_rodado: veiculo?.tipoRodado || undefined,
         tipo_carroceria: veiculo?.tipoCarroceria || undefined,
         uf: veiculo?.uf || empresa.endereco?.uf,
@@ -603,6 +604,7 @@ function montarPayloadMdfe({
           renavam: somenteDigitos(r.renavam),
           tara: r.taraKg ? Math.round(r.taraKg) : undefined,
           capacidade_kg: r.capacidadeKg ? Math.round(r.capacidadeKg) : undefined,
+          capacidade_m3: r.capacidadeM3 ? Math.round(r.capacidadeM3) : undefined,
           tipo_carroceria: r.tipoCarroceria || undefined,
           uf: r.uf || empresa.endereco?.uf,
         }));

@@ -274,6 +274,9 @@ model Veiculo {
   renavam          String?
   taraKg           Float?  @map("tara_kg")
   capacidadeKg     Float?  @map("capacidade_kg")
+  // Volume útil da carroceria. Em biomassa importa tanto quanto o peso:
+  // cavaco e serragem lotam o volume antes de atingir a capacidade em quilos.
+  capacidadeM3     Float?  @map("capacidade_m3")
   tipoRodado       String? @map("tipo_rodado")
   tipoCarroceria   String? @map("tipo_carroceria")
   ativo            Boolean @default(true)

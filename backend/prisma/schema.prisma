@@ -227,6 +227,7 @@ model Colaborador {
   usuario                   Usuario?
   marcacoesPonto            MarcacaoPonto[]
   jornadas                  JornadaTrabalho[]
+  veiculosComoMotorista     Veiculo[]         @relation("VeiculosDoMotorista")
   tratamentosPonto          TratamentoPonto[]
   biometriaFacial           BiometriaFacial?
 
@@ -272,14 +273,18 @@ model Veiculo {
   tipoCarroceria   String? @map("tipo_carroceria")
   ativo            Boolean @default(true)
 
-  // Motorista habitual do veículo. Fica aqui porque é assim que a operação
-  // pensa — o caminhão tem seu motorista — e evita redigitar nome e CPF a
-  // cada CT-e. Continua editável no documento quando houver troca.
-  motoristaNome String? @map("motorista_nome")
-  motoristaCpf  String? @map("motorista_cpf")
+  // Motorista habitual, vindo do cadastro de colaboradores: nome e CPF
+  // ficam num lugar só, e o CT-e aproveita os mesmos dados. Os campos de
+  // texto abaixo ficaram de versões anteriores e não são mais usados.
+  motoristaId   Int?         @map("motorista_id")
+  motorista     Colaborador? @relation("VeiculosDoMotorista", fields: [motoristaId], references: [id])
+  motoristaNome String?      @map("motorista_nome")
+  motoristaCpf  String?      @map("motorista_cpf")
 
-  transportadoraId Int            @map("transportadora_id")
-  transportadora   Transportadora @relation(fields: [transportadoraId], references: [id])
+  // Transportadora deixou de ser obrigatória: a frota é própria. O campo
+  // fica para o dia em que houver subcontratação ou agregado.
+  transportadoraId Int?            @map("transportadora_id")
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
 
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])

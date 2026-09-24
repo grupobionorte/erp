@@ -15,33 +15,35 @@ router.get("/", asyncHandler(async (req, res) => {
       ativo: true,
       ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
     },
-    include: { transportadora: true },
+    include: { transportadora: true, motorista: { select: { id: true, nome: true, cpf: true } } },
     orderBy: { placa: "asc" },
   });
   res.json(veiculos);
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { transportadoraId, placa, empresaId, ...resto } = req.body;
-  if (!transportadoraId || !placa) {
-    return res.status(400).json({ erro: "transportadoraId e placa são obrigatórios" });
+  const { transportadoraId, placa, empresaId, motoristaId, ...resto } = req.body;
+  // Transportadora virou opcional: a frota é própria.
+  if (!placa) {
+    return res.status(400).json({ erro: "placa é obrigatória" });
   }
 
   const veiculo = await prisma.veiculo.create({
     data: {
       ...resto,
       placa,
-      transportadoraId: Number(transportadoraId),
+      transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
+      motoristaId: motoristaId ? Number(motoristaId) : undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
-    include: { transportadora: true },
+    include: { transportadora: true, motorista: { select: { id: true, nome: true, cpf: true } } },
   });
 
   res.status(201).json(veiculo);
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { transportadoraId, empresaId, ...dados } = req.body;
+  const { transportadoraId, empresaId, motoristaId, ...dados } = req.body;
   const id = Number(req.params.id);
 
   const existente = await prisma.veiculo.findUnique({ where: { id } });
@@ -54,9 +56,11 @@ router.put("/:id", asyncHandler(async (req, res) => {
     where: { id },
     data: {
       ...dados,
-      transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
+      // null limpa o vínculo; undefined deixa como está.
+      transportadoraId: transportadoraId === null ? null : (transportadoraId ? Number(transportadoraId) : undefined),
+      motoristaId: motoristaId === null ? null : (motoristaId ? Number(motoristaId) : undefined),
     },
-    include: { transportadora: true },
+    include: { transportadora: true, motorista: { select: { id: true, nome: true, cpf: true } } },
   });
 
   res.json(veiculo);

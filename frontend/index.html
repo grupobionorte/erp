@@ -419,28 +419,33 @@ const MODULES = {
     color: "purple",
     apiPath: "/veiculos",
     fields: [
-      { key: "transportadoraId", label: "Transportadora", type: "transportadora-select", required: true },
+      // Transportadora ficou reservada para subcontratação futura; a frota
+      // hoje é própria, então não é mais obrigatória.
+      { key: "transportadoraId", label: "Transportadora (uso futuro)", type: "transportadora-select" },
       { key: "placa", label: "Placa", type: "text", required: true },
       { key: "renavam", label: "Renavam", type: "text" },
       { key: "tipoRodado", label: "Tipo de rodado", type: "select", options: ["Truck", "Toco", "Cavalo Mecânico", "VAN", "Utilitário", "Outros"] },
       { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
       { key: "taraKg", label: "Tara (kg)", type: "number" },
       { key: "capacidadeKg", label: "Capacidade (kg)", type: "number" },
-      // Motorista habitual: é daqui que o CT-e preenche nome e CPF.
-      { key: "motoristaNome", label: "Motorista", type: "text" },
-      { key: "motoristaCpf", label: "CPF do motorista", type: "text" },
+      // Motorista habitual, vindo do cadastro de colaboradores: é daqui que
+      // o CT-e preenche nome e CPF.
+      {
+        key: "motoristaId", label: "Motorista", type: "vinculo",
+        fonte: "/colaboradores", vazio: "Nenhum",
+        rotulo: (c) => [c.nome, c.cargo].filter(Boolean).join(" — "),
+      },
     ],
     columns: ["placa", "transportadoraNome", "tipoRodado", "motoristaNome"],
     toApi: (data) => ({
-      transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : undefined,
+      transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : null,
       placa: data.placa,
       renavam: data.renavam || undefined,
       tipoRodado: data.tipoRodado || undefined,
       tipoCarroceria: data.tipoCarroceria || undefined,
       taraKg: data.taraKg ? Number(data.taraKg) : undefined,
       capacidadeKg: data.capacidadeKg ? Number(data.capacidadeKg) : undefined,
-      motoristaNome: data.motoristaNome || undefined,
-      motoristaCpf: data.motoristaCpf || undefined,
+      motoristaId: data.motoristaId ?? null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -452,8 +457,9 @@ const MODULES = {
       tipoCarroceria: r.tipoCarroceria,
       taraKg: r.taraKg,
       capacidadeKg: r.capacidadeKg,
-      motoristaNome: r.motoristaNome,
-      motoristaCpf: r.motoristaCpf,
+      motoristaId: r.motoristaId ?? null,
+      motoristaNome: r.motorista?.nome || "—",
+      motoristaCpf: r.motorista?.cpf || "",
     }),
   },
   produtos: {
@@ -4187,18 +4193,26 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
   const [veiculoId, setVeiculoId] = useState(cte?.veiculoId ? String(cte.veiculoId) : "");
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(cte?.veiculoReboqueId ? String(cte.veiculoReboqueId) : "");
+  const [motoristaId, setMotoristaId] = useState("");
   const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(cte?.veiculoReboque2Id ? String(cte.veiculoReboque2Id) : "");
   const [veiculoReboque3Id, setVeiculoReboque3Id] = useState(cte?.veiculoReboque3Id ? String(cte.veiculoReboque3Id) : "");
 
-  // Escolher o veículo traz o motorista habitual dele. Só preenche o que
-  // estiver vazio: se alguém já corrigiu o nome porque hoje é outro
-  // motorista, trocar o veículo não pode apagar essa correção.
+  // Escolher o veículo traz o motorista habitual dele, que vem do cadastro
+  // de colaboradores. Só preenche se ainda não houver motorista escolhido:
+  // se alguém já trocou porque hoje é outro, mudar o veículo não desfaz.
   const escolherVeiculo = (id) => {
     setVeiculoId(id);
     const veiculo = (veiculos || []).find(v => String(v.id) === String(id));
-    if (!veiculo) return;
-    if (!nomeMotorista && veiculo.motoristaNome) setNomeMotorista(veiculo.motoristaNome);
-    if (!cpfMotorista && veiculo.motoristaCpf) setCpfMotorista(formatCPF(veiculo.motoristaCpf));
+    if (veiculo?.motoristaId && !motoristaId) escolherMotorista(String(veiculo.motoristaId));
+  };
+
+  // O documento guarda nome e CPF porque é isso que vai no XML; o vínculo
+  // com o colaborador é o que evita digitar errado.
+  const escolherMotorista = (id) => {
+    setMotoristaId(id);
+    const pessoa = (colaboradores || []).find(c => String(c.id) === String(id));
+    setNomeMotorista(pessoa?.nome || "");
+    setCpfMotorista(pessoa?.cpf ? formatCPF(pessoa.cpf) : "");
   };
 
   // Cadastra cliente/transportadora/veículo sem sair do CTe, e já
@@ -4751,8 +4765,13 @@ naturezaOperacao: naturezaOperacao || undefined,
             </div>
             <div className="nf-grid-4">
               <div className="field-group">
-                <label className="field-label">Nome do motorista</label>
-                <input value={nomeMotorista} onChange={e => setNomeMotorista(e.target.value)} />
+                <label className="field-label">Motorista</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={motoristaId} onChange={e => escolherMotorista(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">{nomeMotorista || "Selecione…"}</option>
+                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">CPF do motorista</label>
@@ -4760,8 +4779,8 @@ naturezaOperacao: naturezaOperacao || undefined,
               </div>
             </div>
             <p className="hint">
-              O motorista vem do cadastro do veículo. Se quem estiver dirigindo hoje for outro, basta
-              corrigir aqui — o cadastro não muda.
+              O motorista vem do cadastro do veículo e é escolhido entre os colaboradores. Se quem estiver
+              dirigindo hoje for outro, troque aqui — o cadastro do veículo não muda.
             </p>
           </div>
 

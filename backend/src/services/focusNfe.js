@@ -481,6 +481,7 @@ function montarPayloadMdfe({
   empresa,
   veiculo,
   veiculoReboque,
+  reboques,
   nomeMotorista,
   cpfMotorista,
   ufPercurso,
@@ -577,18 +578,19 @@ function montarPayloadMdfe({
           ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
           : undefined,
       },
-      veiculos_reboque: veiculoReboque
-        ? [
-            {
-              placa: veiculoReboque.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
-              renavam: somenteDigitos(veiculoReboque.renavam),
-              tara: veiculoReboque.taraKg ? Math.round(veiculoReboque.taraKg) : undefined,
-              capacidade_kg: veiculoReboque.capacidadeKg ? Math.round(veiculoReboque.capacidadeKg) : undefined,
-              tipo_carroceria: veiculoReboque.tipoCarroceria || undefined,
-              uf: veiculoReboque.uf || empresa.endereco?.uf,
-            },
-          ]
-        : undefined,
+      // Bitrem e rodotrem levam mais de um engate; a lista aceita os três.
+      veiculos_reboque: (() => {
+        const lista = (reboques || [veiculoReboque]).filter(Boolean);
+        if (!lista.length) return undefined;
+        return lista.map((r) => ({
+          placa: r.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+          renavam: somenteDigitos(r.renavam),
+          tara: r.taraKg ? Math.round(r.taraKg) : undefined,
+          capacidade_kg: r.capacidadeKg ? Math.round(r.capacidadeKg) : undefined,
+          tipo_carroceria: r.tipoCarroceria || undefined,
+          uf: r.uf || empresa.endereco?.uf,
+        }));
+      })(),
     },
 
     informacao_complementar: documento.informacoesComplementares || undefined,

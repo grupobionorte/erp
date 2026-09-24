@@ -272,6 +272,12 @@ model Veiculo {
   tipoCarroceria   String? @map("tipo_carroceria")
   ativo            Boolean @default(true)
 
+  // Motorista habitual do veículo. Fica aqui porque é assim que a operação
+  // pensa — o caminhão tem seu motorista — e evita redigitar nome e CPF a
+  // cada CT-e. Continua editável no documento quando houver troca.
+  motoristaNome String? @map("motorista_nome")
+  motoristaCpf  String? @map("motorista_cpf")
+
   transportadoraId Int            @map("transportadora_id")
   transportadora   Transportadora @relation(fields: [transportadoraId], references: [id])
 
@@ -279,7 +285,9 @@ model Veiculo {
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
   documentosFiscais DocumentoFiscal[]
-  documentosFiscaisReboque DocumentoFiscal[] @relation("CteVeiculoReboque")
+  documentosFiscaisReboque  DocumentoFiscal[] @relation("CteVeiculoReboque")
+  documentosFiscaisReboque2 DocumentoFiscal[] @relation("CteVeiculoReboque2")
+  documentosFiscaisReboque3 DocumentoFiscal[] @relation("CteVeiculoReboque3")
 
   @@map("veiculos")
 }
@@ -438,8 +446,14 @@ model DocumentoFiscal {
   ufInicio         String? @map("uf_inicio")
   ufFim            String? @map("uf_fim")
 
-  veiculoReboqueId Int?     @map("veiculo_reboque_id")
-  veiculoReboque   Veiculo? @relation("CteVeiculoReboque", fields: [veiculoReboqueId], references: [id])
+  // Até três reboques: bitrem e rodotrem são comuns no transporte de
+  // biomassa, e o MDF-e aceita mais de um engate.
+  veiculoReboqueId  Int?     @map("veiculo_reboque_id")
+  veiculoReboque    Veiculo? @relation("CteVeiculoReboque", fields: [veiculoReboqueId], references: [id])
+  veiculoReboque2Id Int?     @map("veiculo_reboque2_id")
+  veiculoReboque2   Veiculo? @relation("CteVeiculoReboque2", fields: [veiculoReboque2Id], references: [id])
+  veiculoReboque3Id Int?     @map("veiculo_reboque3_id")
+  veiculoReboque3   Veiculo? @relation("CteVeiculoReboque3", fields: [veiculoReboque3Id], references: [id])
 
   // Tributação da prestação de serviço (CTe) — nível documento, não por
   // item, já que o CTe não tem lista de produtos.

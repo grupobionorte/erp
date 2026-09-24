@@ -216,7 +216,8 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
 router.post("/cte/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    tomadorId, transportadoraId, veiculoId, veiculoReboqueId, nomeMotorista, cpfMotorista,
+    tomadorId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
+    nomeMotorista, cpfMotorista,
     origemPercurso, destinoPercurso, distanciaKm, ufInicio, ufFim, naturezaOperacao, informacoesComplementares, valorTotal,
     remetenteId, expedidorId, recebedorId, definicaoTomador, formaPagamento,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
@@ -255,6 +256,8 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       transportadoraId: transportadoraId || undefined,
       veiculoId: veiculoId || undefined,
       veiculoReboqueId: veiculoReboqueId || undefined,
+      veiculoReboque2Id: veiculoReboque2Id || undefined,
+      veiculoReboque3Id: veiculoReboque3Id || undefined,
       nomeMotorista: nomeMotorista || undefined,
       cpfMotorista: cpfMotorista || undefined,
       origemPercurso: origemPercurso || undefined,
@@ -351,7 +354,10 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
 
   const ctes = await prisma.documentoFiscal.findMany({
     where: { id: { in: cteIds }, tipo: "CTe", empresaId: req.usuario.empresaId },
-    include: { veiculo: true, veiculoReboque: true, documentosTransportados: true, empresa: true },
+    include: {
+      veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+      documentosTransportados: true, empresa: true,
+    },
   });
 
   if (ctes.length !== cteIds.length) {
@@ -439,6 +445,8 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       transportadoraId: primeiro.transportadoraId,
       veiculoId: primeiro.veiculoId,
       veiculoReboqueId: primeiro.veiculoReboqueId,
+      veiculoReboque2Id: primeiro.veiculoReboque2Id,
+      veiculoReboque3Id: primeiro.veiculoReboque3Id,
       nomeMotorista: primeiro.nomeMotorista,
       cpfMotorista: primeiro.cpfMotorista,
       ufPercurso: ufsTrajeto.join(","),
@@ -547,6 +555,8 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       transportadora: true,
       veiculo: true,
       veiculoReboque: true,
+      veiculoReboque2: true,
+      veiculoReboque3: true,
       documentosTransportados: { include: { notaFiscal: true } },
       documentosVinculados: true,
     },
@@ -600,7 +610,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       : focusNfe.montarPayloadMdfe({
           empresa: documento.empresa,
           veiculo: documento.veiculo,
-          veiculoReboque: documento.veiculoReboque,
+          reboques: [documento.veiculoReboque, documento.veiculoReboque2, documento.veiculoReboque3].filter(Boolean),
           nomeMotorista: documento.nomeMotorista,
           cpfMotorista: documento.cpfMotorista,
           ufPercurso: documento.ufPercurso,
@@ -790,7 +800,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
     dataEmissao, colaboradorResponsavelId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
-    veiculoReboqueId, distanciaKm, ufInicio, ufFim, remetenteId, expedidorId, recebedorId, definicaoTomador,
+    veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
+    distanciaKm, ufInicio, ufFim, remetenteId, expedidorId, recebedorId, definicaoTomador,
     cstIbsCbsPrestacao, classificacaoTributariaIbsCbsPrestacao,
     tipoServico, dataTransporte, horaTransporte, cteGlobalizado, tipoCte,
     cfopPrestacao, cstIcmsPrestacao, baseCalculoIcmsPrestacao, aliquotaIcmsPrestacao,
@@ -851,6 +862,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       transportadoraId: transportadoraId === null ? null : transportadoraId || undefined,
       veiculoId: veiculoId === null ? null : veiculoId || undefined,
       veiculoReboqueId: veiculoReboqueId === null ? null : veiculoReboqueId || undefined,
+      veiculoReboque2Id: veiculoReboque2Id === null ? null : veiculoReboque2Id || undefined,
+      veiculoReboque3Id: veiculoReboque3Id === null ? null : veiculoReboque3Id || undefined,
       remetenteId: remetenteId === null ? null : remetenteId || undefined,
       expedidorId: expedidorId === null ? null : expedidorId || undefined,
       recebedorId: recebedorId === null ? null : recebedorId || undefined,
@@ -925,8 +938,24 @@ router.delete("/:id", asyncHandler(async (req, res) => {
     return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
   }
 
-  // Rascunho ou rejeitado: nunca chegou a ser enviado pra SEFAZ, então
-  // cancelar aqui é só marcar como cancelado no nosso banco.
+  // Rascunho nunca saiu daqui: não tem número na SEFAZ, não tem valor
+  // fiscal e não precisa deixar rastro. Com ?definitivo=1 ele é apagado de
+  // vez, em vez de ficar sujando a lista como cancelado.
+  if (existente.status === "rascunho" && req.query.definitivo === "1") {
+    await prisma.$transaction([
+      prisma.cteDocumento.deleteMany({ where: { cteId: id } }),
+      prisma.documentoItem.deleteMany({ where: { documentoId: id } }),
+      prisma.documentoEvento.deleteMany({ where: { documentoId: id } }),
+      prisma.cartaCorrecao.deleteMany({ where: { documentoId: id } }),
+      // Solta os documentos que este manifesto carregava, se for um MDFe.
+      prisma.documentoFiscal.updateMany({ where: { mdfeId: id }, data: { mdfeId: null } }),
+      prisma.documentoFiscal.delete({ where: { id } }),
+    ]);
+    return res.status(204).send();
+  }
+
+  // Rejeitado já foi à SEFAZ e tem retorno registrado no provedor: some da
+  // operação como cancelado, mas o histórico do que foi tentado fica.
   if (existente.status === "rascunho" || existente.status === "rejeitado") {
     await prisma.documentoFiscal.update({ where: { id }, data: { status: "cancelado" } });
     return res.status(204).send();

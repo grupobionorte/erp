@@ -426,8 +426,11 @@ const MODULES = {
       { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
       { key: "taraKg", label: "Tara (kg)", type: "number" },
       { key: "capacidadeKg", label: "Capacidade (kg)", type: "number" },
+      // Motorista habitual: é daqui que o CT-e preenche nome e CPF.
+      { key: "motoristaNome", label: "Motorista", type: "text" },
+      { key: "motoristaCpf", label: "CPF do motorista", type: "text" },
     ],
-    columns: ["placa", "transportadoraNome", "tipoRodado", "capacidadeKg"],
+    columns: ["placa", "transportadoraNome", "tipoRodado", "motoristaNome"],
     toApi: (data) => ({
       transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : undefined,
       placa: data.placa,
@@ -436,6 +439,8 @@ const MODULES = {
       tipoCarroceria: data.tipoCarroceria || undefined,
       taraKg: data.taraKg ? Number(data.taraKg) : undefined,
       capacidadeKg: data.capacidadeKg ? Number(data.capacidadeKg) : undefined,
+      motoristaNome: data.motoristaNome || undefined,
+      motoristaCpf: data.motoristaCpf || undefined,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -447,6 +452,8 @@ const MODULES = {
       tipoCarroceria: r.tipoCarroceria,
       taraKg: r.taraKg,
       capacidadeKg: r.capacidadeKg,
+      motoristaNome: r.motoristaNome,
+      motoristaCpf: r.motoristaCpf,
     }),
   },
   produtos: {
@@ -4143,6 +4150,19 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   const [transportadoraId, setTransportadoraId] = useState(cte?.transportadoraId ? String(cte.transportadoraId) : "");
   const [veiculoId, setVeiculoId] = useState(cte?.veiculoId ? String(cte.veiculoId) : "");
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(cte?.veiculoReboqueId ? String(cte.veiculoReboqueId) : "");
+  const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(cte?.veiculoReboque2Id ? String(cte.veiculoReboque2Id) : "");
+  const [veiculoReboque3Id, setVeiculoReboque3Id] = useState(cte?.veiculoReboque3Id ? String(cte.veiculoReboque3Id) : "");
+
+  // Escolher o veículo traz o motorista habitual dele. Só preenche o que
+  // estiver vazio: se alguém já corrigiu o nome porque hoje é outro
+  // motorista, trocar o veículo não pode apagar essa correção.
+  const escolherVeiculo = (id) => {
+    setVeiculoId(id);
+    const veiculo = (veiculos || []).find(v => String(v.id) === String(id));
+    if (!veiculo) return;
+    if (!nomeMotorista && veiculo.motoristaNome) setNomeMotorista(veiculo.motoristaNome);
+    if (!cpfMotorista && veiculo.motoristaCpf) setCpfMotorista(formatCPF(veiculo.motoristaCpf));
+  };
 
   // Cadastra cliente/transportadora/veículo sem sair do CTe, e já
   // seleciona o registro novo no campo certo assim que salvar.
@@ -4210,7 +4230,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
         definicaoTomador,
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
         veiculoId: veiculoId ? Number(veiculoId) : undefined,
-        veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : undefined,
+        veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : null,
+        veiculoReboque2Id: veiculoReboque2Id ? Number(veiculoReboque2Id) : null,
+        veiculoReboque3Id: veiculoReboque3Id ? Number(veiculoReboque3Id) : null,
         nomeMotorista: nomeMotorista || undefined,
         cpfMotorista: cpfMotorista || undefined,
         origemPercurso: origemPercurso || undefined,
@@ -4633,37 +4655,36 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
           <div className="nf-section">
             <h4 className="nf-section-title">Transporte</h4>
-            <div className="field-group">
-              <label className="field-label">Transportadora subcontratada</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)} style={{ flex: 1 }}>
-                  <option value="">Nenhuma (frete próprio)</option>
-                  {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-                <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar transportadora nova" onClick={() => setQuickAdd({ tipo: "transportadoras", setter: setTransportadoraId })}><Plus size={14} /></button>
-              </div>
-            </div>
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Veículo transportador</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
+                  <select value={veiculoId} onChange={e => escolherVeiculo(e.target.value)} style={{ flex: 1 }}>
                     <option value="">Nenhum</option>
                     {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                   </select>
                   <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
                 </div>
               </div>
-              <div className="field-group">
-                <label className="field-label">Veículo reboque</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={veiculoReboqueId} onChange={e => setVeiculoReboqueId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Nenhum</option>
-                    {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                  </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoReboqueId })}><Plus size={14} /></button>
+              {[
+                { rotulo: "1º reboque", valor: veiculoReboqueId, setter: setVeiculoReboqueId },
+                { rotulo: "2º reboque", valor: veiculoReboque2Id, setter: setVeiculoReboque2Id },
+                { rotulo: "3º reboque", valor: veiculoReboque3Id, setter: setVeiculoReboque3Id },
+              ].map(({ rotulo, valor, setter }) => (
+                <div className="field-group" key={rotulo}>
+                  <label className="field-label">{rotulo}</label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select value={valor} onChange={e => setter(e.target.value)} style={{ flex: 1 }}>
+                      <option value="">Nenhum</option>
+                      {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                    </select>
+                    <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo"
+                      onClick={() => setQuickAdd({ tipo: "veiculos", setter })}><Plus size={14} /></button>
+                  </div>
                 </div>
-              </div>
+              ))}
+            </div>
+            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Nome do motorista</label>
                 <input value={nomeMotorista} onChange={e => setNomeMotorista(e.target.value)} />
@@ -4673,6 +4694,10 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                 <input value={cpfMotorista} onChange={e => setCpfMotorista(formatCPF(e.target.value))} maxLength={14} />
               </div>
             </div>
+            <p className="hint">
+              O motorista vem do cadastro do veículo. Se quem estiver dirigindo hoje for outro, basta
+              corrigir aqui — o cadastro não muda.
+            </p>
           </div>
 
           </div>
@@ -4821,6 +4846,18 @@ function CteView({ onIrParaMdfe }) {
       carregar();
     } catch (e) {
       alert(`Não foi possível cancelar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
+
+  // Rascunho nunca foi à SEFAZ: pode sumir de vez, em vez de ficar na lista
+  // como cancelado.
+  const excluirRascunho = async (cte) => {
+    if (!window.confirm(`Excluir o rascunho de CTe ${cte.numero || ""}?\n\nEle será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro.`)) return;
+    try {
+      await apiRequest(`/documentos-fiscais/${cte.id}?definitivo=1`, { method: "DELETE" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
     }
   };
 
@@ -5046,9 +5083,15 @@ function CteView({ onIrParaMdfe }) {
                           >
                             <FileText size={14} /> {processando === cte.id ? "Aguardando SEFAZ…" : cte.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir CTe"}
                           </button>
-                          <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarCte(cte.id); }}>
-                            <Trash2 size={14} /> Cancelar
-                          </button>
+                          {cte.status === "rascunho" ? (
+                            <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); excluirRascunho(cte); }}>
+                              <Trash2 size={14} /> Excluir rascunho
+                            </button>
+                          ) : (
+                            <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarCte(cte.id); }}>
+                              <Trash2 size={14} /> Cancelar
+                            </button>
+                          )}
                         </>
                       )}
                       {cte.status === "enviado" && (

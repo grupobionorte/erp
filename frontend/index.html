@@ -876,9 +876,14 @@ function CfopField({ value, onChange }) {
         onBlur={() => setTimeout(() => setAberto(false), 150)}
         placeholder="Digite o código ou parte da descrição"
       />
-      {aberto && (buscando || sugestoes.length > 0) && (
+      {aberto && (buscando || sugestoes.length > 0 || (value || "").length >= 2) && (
         <div className="ncm-suggestions">
           {buscando && <div className="ncm-suggestion-loading">Buscando…</div>}
+          {/* Sem resultado a lista sumia, e parecia que a busca tinha
+              travado no "Buscando". */}
+          {!buscando && sugestoes.length === 0 && (value || "").length >= 2 && (
+            <div className="ncm-suggestion-loading">Nenhum CFOP encontrado para "{value}"</div>
+          )}
           {sugestoes.map(s => (
             <button
               key={s.codigo}
@@ -3389,8 +3394,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     </select>
                     <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
                     <InputMoeda value={item.valorUnitario} onChange={v => atualizarItem(index, "valorUnitario", v)} />
-                    <input value={item.cfopUtilizado} onChange={e => atualizarItem(index, "cfopUtilizado", e.target.value)} />
-                    <input value={item.ncmUtilizado} onChange={e => atualizarItem(index, "ncmUtilizado", e.target.value)} />
+                    <CfopField value={item.cfopUtilizado} onChange={v => atualizarItem(index, "cfopUtilizado", v)} />
+                    <NcmField value={item.ncmUtilizado} onChange={v => atualizarItem(index, "ncmUtilizado", v)} />
                     <input value={item.cstUtilizado} onChange={e => atualizarItem(index, "cstUtilizado", e.target.value)} />
                     <span className="nf-item-total">R$ {formatarMoeda(totalItem)}</span>
                     <button type="button" className="icon-btn icon-btn-danger" onClick={() => removerItem(index)} aria-label="Remover item">
@@ -5393,7 +5398,13 @@ function ErpBiomassa() {
         .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
         .nf-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
         .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }
-        .nf-itens-table { border: 1px solid #e5e3da; border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+        /* overflow visível: senão a lista de sugestões de CFOP e NCM é
+           cortada pela borda da tabela de itens. */
+        .nf-itens-table { border: 1px solid #e5e3da; border-radius: 8px; margin-bottom: 10px; }
+        .nf-item-row .ncm-field { width: 100%; }
+        /* A coluna é estreita, mas a descrição do CFOP é longa — a lista
+           abre mais larga que o campo para dar pra ler. */
+        .nf-item-row .ncm-suggestions { min-width: 340px; }
         .nf-itens-header, .nf-item-row {
           display: grid;
           grid-template-columns: 2.4fr 0.8fr 1fr 0.9fr 1fr 0.8fr 1fr 28px;

@@ -853,10 +853,37 @@ function MunicipioField({ uf, value, onChange }) {
   );
 }
 
-function CfopField({ value, onChange }) {
+function CfopField({ value, onChange, onDescricao }) {
   const [sugestoes, setSugestoes] = useState([]);
   const [aberto, setAberto] = useState(false);
   const [buscando, setBuscando] = useState(false);
+  const [descricao, setDescricao] = useState("");
+
+  // Código sozinho não diz nada pra quem não decorou a tabela. Assim que o
+  // código está completo, buscamos a descrição e mostramos embaixo — e
+  // avisamos quem usa o campo, porque é ela que vira a natureza da operação.
+  useEffect(() => {
+    const codigo = String(value || "").replace(/\D/g, "");
+    if (codigo.length !== 4) {
+      setDescricao("");
+      onDescricao?.("");
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      try {
+        const resultado = await apiRequest(`/cfops?busca=${codigo}`);
+        const exato = resultado.find(c => c.codigo === codigo);
+        if (!cancelado) {
+          setDescricao(exato?.descricao || "");
+          onDescricao?.(exato?.descricao || "");
+        }
+      } catch {
+        if (!cancelado) setDescricao("");
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [value]);
 
   useEffect(() => {
     if (!value || value.length < 2) { setSugestoes([]); return; }
@@ -903,6 +930,9 @@ function CfopField({ value, onChange }) {
             </button>
           ))}
         </div>
+      )}
+      {!aberto && descricao && (
+        <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>{descricao}</p>
       )}
     </div>
   );
@@ -4055,7 +4085,10 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
-  const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "Prestação de serviço de transporte");
+  // A natureza da operação é a própria descrição do CFOP — ter os dois na
+  // tela só criava chance de um contradizer o outro. O campo saiu e o valor
+  // passa a vir do CFOP escolhido.
+  const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "");
   const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || "");
   const [tipoServico, setTipoServico] = useState(cte?.tipoServico || "Normal");
   const [dataTransporte, setDataTransporte] = useState(cte?.dataTransporte ? cte.dataTransporte.slice(0, 10) : hoje);
@@ -4240,7 +4273,7 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
         ufInicio: ufInicio || undefined,
         ufFim: ufFim || undefined,
         distanciaKm: distanciaKm !== "" ? Number(distanciaKm) : undefined,
-        naturezaOperacao,
+naturezaOperacao: naturezaOperacao || undefined,
         cfopPrestacao: cfopPrestacao || undefined,
         tipoServico,
         dataTransporte: dataTransporte || undefined,
@@ -4553,7 +4586,8 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
               </div>
               <div className="field-group">
                 <label className="field-label">CFOP da prestação</label>
-                <CfopField value={cfopPrestacao} onChange={setCfopPrestacao} />
+                <CfopField value={cfopPrestacao} onChange={setCfopPrestacao}
+                  onDescricao={d => { if (d) setNaturezaOperacao(d); }} />
                 {cfopIncompativel && (
                   <p className="cte-sugestao">
                     Trajeto {interestadual ? "interestadual" : `dentro de ${ufInicio}`}: o CFOP deveria começar
@@ -4561,10 +4595,6 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
                   </p>
                 )}
               </div>
-            </div>
-            <div className="field-group" style={{ marginBottom: 0, maxWidth: 400 }}>
-              <label className="field-label">Natureza da operação</label>
-              <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
             </div>
           </div>
 

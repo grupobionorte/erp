@@ -4293,6 +4293,8 @@ naturezaOperacao: naturezaOperacao || undefined,
         cstIbsCbsPrestacao: cstIbsCbsPrestacao || undefined,
         classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
         valorTotal: Number(valorTotal),
+        produtoPredominante: produtoPredominante || sugestaoProduto || undefined,
+        valorTotalCarga: valorTotalCarga !== "" ? Number(valorTotalCarga) : null,
       });
     } catch (e) {
       setErro(e.message || "Erro ao salvar o CTe");
@@ -4302,6 +4304,14 @@ naturezaOperacao: naturezaOperacao || undefined,
   };
 
   const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
+
+  const [produtoPredominante, setProdutoPredominante] = useState(cte?.produtoPredominante || "");
+  const [valorTotalCarga, setValorTotalCarga] = useState(cte?.valorTotalCarga ?? "");
+
+  // A carga vem das notas vinculadas; os campos acima só existem para
+  // corrigir quando a soma não representa o que está no caminhão.
+  const somaNotas = documentosTransportados.reduce((t, d) => t + (Number(d.valorTotalNota) || 0), 0);
+  const sugestaoProduto = documentosTransportados.find(d => d.naturezaMercadoria)?.naturezaMercadoria || "";
 
   const [aba, setAba] = useState("rota");
 
@@ -4347,6 +4357,27 @@ naturezaOperacao: naturezaOperacao || undefined,
         </div>
         <div className="modal-body cte-corpo" ref={corpo}>
           <div data-painel="carga" hidden={aba !== "carga"}>
+          <div className="nf-section">
+            <h4 className="nf-section-title">Carga</h4>
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Produto predominante</label>
+                <input value={produtoPredominante} placeholder={sugestaoProduto || "Ex.: Cavaco de eucalipto"}
+                  onChange={e => setProdutoPredominante(e.target.value)} />
+                <p className="hint">É o que aparece no DACTe e o que a fiscalização de estrada confere na carroceria.</p>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor total da carga</label>
+                <InputMoeda value={valorTotalCarga} onChange={setValorTotalCarga} />
+                <p className="hint">
+                  {somaNotas > 0
+                    ? `Soma das notas: R$ ${formatarMoeda(somaNotas)} — deixe em branco para usar esse valor.`
+                    : "Valor da mercadoria transportada, não do frete."}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="nf-section">
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
             {documentosTransportados.length > 0 ? (

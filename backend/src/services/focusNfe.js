@@ -297,6 +297,12 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
   // valor total da prestação.
   const temIbsCbs = Boolean(documento.cstIbsCbsPrestacao);
 
+  // Carga: soma das notas transportadas, com o campo manual por cima.
+  const somar = (campo) =>
+    (documento.documentosTransportados || []).reduce((t, d) => t + (Number(d[campo]) || 0), 0);
+  const valorDaCarga = Number(documento.valorTotalCarga) || somar("valorTotalNota") || somar("valorTotalProdutos") || undefined;
+  const pesoDaCarga = Number(documento.pesoBrutoTotal) || somar("pesoBruto") || undefined;
+
   return {
     cfop: documento.cfopPrestacao || undefined,
     natureza_operacao: documento.naturezaOperacao || "Prestação de serviço de transporte",
@@ -347,18 +353,28 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // presente. Em 2026 é igual ao valor total da prestação.
     valor_total_dfe: temIbsCbs ? dec(documento.valorTotal) : undefined,
 
-    valor_total_carga: dec(documento.valorTotal),
-    produto_predominante: documento.especieVolumes || documento.naturezaOperacao || "Carga geral",
+    // Valor da CARGA, não do frete. São grandezas diferentes: o frete é o
+    // que se cobra pelo transporte, a carga é quanto vale a mercadoria que
+    // está no caminhão. Vem das notas vinculadas, e o campo manual do
+    // formulário tem prioridade quando preenchido.
+    valor_total_carga: dec(valorDaCarga),
+    valor_carga_averbacao: dec(valorDaCarga),
+
+    // O que está sendo transportado, como aparece no DACTe e como a
+    // fiscalização de estrada confere na carroceria.
+    produto_predominante: documento.produtoPredominante
+      || documento.documentosTransportados?.[0]?.naturezaMercadoria
+      || documento.especieVolumes
+      || "Carga geral",
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
-    // Obrigatório (schema exige pelo menos um) — ainda não temos um campo
-    // de peso bruto no formulário do CTe, então usamos o que tiver
-    // disponível como uma estimativa mínima.
+
+    // O schema exige pelo menos uma medida. Peso é o que importa em
+    // biomassa; só cai para contagem de volumes se não houver peso nenhum.
     quantidades: [{
-      codigo_unidade_medida: documento.pesoBrutoTotal ? "01" : "03",
-      tipo_medida: documento.pesoBrutoTotal ? "PESO BRUTO" : "UNIDADE",
-      quantidade: documento.pesoBrutoTotal || documento.quantidadeVolumes || 1,
+      codigo_unidade_medida: pesoDaCarga ? "01" : "03",
+      tipo_medida: pesoDaCarga ? "PESO BRUTO" : "UNIDADE",
+      quantidade: pesoDaCarga ? dec(pesoDaCarga, 4) : (documento.quantidadeVolumes || 1),
     }],
-    valor_carga_averbacao: documento.valorTotal,
 
     informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,
 

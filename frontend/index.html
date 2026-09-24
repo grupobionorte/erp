@@ -419,10 +419,10 @@ const MODULES = {
     color: "purple",
     apiPath: "/veiculos",
     fields: [
-      // Transportadora ficou reservada para subcontratação futura; a frota
-      // hoje é própria, então não é mais obrigatória.
-      { key: "transportadoraId", label: "Transportadora (uso futuro)", type: "transportadora-select" },
       { key: "placa", label: "Placa", type: "text", required: true },
+      { key: "descricao", label: "Descrição", type: "text" },
+      { key: "anoFabricacao", label: "Ano de fabricação", type: "number" },
+      { key: "anoModelo", label: "Ano modelo", type: "number" },
       { key: "renavam", label: "Renavam", type: "text" },
       { key: "tipoRodado", label: "Tipo de rodado", type: "select", options: ["Truck", "Toco", "Cavalo Mecânico", "VAN", "Utilitário", "Outros"] },
       { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
@@ -435,11 +435,17 @@ const MODULES = {
         fonte: "/colaboradores", vazio: "Nenhum",
         rotulo: (c) => [c.nome, c.cargo].filter(Boolean).join(" — "),
       },
+      // Transportadora ficou reservada para subcontratação futura; a frota
+      // hoje é própria, então saiu do topo e não é mais obrigatória.
+      { key: "transportadoraId", label: "Transportadora (uso futuro)", type: "transportadora-select" },
     ],
-    columns: ["placa", "transportadoraNome", "tipoRodado", "motoristaNome"],
+    columns: ["placa", "descricao", "tipoRodado", "motoristaNome"],
     toApi: (data) => ({
       transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : null,
       placa: data.placa,
+      descricao: data.descricao || undefined,
+      anoFabricacao: data.anoFabricacao ? Number(data.anoFabricacao) : undefined,
+      anoModelo: data.anoModelo ? Number(data.anoModelo) : undefined,
       renavam: data.renavam || undefined,
       tipoRodado: data.tipoRodado || undefined,
       tipoCarroceria: data.tipoCarroceria || undefined,
@@ -452,6 +458,9 @@ const MODULES = {
       transportadoraId: r.transportadoraId,
       transportadoraNome: r.transportadora?.razaoSocial || "—",
       placa: r.placa,
+      descricao: r.descricao,
+      anoFabricacao: r.anoFabricacao,
+      anoModelo: r.anoModelo,
       renavam: r.renavam,
       tipoRodado: r.tipoRodado,
       tipoCarroceria: r.tipoCarroceria,
@@ -753,6 +762,9 @@ const COLOR_MAP = {
 // veículo, que vem calculado no fromApi.
 const COLUMN_LABELS = {
   transportadoraNome: "Transportadora",
+  // A coluna mostra o nome do motorista, mas o campo do formulário é o
+  // vínculo com o colaborador — daí o rótulo próprio.
+  motoristaNome: "Motorista",
 };
 
 function getPath(obj, path) {

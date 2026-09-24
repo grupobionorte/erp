@@ -266,6 +266,11 @@ model Transportadora {
 model Veiculo {
   id               Int    @id @default(autoincrement())
   placa            String
+  // Como a frota é identificada no dia a dia: "Carreta graneleira 01",
+  // "Cavalo Scania vermelho". Ajuda mais que a placa na hora de escolher.
+  descricao        String?
+  anoFabricacao    Int?   @map("ano_fabricacao")
+  anoModelo        Int?   @map("ano_modelo")
   renavam          String?
   taraKg           Float?  @map("tara_kg")
   capacidadeKg     Float?  @map("capacidade_kg")

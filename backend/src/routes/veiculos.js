@@ -22,7 +22,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { transportadoraId, placa, empresaId, motoristaId, ...resto } = req.body;
+  const { transportadoraId, placa, empresaId, motoristaId, anoFabricacao, anoModelo, ...resto } = req.body;
   // Transportadora virou opcional: a frota é própria.
   if (!placa) {
     return res.status(400).json({ erro: "placa é obrigatória" });
@@ -32,6 +32,8 @@ router.post("/", asyncHandler(async (req, res) => {
     data: {
       ...resto,
       placa,
+      anoFabricacao: anoFabricacao ? Number(anoFabricacao) : undefined,
+      anoModelo: anoModelo ? Number(anoModelo) : undefined,
       transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
       motoristaId: motoristaId ? Number(motoristaId) : undefined,
       empresaId: req.usuario.empresaId || undefined,
@@ -43,7 +45,7 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { transportadoraId, empresaId, motoristaId, ...dados } = req.body;
+  const { transportadoraId, empresaId, motoristaId, anoFabricacao, anoModelo, ...dados } = req.body;
   const id = Number(req.params.id);
 
   const existente = await prisma.veiculo.findUnique({ where: { id } });
@@ -56,6 +58,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
     where: { id },
     data: {
       ...dados,
+      anoFabricacao: anoFabricacao ? Number(anoFabricacao) : undefined,
+      anoModelo: anoModelo ? Number(anoModelo) : undefined,
       // null limpa o vínculo; undefined deixa como está.
       transportadoraId: transportadoraId === null ? null : (transportadoraId ? Number(transportadoraId) : undefined),
       motoristaId: motoristaId === null ? null : (motoristaId ? Number(motoristaId) : undefined),

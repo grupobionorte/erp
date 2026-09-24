@@ -15,6 +15,7 @@ const authRouter = require("./routes/auth");
 const usuariosRouter = require("./routes/usuarios");
 const empresasRouter = require("./routes/empresas");
 const { router: pontoRouter, routerTablet: pontoTabletRouter } = require("./routes/ponto");
+const { carregarTabelasDeApoio } = require("./lib/cargaInicial");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -101,4 +102,9 @@ app.use((erro, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3333;
-app.listen(PORT, () => console.log(`Backend rodando em http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Backend rodando em http://localhost:${PORT}`);
+  // Tabelas de apoio (CFOP, municípios) são carregadas aqui se estiverem
+  // vazias. Depois de ouvir a porta, para não atrasar a subida do serviço.
+  carregarTabelasDeApoio();
+});

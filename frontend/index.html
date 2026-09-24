@@ -4224,30 +4224,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
   const [aba, setAba] = useState("rota");
 
-  const nomeDe = (id) => (clientes || []).find(c => String(c.id) === String(id))?.nome;
-  // Quem é o tomador depende do papel escolhido — é esse cruzamento que a
-  // SEFAZ confere, e foi onde o primeiro CT-e saiu errado.
-  const idPorPapel = { "Remetente": remetenteId, "Expedidor": expedidorId, "Recebedor": recebedorId, "Destinatário": tomadorId };
-  const nomeTomador = nomeDe(idPorPapel[definicaoTomador]);
-
-  const pesoTotalCarga = documentosTransportados.reduce((t, d) => t + (Number(d.pesoBruto) || 0), 0);
   const interestadual = Boolean(ufInicio && ufFim && ufInicio !== ufFim);
   const cfopSugerido = interestadual ? "6353" : "5353";
   const cfopIncompativel = Boolean(cfopPrestacao && ufInicio && ufFim && cfopPrestacao.startsWith("6") !== interestadual);
-
-  // Mesma conferência que o backend faz antes de mandar pra SEFAZ — aqui ela
-  // aparece enquanto se preenche, não depois da rejeição.
-  const pendencias = [];
-  if (!tomadorId) pendencias.push("Destinatário não selecionado.");
-  if (!documentosTransportados.length) pendencias.push("Nenhuma nota fiscal vinculada — é a rejeição 693.");
-  if (!ufInicio || !ufFim || !origemPercurso || !destinoPercurso) pendencias.push("Trajeto incompleto (UF e município de início e fim).");
-  if (cfopIncompativel) pendencias.push(`CFOP ${cfopPrestacao} não combina com o trajeto ${ufInicio} → ${ufFim}: o certo começa com ${interestadual ? "6" : "5"} (sugestão ${cfopSugerido}).`);
-  if (!valorTotal || Number(valorTotal) <= 0) pendencias.push("Valor da prestação não informado.");
-  for (const d of documentosTransportados) {
-    if (d.chaveAcesso && !/^\d{44}$/.test(String(d.chaveAcesso).replace(/\D/g, ""))) {
-      pendencias.push(`Chave de acesso com tamanho inválido no documento ${d.numeroDocumento || "sem número"}.`);
-    }
-  }
 
   return (
     <div className="modal-backdrop">
@@ -4256,32 +4235,6 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
             <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
-          </div>
-
-          {/* Resumo fixo: o que o CT-e diz hoje, sem precisar rolar as abas */}
-          <div className="cte-resumo">
-            <div>
-              <span className="cte-resumo-rotulo">Trajeto</span>
-              <span className="cte-resumo-valor">
-                {origemPercurso || "—"}/{ufInicio || "—"} → {destinoPercurso || "—"}/{ufFim || "—"}
-              </span>
-            </div>
-            <div>
-              <span className="cte-resumo-rotulo">Tomador</span>
-              <span className="cte-resumo-valor">
-                {nomeTomador ? `${nomeTomador} (${definicaoTomador.toLowerCase()})` : "—"}
-              </span>
-            </div>
-            <div>
-              <span className="cte-resumo-rotulo">Carga</span>
-              <span className="cte-resumo-valor">
-                {documentosTransportados.length} NF-e · {formatarDecimal(pesoTotalCarga, 3)} kg
-              </span>
-            </div>
-            <div>
-              <span className="cte-resumo-rotulo">Prestação</span>
-              <span className="cte-resumo-valor">R$ {formatarMoeda(Number(valorTotal) || 0)}</span>
-            </div>
           </div>
 
           <div className="cte-abas" role="tablist">
@@ -4742,21 +4695,9 @@ function CteForm({ cte, clientes, transportadoras, veiculos, colaboradores, cria
 
           {erro && <p className="error-text">{erro}</p>}
         </div>
-        <div className="modal-footer cte-rodape">
-          {/* Conferência ao vivo: as mesmas regras que barram o envio no
-              servidor, mostradas enquanto ainda dá pra corrigir. */}
-          <div className={`cte-conferencia ${pendencias.length ? "pendente" : "ok"}`}>
-            <strong>
-              {pendencias.length
-                ? `${pendencias.length} ponto${pendencias.length > 1 ? "s" : ""} a resolver antes de emitir`
-                : "Pronto para emitir"}
-            </strong>
-            {pendencias.length > 0 && <ul>{pendencias.map((p, i) => <li key={i}>{p}</li>)}</ul>}
-          </div>
-          <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-            <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
-            <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar rascunho"}</button>
-          </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar rascunho"}</button>
         </div>
       </div>
       {quickAdd && (

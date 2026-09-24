@@ -5348,7 +5348,7 @@ function ErpBiomassa() {
         /* Altura fixa no corpo: cada aba tem uma quantidade diferente de
            campos, e sem isso o modal encolhia e crescia a cada troca, com os
            botões do rodapé pulando de lugar. */
-        .cte-corpo { height: 60vh; }
+        .cte-corpo { height: 60vh; flex: 0 0 60vh; }
 
         /* Formulário de CT-e: resumo, abas, papéis e conferência */
         .cte-resumo { display: flex; gap: 22px; flex-wrap: wrap; margin: 12px 0 14px; }
@@ -5357,10 +5357,12 @@ function ErpBiomassa() {
         .cte-abas { display: flex; gap: 2px; }
         .cte-aba {
           border: none; background: none; cursor: pointer; font-family: inherit; font-size: 13.5px;
-          padding: 10px 16px 11px; color: #6b6b68; border-bottom: 2px solid transparent;
+          padding: 10px 16px 11px; color: #6b6b68; border-bottom: 2px solid transparent; font-weight: 600;
           display: inline-flex; align-items: center; gap: 7px;
         }
-        .cte-aba[aria-selected="true"] { color: var(--erp-azul); font-weight: 600; border-bottom-color: var(--erp-verde); }
+        /* Peso fixo em todas: quando só a selecionada ficava em negrito, a
+           largura dela mudava e empurrava as vizinhas a cada clique. */
+        .cte-aba[aria-selected="true"] { color: var(--erp-azul); border-bottom-color: var(--erp-verde); }
         .cte-contador { font-size: 11px; background: #f2f1ec; border-radius: 20px; padding: 1px 7px; color: #6b6b68; }
         .cte-papeis { border: 0.5px solid #e5e3da; border-radius: 10px; padding: 2px 12px; }
         .cte-papel-linha {

@@ -282,6 +282,20 @@ model Veiculo {
   // UF onde o veículo está licenciado: obrigatória no MDF-e, e nem sempre
   // é a UF da empresa (veículo de agregado, por exemplo).
   ufLicenciamento  String? @map("uf_licenciamento")
+
+  // Propriedade do veículo. "propria" é o padrão; sendo de terceiro, a
+  // SEFAZ exige o grupo do proprietário no MDF-e — e é só nesse caso que o
+  // tipo de transportador pode ser informado (rejeição 745).
+  propriedade              String? @default("propria")
+  proprietarioDocumento    String? @map("proprietario_documento")
+  proprietarioNome         String? @map("proprietario_nome")
+  proprietarioIe           String? @map("proprietario_ie")
+  proprietarioUf           String? @map("proprietario_uf")
+  proprietarioRntrc        String? @map("proprietario_rntrc")
+  // 0 TAC agregado, 1 TAC independente, 2 outros
+  proprietarioTipo         String? @map("proprietario_tipo")
+  // 1 ETC, 2 TAC, 3 CTC — só vai ao XML quando há proprietário declarado
+  tipoTransportador        String? @map("tipo_transportador")
   ativo            Boolean @default(true)
 
   // Motorista habitual, vindo do cadastro de colaboradores: nome e CPF

@@ -605,6 +605,24 @@ const TIPO_CARROCERIA_MDFE = {
 const codigoDe = (tabela, valor, padrao) =>
   tabela[String(valor || "").trim().toUpperCase()] || padrao;
 
+// Grupo do proprietário do veículo. Só existe quando o veículo é de
+// terceiro — com frota própria, informar isso gera rejeição.
+function proprietarioDoVeiculo(v, sufixo = "") {
+  const doc = somenteDigitos(v?.proprietarioDocumento);
+  if (v?.propriedade !== "terceiro" || !doc) return {};
+
+  const campo = (nome) => (sufixo ? `${nome}_${sufixo}` : nome);
+  return {
+    [campo("cpf_proprietario")]: doc.length === 11 ? doc : undefined,
+    [campo("cnpj_proprietario")]: doc.length === 14 ? doc : undefined,
+    [campo("rntrc_proprietario")]: somenteDigitos(v.proprietarioRntrc),
+    [campo("razao_social_proprietario")]: v.proprietarioNome || undefined,
+    [campo("inscricao_estadual_proprietario")]: v.proprietarioIe || undefined,
+    [campo("uf_proprietario")]: v.proprietarioUf || undefined,
+    [campo("tipo_proprietario")]: v.proprietarioTipo || undefined,
+  };
+}
+
 function montarPayloadMdfe({
   empresa,
   veiculo,
@@ -639,7 +657,11 @@ function montarPayloadMdfe({
     // tração tem proprietário declarado — ou seja, quando ele NÃO é da
     // empresa emitente. Com frota própria, informar isso gera a rejeição
     // 745. Por isso o campo só sai se for preenchido de propósito.
-    tipo_transporte: documento.tipoTransportador || undefined,
+    // Só sai quando o veículo de tração é de terceiro e tem proprietário
+    // declarado. Do contrário: rejeição 745.
+    tipo_transporte: veiculo?.propriedade === "terceiro" && veiculo?.proprietarioDocumento
+      ? (veiculo.tipoTransportador || documento.tipoTransportador || undefined)
+      : undefined,
     data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
 
     cnpj_emitente: somenteDigitos(empresa.cnpj),
@@ -723,6 +745,9 @@ function montarPayloadMdfe({
       tipo_rodado_veiculo: codigoDe(TIPO_RODADO_MDFE, veiculo?.tipoRodado, "06"),
       tipo_carroceria_veiculo: codigoDe(TIPO_CARROCERIA_MDFE, veiculo?.tipoCarroceria, "00"),
       uf_licenciamento_veiculo: veiculo?.ufLicenciamento || veiculo?.uf || ufEmpresa,
+      // Os campos do proprietário levam o sufixo "_veiculo" no grupo de
+      // tração; nos reboques, não.
+      ...proprietarioDoVeiculo(veiculo, "veiculo"),
 
       condutores: nomeMotorista
         ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
@@ -737,6 +762,7 @@ function montarPayloadMdfe({
             capacidade_m3: r.capacidadeM3 ? Math.round(r.capacidadeM3) : undefined,
             tipo_carroceria: codigoDe(TIPO_CARROCERIA_MDFE, r.tipoCarroceria, "00"),
             uf_licenciamento: r.ufLicenciamento || r.uf || ufEmpresa,
+            ...proprietarioDoVeiculo(r),
           }))
         : undefined,
     },

@@ -296,17 +296,15 @@ const CODIGO_TIPO_SERVICO = { "Normal": 0, "Subcontratação": 1, "Redespacho": 
 function montarObservacoesCte(documento) {
   const linhas = [];
 
-  const descreverVeiculo = (v) =>
-    v ? [v.placa, v.descricao].filter(Boolean).join(" - ") : null;
-
-  const veiculo = descreverVeiculo(documento.veiculo);
-  if (veiculo) linhas.push(`VEICULO: ${veiculo}`);
+  // Só a placa: a descrição do cadastro é para uso interno e só ocuparia
+  // espaço na observação.
+  if (documento.veiculo?.placa) linhas.push(`VEICULO: ${documento.veiculo.placa}`);
 
   // Só os reboques que existirem: bitrem tem um, rodotrem tem dois.
   [documento.veiculoReboque, documento.veiculoReboque2, documento.veiculoReboque3]
-    .map(descreverVeiculo)
+    .map(v => v?.placa)
     .filter(Boolean)
-    .forEach((reboque, i) => linhas.push(`REBOQUE ${i + 1}: ${reboque}`));
+    .forEach((placa, i) => linhas.push(`REBOQUE ${i + 1}: ${placa}`));
 
   if (documento.nomeMotorista) {
     const cpf = somenteDigitos(documento.cpfMotorista);
@@ -316,11 +314,17 @@ function montarObservacoesCte(documento) {
     linhas.push(`MOTORISTA: ${documento.nomeMotorista}${cpfFormatado ? ` - CPF ${cpfFormatado}` : ""}`);
   }
 
-  if (documento.dataTransporte) {
-    const zona = process.env.TZ_FISCAL || "America/Cuiaba";
-    const data = new Date(documento.dataTransporte).toLocaleDateString("pt-BR", { timeZone: zona });
-    linhas.push(`SAIDA: ${data}${documento.horaTransporte ? ` as ${documento.horaTransporte}` : ""}`);
-  }
+  // Data e hora da saída. Não preenchidas, valem as do envio — o CT-e é
+  // emitido quando o caminhão está saindo, então é a informação mais
+  // próxima da realidade, e melhor que deixar a linha em branco no DACTe.
+  const zona = process.env.TZ_FISCAL || "America/Cuiaba";
+  const agora = new Date();
+  const data = documento.dataTransporte
+    ? new Date(documento.dataTransporte).toLocaleDateString("pt-BR", { timeZone: zona })
+    : agora.toLocaleDateString("pt-BR", { timeZone: zona });
+  const hora = documento.horaTransporte
+    || agora.toLocaleTimeString("pt-BR", { timeZone: zona, hour: "2-digit", minute: "2-digit" });
+  linhas.push(`SAIDA: ${data} as ${hora}`);
 
   // O que o usuário escreveu vem primeiro; a ficha da viagem, depois.
   // xObs aceita 2000 caracteres.

@@ -36,6 +36,17 @@ function dec(valor, casas = 2) {
   return Number(Number(valor).toFixed(casas));
 }
 
+// Corta respeitando a palavra: "…estabelecimento industr" fica feio no
+// DACTe, e quem lê o documento é gente.
+function limitarTexto(texto, maximo) {
+  const limpo = String(texto || "").trim();
+  if (limpo.length <= maximo) return limpo;
+  const cortado = limpo.slice(0, maximo);
+  const ultimoEspaco = cortado.lastIndexOf(" ");
+  // Só volta até o espaço se não perder metade do texto no caminho.
+  return (ultimoEspaco > maximo * 0.6 ? cortado.slice(0, ultimoEspaco) : cortado).trim();
+}
+
 function somenteDigitos(valor) {
   if (!valor) return undefined;
   return String(valor).replace(/\D/g, "") || undefined;
@@ -123,7 +134,8 @@ function dataEmissaoSefaz(data = new Date(), timeZone = process.env.TZ_FISCAL ||
 // versão da documentação do provedor.
 function montarPayloadNfe({ empresa, destinatario, itens, documento, transportadora, veiculo }) {
   return {
-    natureza_operacao: documento.naturezaOperacao || "Venda de mercadoria",
+    // Mesmo limite de 60 caracteres vale para a NF-e.
+    natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
     data_emissao: (documento.dataEmissao || new Date()).toISOString(),
     data_entrada_saida: documento.dataSaida ? documento.dataSaida.toISOString() : undefined,
     tipo_documento: 1, // 1 = saída
@@ -330,7 +342,10 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
   return {
     cfop: documento.cfopPrestacao || undefined,
-    natureza_operacao: documento.naturezaOperacao || "Prestação de serviço de transporte",
+    // natOp aceita no máximo 60 caracteres. Como a natureza vem da
+    // descrição do CFOP, e várias passam disso, o corte é obrigatório —
+    // sem ele o XML é recusado antes de chegar à SEFAZ.
+    natureza_operacao: limitarTexto(documento.naturezaOperacao || "Prestação de serviço de transporte", 60),
     data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
     tipo_documento: CODIGO_TIPO_CTE[documento.tipoCte] ?? 0,
     tipo_servico: CODIGO_TIPO_SERVICO[documento.tipoServico] ?? 0,
@@ -387,10 +402,13 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
     // O que está sendo transportado, como aparece no DACTe e como a
     // fiscalização de estrada confere na carroceria.
-    produto_predominante: documento.produtoPredominante
-      || documento.documentosTransportados?.[0]?.naturezaMercadoria
-      || documento.especieVolumes
-      || "Carga geral",
+    produto_predominante: limitarTexto(
+      documento.produtoPredominante
+        || documento.documentosTransportados?.[0]?.naturezaMercadoria
+        || documento.especieVolumes
+        || "Carga geral",
+      60
+    ),
     outras_caracteristicas_carga: documento.especieVolumes || undefined,
 
     // Medidas da carga no DACTe. O peso bruto vai sempre — é o que a

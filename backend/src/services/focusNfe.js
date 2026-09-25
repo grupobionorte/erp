@@ -653,7 +653,7 @@ function contratantesDosCtes(ctes) {
 // Quem paga o frete, quanto e como. A SEFAZ exige esse grupo no MDF-e de
 // carga lotação (rejeição 302) — e os dados são os do próprio CT-e: o
 // tomador paga, e o valor é o da prestação.
-function pagamentosDosCtes(ctes) {
+function pagamentosDosCtes(ctes, empresa) {
   const porDocumento = new Map();
 
   for (const cte of ctes || []) {
@@ -695,13 +695,13 @@ function pagamentosDosCtes(ctes) {
     forma_pagamento: "0",
 
     // O schema exige ao menos um destes depois da forma de pagamento:
-    // adiantamento, parcelas ou dados bancários. Declarar "sem
-    // adiantamento" basta e é o que corresponde à realidade.
-    //
-    // Chave PIX e conta bancária ficam de fora de propósito: o layout
-    // recusou o elemento PIX nessa posição, e mandar conta em documento
-    // fiscal não traz benefício nenhum aqui.
+    // adiantamento, parcelas ou dados bancários. Na prática sobrou o
+    // último: o indicador de adiantamento sozinho não é emitido, e o
+    // elemento PIX foi recusado nessa posição. Banco e agência são a
+    // forma clássica, aceita pelo layout.
     indicador_adiantamento: "0",
+    numero_banco: empresa?.bancoNumero || undefined,
+    numero_agencia: empresa?.bancoAgencia || undefined,
   }));
 }
 
@@ -836,7 +836,7 @@ function montarPayloadMdfe({
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
       contratantes: contratantesDosCtes(ctes),
-      pagamentos: pagamentosDosCtes(ctes),
+      pagamentos: pagamentosDosCtes(ctes, empresa),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,
@@ -938,6 +938,13 @@ function validarPayloadMdfe(payload) {
   }
   if (!modal.contratantes?.length) {
     problemas.push("Contratante do serviço não identificado. Confira o tomador dos CT-es vinculados.");
+  }
+  const pagamentoSemBanco = (modal.pagamentos || []).some((p) => !p.numero_banco || !p.numero_agencia);
+  if (umDocumentoSo && pagamentoSemBanco) {
+    problemas.push(
+      "O grupo de pagamento do MDF-e exige banco e agência de recebimento. " +
+      "Preencha em Configurações, no cadastro da empresa."
+    );
   }
   if (umDocumentoSo && !modal.pagamentos?.length) {
     problemas.push(

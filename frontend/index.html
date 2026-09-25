@@ -4307,8 +4307,14 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   const [valorIcms, setValorIcms] = useState(cte?.valorIcms ?? "");
   const [percentualReducaoBaseIcms, setPercentualReducaoBaseIcms] = useState(cte?.percentualReducaoBaseIcms ?? "");
   const [valorCreditoPresumidoIcms, setValorCreditoPresumidoIcms] = useState(cte?.valorCreditoPresumidoIcms ?? "");
-  const [cstIbsCbsPrestacao, setCstIbsCbsPrestacao] = useState(cte?.cstIbsCbsPrestacao || "");
-  const [classificacaoTributariaIbsCbsPrestacao, setClassificacaoTributariaIbsCbsPrestacao] = useState(cte?.classificacaoTributariaIbsCbsPrestacao || "");
+  // Reforma Tributária: enquanto a cobrança não entra em vigor, todo CT-e
+  // sai com a mesma combinação. Ficam travados para ninguém alterar sem
+  // querer; quando a lei valer de fato, é aqui que se volta a mexer.
+  const IBS_CBS_CST_PADRAO = "000";
+  const IBS_CBS_CLASSIFICACAO_PADRAO = "000001";
+  const [cstIbsCbsPrestacao, setCstIbsCbsPrestacao] = useState(cte?.cstIbsCbsPrestacao || IBS_CBS_CST_PADRAO);
+  const [classificacaoTributariaIbsCbsPrestacao, setClassificacaoTributariaIbsCbsPrestacao] =
+    useState(cte?.classificacaoTributariaIbsCbsPrestacao || IBS_CBS_CLASSIFICACAO_PADRAO);
 
   const [informacoesComplementares, setInformacoesComplementares] = useState(cte?.informacoesComplementares || "");
   const [erro, setErro] = useState("");
@@ -4381,8 +4387,8 @@ naturezaOperacao: naturezaOperacao || undefined,
         valorIcms: valorIcms !== "" ? Number(valorIcms) : undefined,
         percentualReducaoBaseIcms: percentualReducaoBaseIcms !== "" ? Number(percentualReducaoBaseIcms) : undefined,
         valorCreditoPresumidoIcms: valorCreditoPresumidoIcms !== "" ? Number(valorCreditoPresumidoIcms) : undefined,
-        cstIbsCbsPrestacao: cstIbsCbsPrestacao || undefined,
-        classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
+        cstIbsCbsPrestacao: cstIbsCbsPrestacao || IBS_CBS_CST_PADRAO,
+        classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || IBS_CBS_CLASSIFICACAO_PADRAO,
         valorTotal: Number(valorTotal),
         produtoPredominante: produtoPredominante || sugestaoProduto || undefined,
         unidadeMedidaCarga,
@@ -4992,11 +4998,17 @@ naturezaOperacao: naturezaOperacao || undefined,
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">IBS/CBS — CST (Reforma Tributária)</label>
-                <input value={cstIbsCbsPrestacao} onChange={e => setCstIbsCbsPrestacao(e.target.value)} placeholder="Confirme com o contador" />
+                <input value={cstIbsCbsPrestacao} disabled />
               </div>
               <div className="field-group">
                 <label className="field-label">IBS/CBS — Classificação (cClassTrib)</label>
-                <input value={classificacaoTributariaIbsCbsPrestacao} onChange={e => setClassificacaoTributariaIbsCbsPrestacao(e.target.value)} placeholder="Confirme com o contador" />
+                <input value={classificacaoTributariaIbsCbsPrestacao} disabled />
+              </div>
+              <div className="field-group">
+                <p className="hint" style={{ marginTop: 22 }}>
+                  Fixos enquanto a Reforma Tributária não entra em vigor. Quando a cobrança começar, esses
+                  dois campos voltam a ser editáveis e devem ser conferidos com o contador.
+                </p>
               </div>
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>

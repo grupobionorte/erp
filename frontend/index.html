@@ -5125,6 +5125,24 @@ function CteView({ onIrParaMdfe }) {
 
   // Igual à NFe: depois de emitir, o CTe fica "enviado" enquanto a SEFAZ
   // processa — consulta sozinho de tempos em tempos até resolver.
+  // Ordem da lista. O padrão põe rascunho primeiro, porque é o que está
+  // esperando ação; clicando no cabeçalho, ordena por número.
+  const [ordem, setOrdem] = useState("padrao"); // padrao | numeroAsc | numeroDesc
+
+  const alternarOrdemNumero = () =>
+    setOrdem(atual => (atual === "numeroDesc" ? "numeroAsc" : atual === "numeroAsc" ? "padrao" : "numeroDesc"));
+
+  const ctesOrdenados = (ctes || []).slice().sort((a, b) => {
+    if (ordem === "padrao") {
+      const peso = (c) => (c.status === "rascunho" ? 0 : 1);
+      return peso(a) - peso(b);
+    }
+    // Rascunho ainda não tem número; fica no fim quando se ordena por ele.
+    const numero = (c) => (c.numero == null ? -Infinity : Number(c.numero));
+    const diferenca = numero(a) - numero(b);
+    return ordem === "numeroAsc" ? diferenca : -diferenca;
+  });
+
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; }
     await new Promise(r => setTimeout(r, 3000));
@@ -5325,7 +5343,13 @@ function CteView({ onIrParaMdfe }) {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Número/Série</th>
+              <th
+                onClick={alternarOrdemNumero}
+                title="Clique para ordenar por número"
+                style={{ cursor: "pointer", userSelect: "none" }}
+              >
+                Número/Série{ordem === "numeroDesc" ? " ↓" : ordem === "numeroAsc" ? " ↑" : ""}
+              </th>
               <th>Tomador</th>
               <th>Trajeto</th>
               <th>Valor</th>
@@ -5336,7 +5360,7 @@ function CteView({ onIrParaMdfe }) {
             </tr>
           </thead>
           <tbody>
-            {ctes.map(cte => (
+            {ctesOrdenados.map(cte => (
               <tr key={cte.id}>
                 <td>{cte.numero ? `${cte.numero}/${cte.serie ?? "—"}` : "—"}</td>
                 <td>{cte.destinatario?.nomeRazaoSocial || "—"}</td>

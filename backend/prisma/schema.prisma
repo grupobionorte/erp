@@ -431,6 +431,9 @@ model DocumentoFiscal {
   // ("01" granel sólido, "05" carga geral, etc.).
   tipoCarga           String? @map("tipo_carga")
   produtoPredominante String? @map("produto_predominante")
+  // NCM do produto predominante: exigido no MDF-e de carga lotação
+  // (rejeição 301). Vem do cadastro de produtos.
+  ncmProdutoPredominante String? @map("ncm_produto_predominante")
   unidadeMedidaPeso   String? @map("unidade_medida_peso") // "01" KG, "02" TON
   pesoBrutoCarga      Float?  @map("peso_bruto_carga")
   valorTotalCarga     Float?  @map("valor_total_carga")

@@ -757,6 +757,8 @@ function montarPayloadMdfe({
     peso_bruto: dec(documento.pesoBrutoCarga, 4),
     tipo_carga: documento.tipoCarga || undefined,
     descricao_produto: documento.produtoPredominante || undefined,
+    // NCM só é exigido na carga lotação, mas mandar sempre não atrapalha.
+    codigo_ncm_produto: somenteDigitos(documento.ncmProdutoPredominante) || undefined,
 
     // Seguro da carga — obrigatório no rodoviário depois da Lei 11.442/07.
     seguros_carga: documento.seguroNomeSeguradora
@@ -866,6 +868,12 @@ function validarPayloadMdfe(payload) {
   if (!modal.uf_licenciamento_veiculo) problemas.push("UF de licenciamento do veículo não informada.");
   // Carga lotação: sem os CEPs, a SEFAZ recusa com a rejeição 726.
   const umDocumentoSo = (payload.quantidade_total_cte || 0) + (payload.quantidade_total_nfe || 0) === 1;
+  if (umDocumentoSo && !payload.codigo_ncm_produto) {
+    problemas.push(
+      "Manifesto de carga lotação exige o NCM do produto predominante. " +
+      "Confira se o produto está cadastrado com NCM em Produtos."
+    );
+  }
   if (umDocumentoSo && (!payload.cep_carregamento || !payload.cep_descarregamento)) {
     problemas.push(
       "Manifesto com um documento só (carga lotação) exige o CEP de carregamento e de descarregamento. " +

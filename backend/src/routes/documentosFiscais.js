@@ -347,6 +347,21 @@ router.post("/mdfe/rascunho", asyncHandler(async (req, res) => {
   res.status(201).json(documento);
 }));
 
+// O MDF-e de carga lotação exige o NCM do produto predominante, e essa
+// informação vive no cadastro de produtos. Procura pela descrição, que é o
+// que foi escolhido no CT-e.
+async function ncmDoProduto(descricao, empresaId) {
+  if (!descricao) return null;
+  const produto = await prisma.produto.findFirst({
+    where: {
+      empresaId: empresaId ?? undefined,
+      descricao: { equals: String(descricao).trim(), mode: "insensitive" },
+    },
+    select: { ncm: true },
+  });
+  return produto?.ncm || null;
+}
+
 // Gera um rascunho de MDFe já preenchido a partir de CT-e(s) autorizados.
 // É o caminho prático: quase tudo que a SEFAZ exige no manifesto já está
 // no CT-e — trajeto, veículo, motorista, carga. O usuário só confere.
@@ -441,6 +456,10 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   const valorCarga = somar("valorTotalNota") || somar("valorTotalProdutos");
 
   const ufsTrajeto = [...new Set(ctes.flatMap((c) => [c.ufInicio, c.ufFim]).filter(Boolean))];
+  const produtoPredominanteMdfe = primeiro.produtoPredominante
+    || primeiro.documentosTransportados?.[0]?.naturezaMercadoria
+    || primeiro.especieVolumes
+    || null;
 
   const documento = await prisma.documentoFiscal.create({
     data: {
@@ -465,9 +484,8 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
 
       tipoEmitenteMdfe: "1", // prestador de serviço de transporte
       tipoCarga: tipoCarga || undefined,
-      produtoPredominante: primeiro.documentosTransportados?.[0]?.naturezaMercadoria
-        || primeiro.especieVolumes
-        || undefined,
+      produtoPredominante: produtoPredominanteMdfe || undefined,
+      ncmProdutoPredominante: await ncmDoProduto(produtoPredominanteMdfe, req.usuario.empresaId),
       unidadeMedidaPeso: "01", // KG
       pesoBrutoCarga: pesoBruto || undefined,
       valorTotalCarga: valorCarga || undefined,
@@ -690,6 +708,16 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
 
   // Validação local do CT-e: evita mandar pra SEFAZ algo que já dá pra ver
   // que vai voltar rejeitado, e explica o motivo em português na hora.
+  if (documento.tipo === "MDFe" && documento.produtoPredominante && !documento.ncmProdutoPredominante) {
+    // Rascunhos criados antes deste campo existir ainda não têm o NCM.
+    const ncm = await ncmDoProduto(documento.produtoPredominante, documento.empresaId);
+    if (ncm) {
+      documento.ncmProdutoPredominante = ncm;
+      await prisma.documentoFiscal.update({ where: { id }, data: { ncmProdutoPredominante: ncm } });
+      payload.codigo_ncm_produto = ncm.replace(/\D/g, "");
+    }
+  }
+
   if (documento.tipo === "MDFe") {
     const problemas = focusNfe.validarPayloadMdfe(payload);
     if (problemas.length) {

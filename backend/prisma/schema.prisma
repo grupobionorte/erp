@@ -279,6 +279,9 @@ model Veiculo {
   capacidadeM3     Float?  @map("capacidade_m3")
   tipoRodado       String? @map("tipo_rodado")
   tipoCarroceria   String? @map("tipo_carroceria")
+  // UF onde o veículo está licenciado: obrigatória no MDF-e, e nem sempre
+  // é a UF da empresa (veículo de agregado, por exemplo).
+  ufLicenciamento  String? @map("uf_licenciamento")
   ativo            Boolean @default(true)
 
   // Motorista habitual, vindo do cadastro de colaboradores: nome e CPF

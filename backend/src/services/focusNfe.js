@@ -719,7 +719,7 @@ function montarPayloadMdfe({
       capacidade_m3_veiculo: veiculo?.capacidadeM3 ? Math.round(veiculo.capacidadeM3) : undefined,
       tipo_rodado_veiculo: codigoDe(TIPO_RODADO_MDFE, veiculo?.tipoRodado, "06"),
       tipo_carroceria_veiculo: codigoDe(TIPO_CARROCERIA_MDFE, veiculo?.tipoCarroceria, "00"),
-      uf_licenciamento_veiculo: veiculo?.uf || ufEmpresa,
+      uf_licenciamento_veiculo: veiculo?.ufLicenciamento || veiculo?.uf || ufEmpresa,
 
       condutores: nomeMotorista
         ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
@@ -733,7 +733,7 @@ function montarPayloadMdfe({
             capacidade_kg: r.capacidadeKg ? Math.round(r.capacidadeKg) : undefined,
             capacidade_m3: r.capacidadeM3 ? Math.round(r.capacidadeM3) : undefined,
             tipo_carroceria: codigoDe(TIPO_CARROCERIA_MDFE, r.tipoCarroceria, "00"),
-            uf_licenciamento: r.uf || ufEmpresa,
+            uf_licenciamento: r.ufLicenciamento || r.uf || ufEmpresa,
           }))
         : undefined,
     },

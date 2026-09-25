@@ -361,7 +361,7 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
     where: { id: { in: cteIds }, tipo: "CTe", empresaId: req.usuario.empresaId },
     include: {
       veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
-      documentosTransportados: true, empresa: true,
+      documentosTransportados: true, empresa: { include: { endereco: true } },
     },
   });
 
@@ -598,7 +598,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id },
     include: {
-      empresa: true,
+      empresa: { include: { endereco: true } },
       destinatario: { include: { endereco: true } },
       remetente: { include: { endereco: true } },
       expedidor: { include: { endereco: true } },

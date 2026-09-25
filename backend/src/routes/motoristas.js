@@ -8,6 +8,7 @@ const router = express.Router();
 const incluir = {
   transportadora: { select: { id: true, razaoSocial: true } },
   colaborador: { select: { id: true, nome: true } },
+  endereco: true,
 };
 
 router.get("/", asyncHandler(async (req, res) => {
@@ -23,7 +24,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { nome, cpf, transportadoraId, colaboradorId, validadeCnh, empresaId, ...resto } = req.body;
+  const { nome, cpf, transportadoraId, colaboradorId, validadeCnh, empresaId, endereco, ...resto } = req.body;
   if (!nome || !cpf) {
     return res.status(400).json({ erro: "Nome e CPF são obrigatórios" });
   }
@@ -37,6 +38,7 @@ router.post("/", asyncHandler(async (req, res) => {
       colaboradorId: colaboradorId ? Number(colaboradorId) : undefined,
       validadeCnh: validadeCnh ? new Date(validadeCnh) : undefined,
       empresaId: req.usuario.empresaId || undefined,
+      endereco: endereco ? { create: endereco } : undefined,
     },
     include: incluir,
   });
@@ -44,7 +46,7 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { transportadoraId, colaboradorId, validadeCnh, cpf, empresaId, ...dados } = req.body;
+  const { transportadoraId, colaboradorId, validadeCnh, cpf, empresaId, endereco, ...dados } = req.body;
 
   const motorista = await prisma.motorista.update({
     where: { id: Number(req.params.id) },
@@ -55,6 +57,11 @@ router.put("/:id", asyncHandler(async (req, res) => {
       transportadoraId: transportadoraId === null ? null : (transportadoraId ? Number(transportadoraId) : undefined),
       colaboradorId: colaboradorId === null ? null : (colaboradorId ? Number(colaboradorId) : undefined),
       validadeCnh: validadeCnh === null ? null : (validadeCnh ? new Date(validadeCnh) : undefined),
+      // Atualiza o endereço existente ou cria um, conforme o motorista já
+      // tenha ou não.
+      endereco: endereco
+        ? { upsert: { create: endereco, update: endereco } }
+        : undefined,
     },
     include: incluir,
   });

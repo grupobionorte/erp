@@ -527,6 +527,7 @@ const MODULES = {
       { key: "categoriaCnh", label: "Categoria da CNH", type: "select", options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"] },
       { key: "validadeCnh", label: "Validade da CNH", type: "date" },
       { key: "telefone", label: "Telefone", type: "text" },
+      { key: "endereco", label: "Endereço", type: "endereco" },
       { key: "transportadoraId", label: "Transportadora (agregado)", type: "transportadora-select" },
       {
         key: "colaboradorId", label: "Colaborador vinculado (se for funcionário)", type: "vinculo",
@@ -535,7 +536,7 @@ const MODULES = {
       },
       { key: "observacao", label: "Observação", type: "text" },
     ],
-    columns: ["nome", "cpf", "vinculo", "transportadoraNome"],
+    columns: ["nome", "cpf", "vinculo", "endereco.cidade"],
     toApi: (data) => ({
       nome: data.nome,
       cpf: data.cpf,
@@ -544,6 +545,7 @@ const MODULES = {
       categoriaCnh: data.categoriaCnh || undefined,
       validadeCnh: data.validadeCnh || null,
       telefone: data.telefone || undefined,
+      endereco: data.endereco || undefined,
       transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : null,
       colaboradorId: data.colaboradorId ?? null,
       observacao: data.observacao || undefined,
@@ -557,6 +559,7 @@ const MODULES = {
       categoriaCnh: r.categoriaCnh,
       validadeCnh: r.validadeCnh ? String(r.validadeCnh).slice(0, 10) : "",
       telefone: r.telefone,
+      endereco: mapEndereco(r.endereco),
       transportadoraId: r.transportadoraId,
       transportadoraNome: r.transportadora?.razaoSocial || "—",
       colaboradorId: r.colaboradorId,

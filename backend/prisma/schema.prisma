@@ -108,6 +108,7 @@ model Endereco {
   transportadoras Transportadora[]
 
   @@map("enderecos")
+  motoristas     Motorista[]
 }
 
 model CertificadoDigital {
@@ -826,6 +827,9 @@ model Motorista {
   // Transportadora do agregado, quando houver.
   transportadoraId Int?            @map("transportadora_id")
   transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
+
+  enderecoId Int?      @map("endereco_id")
+  endereco   Endereco? @relation(fields: [enderecoId], references: [id])
 
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])

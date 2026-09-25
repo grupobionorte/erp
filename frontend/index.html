@@ -4385,11 +4385,14 @@ naturezaOperacao: naturezaOperacao || undefined,
         classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
         valorTotal: Number(valorTotal),
         produtoPredominante: produtoPredominante || sugestaoProduto || undefined,
-        valorTotalCarga: valorTotalCarga !== "" ? Number(valorTotalCarga) : null,
         unidadeMedidaCarga,
-        pesoBrutoTotal: pesoBrutoTotal !== "" ? Number(pesoBrutoTotal) : null,
-        pesoLiquidoTotal: pesoLiquidoTotal !== "" ? Number(pesoLiquidoTotal) : null,
-        volumeM3Total: volumeM3Total !== "" ? Number(volumeM3Total) : null,
+        // Os totais saem da lista de notas transportadas. Vão como null
+        // para que o servidor some as notas em vez de usar um valor antigo
+        // que tenha ficado gravado.
+        valorTotalCarga: null,
+        pesoBrutoTotal: null,
+        pesoLiquidoTotal: null,
+        volumeM3Total: null,
       });
     } catch (e) {
       setErro(e.message || "Erro ao salvar o CTe");
@@ -4401,12 +4404,20 @@ naturezaOperacao: naturezaOperacao || undefined,
   const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
 
   const [produtoPredominante, setProdutoPredominante] = useState(cte?.produtoPredominante || "");
-  const [valorTotalCarga, setValorTotalCarga] = useState(cte?.valorTotalCarga ?? "");
   // Como o produto é negociado: decide quais medidas saem no DACTe.
   const [unidadeMedidaCarga, setUnidadeMedidaCarga] = useState(cte?.unidadeMedidaCarga || "KG");
-  const [pesoBrutoTotal, setPesoBrutoTotal] = useState(cte?.pesoBrutoTotal ?? "");
-  const [pesoLiquidoTotal, setPesoLiquidoTotal] = useState(cte?.pesoLiquidoTotal ?? "");
-  const [volumeM3Total, setVolumeM3Total] = useState(cte?.volumeM3Total ?? "");
+
+  // Escolher o produto no cadastro já define como a carga é medida — é a
+  // unidade do próprio produto que diz se a venda é por peso ou por volume.
+  const escolherProdutoPredominante = (descricao) => {
+    setProdutoPredominante(descricao);
+    const produto = (produtos || []).find(p => p.descricao === descricao);
+    if (!produto?.unidade) return;
+    const unidade = String(produto.unidade).toUpperCase();
+    if (unidade === "M3") setUnidadeMedidaCarga("M3");
+    else if (unidade === "TON") setUnidadeMedidaCarga("TON");
+    else if (unidade === "KG") setUnidadeMedidaCarga("KG");
+  };
 
   // A carga vem das notas vinculadas; os campos acima só existem para
   // corrigir quando a soma não representa o que está no caminhão.
@@ -4466,18 +4477,20 @@ naturezaOperacao: naturezaOperacao || undefined,
             <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Produto predominante</label>
-                <input value={produtoPredominante} placeholder={sugestaoProduto || "Ex.: Cavaco de eucalipto"}
-                  onChange={e => setProdutoPredominante(e.target.value)} />
+                {/* Busca no cadastro de produtos: escolher um produto já
+                    define como a carga é medida. */}
+                <input
+                  list="produtos-predominante"
+                  value={produtoPredominante}
+                  placeholder={sugestaoProduto || "Busque no cadastro de produtos"}
+                  onChange={e => escolherProdutoPredominante(e.target.value)}
+                />
+                <datalist id="produtos-predominante">
+                  {(produtos || []).map(p => (
+                    <option key={p.id} value={p.descricao}>{[p.codigo, p.unidade].filter(Boolean).join(" · ")}</option>
+                  ))}
+                </datalist>
                 <p className="hint">É o que aparece no DACTe e o que a fiscalização de estrada confere na carroceria.</p>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Valor total da carga</label>
-                <InputMoeda value={valorTotalCarga} onChange={setValorTotalCarga} />
-                <p className="hint">
-                  {somaNotas > 0
-                    ? `Soma das notas: R$ ${formatarMoeda(somaNotas)} — deixe em branco para usar esse valor.`
-                    : "Valor da mercadoria transportada, não do frete."}
-                </p>
               </div>
               <div className="field-group">
                 <label className="field-label">Produto vendido por</label>
@@ -4494,31 +4507,25 @@ naturezaOperacao: naturezaOperacao || undefined,
               </div>
             </div>
 
-            <div className="nf-grid-3">
-              <div className="field-group">
-                <label className="field-label">Peso bruto total (kg)</label>
-                <InputDecimal value={pesoBrutoTotal} onChange={setPesoBrutoTotal} />
-                <p className="hint">
-                  {somaPesoBruto > 0 ? `Soma das notas: ${formatarDecimal(somaPesoBruto, 3)}` : "Sempre sai no DACTe."}
-                </p>
+            {/* Os totais da carga são os da lista de notas abaixo — um valor
+                só, numa origem só. */}
+            <div className="cte-resumo" style={{ marginTop: 4 }}>
+              <div>
+                <span className="cte-resumo-rotulo">Valor da carga</span>
+                <span className="cte-resumo-valor">R$ {formatarMoeda(somaNotas)}</span>
               </div>
-              {unidadeMedidaCarga === "M3" ? (
-                <div className="field-group">
-                  <label className="field-label">Volume total (m³)</label>
-                  <InputDecimal value={volumeM3Total} onChange={setVolumeM3Total} />
-                  <p className="hint">
-                    {somaM3 > 0 ? `Soma das notas: ${formatarDecimal(somaM3, 3)}` : "Volume da carga transportada."}
-                  </p>
-                </div>
-              ) : (
-                <div className="field-group">
-                  <label className="field-label">Peso líquido total (kg)</label>
-                  <InputDecimal value={pesoLiquidoTotal} onChange={setPesoLiquidoTotal} />
-                  <p className="hint">
-                    {somaPesoLiquido > 0 ? `Soma das notas: ${formatarDecimal(somaPesoLiquido, 3)}` : "Carga sem a tara da embalagem."}
-                  </p>
-                </div>
-              )}
+              <div>
+                <span className="cte-resumo-rotulo">Peso bruto</span>
+                <span className="cte-resumo-valor">{formatarDecimal(somaPesoBruto, 3)} kg</span>
+              </div>
+              <div>
+                <span className="cte-resumo-rotulo">{unidadeMedidaCarga === "M3" ? "Volume" : "Peso líquido"}</span>
+                <span className="cte-resumo-valor">
+                  {unidadeMedidaCarga === "M3"
+                    ? `${formatarDecimal(somaM3, 3)} m³`
+                    : `${formatarDecimal(somaPesoLiquido, 3)} kg`}
+                </span>
+              </div>
             </div>
           </div>
 

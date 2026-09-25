@@ -650,6 +650,53 @@ function contratantesDosCtes(ctes) {
   return porDocumento.size ? [...porDocumento.values()] : undefined;
 }
 
+// Quem paga o frete, quanto e como. A SEFAZ exige esse grupo no MDF-e de
+// carga lotação (rejeição 302) — e os dados são os do próprio CT-e: o
+// tomador paga, e o valor é o da prestação.
+function pagamentosDosCtes(ctes) {
+  const porDocumento = new Map();
+
+  for (const cte of ctes || []) {
+    const pessoa = {
+      "Remetente": cte.remetente,
+      "Expedidor": cte.expedidor,
+      "Recebedor": cte.recebedor,
+      "Destinatário": cte.destinatario,
+    }[cte.definicaoTomador] || cte.destinatario;
+
+    const doc = somenteDigitos(pessoa?.documento);
+    const valor = Number(cte.valorTotal) || 0;
+    if (!doc || !valor) continue;
+
+    const atual = porDocumento.get(doc);
+    if (atual) {
+      atual.valor += valor;
+    } else {
+      porDocumento.set(doc, {
+        nome: pessoa.nomeRazaoSocial,
+        cpf: doc.length === 11 ? doc : undefined,
+        cnpj: doc.length === 14 ? doc : undefined,
+        // "Pago" no CT-e significa frete já quitado; o resto é a pagar.
+        aPrazo: !/pago/i.test(cte.formaPagamento || ""),
+        valor,
+      });
+    }
+  }
+
+  if (!porDocumento.size) return undefined;
+
+  return [...porDocumento.values()].map((p) => ({
+    nome: p.nome,
+    cpf: p.cpf,
+    cnpj: p.cnpj,
+    // 04 = Frete. Pedágio e impostos teriam componentes próprios.
+    componentes: [{ tipo: "04", valor: dec(p.valor) }],
+    valor_total_contrato: dec(p.valor),
+    // 0 = à vista, 1 = a prazo.
+    forma_pagamento: p.aPrazo ? "1" : "0",
+  }));
+}
+
 function montarPayloadMdfe({
   empresa,
   veiculo,
@@ -781,6 +828,7 @@ function montarPayloadMdfe({
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
       contratantes: contratantesDosCtes(ctes),
+      pagamentos: pagamentosDosCtes(ctes),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,
@@ -882,6 +930,12 @@ function validarPayloadMdfe(payload) {
   }
   if (!modal.contratantes?.length) {
     problemas.push("Contratante do serviço não identificado. Confira o tomador dos CT-es vinculados.");
+  }
+  if (umDocumentoSo && !modal.pagamentos?.length) {
+    problemas.push(
+      "Manifesto de carga lotação exige as informações de pagamento do frete. " +
+      "Confira se o CT-e vinculado tem tomador e valor da prestação."
+    );
   }
   if (!modal.condutores?.length) {
     problemas.push("Condutor não informado (nome e CPF).");

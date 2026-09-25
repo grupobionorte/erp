@@ -2763,6 +2763,102 @@ function ModuleView({ moduleKey }) {
           onCancel={() => { setShowForm(false); setEditing(null); }}
         />
       )}
+
+      {/* A limpeza da base vive aqui porque o plano do servidor não dá
+          acesso ao terminal — sem isso não haveria como zerar os dados de
+          teste antes de entrar em produção. */}
+      {moduleKey === "empresas" && <ZerarBase />}
+    </div>
+  );
+}
+
+function ZerarBase() {
+  const [contagem, setContagem] = useState(null);
+  const [aberto, setAberto] = useState(false);
+  const [senha, setSenha] = useState("");
+  const [confirmacao, setConfirmacao] = useState("");
+  const [processando, setProcessando] = useState(false);
+  const [resultado, setResultado] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try { setContagem(await apiRequest("/manutencao/base")); }
+    catch (e) { setContagem({ erro: e.message }); }
+  }, []);
+  useEffect(() => { if (aberto) carregar(); }, [aberto, carregar]);
+
+  const zerar = async () => {
+    setProcessando(true); setResultado(null);
+    try {
+      const r = await apiRequest("/manutencao/base/zerar", {
+        method: "POST",
+        body: JSON.stringify({ senha, confirmacao }),
+      });
+      setResultado({ ok: true, texto: `Base zerada. ${r.registrosRemovidos} registro(s) removido(s).` });
+      setSenha(""); setConfirmacao("");
+      carregar();
+    } catch (e) {
+      setResultado({ ok: false, texto: [e.message, e.detalhe].filter(Boolean).join(" — ") });
+    } finally { setProcessando(false); }
+  };
+
+  return (
+    <div className="nf-section" style={{ marginTop: 28, borderTop: "1px solid #e5e3da", paddingTop: 20 }}>
+      <button className="link-btn" onClick={() => setAberto(a => !a)}>
+        {aberto ? "Ocultar" : "Zerar dados de teste"}
+      </button>
+
+      {aberto && (
+        <div style={{ marginTop: 14, background: "#faece7", border: "1px solid #e8cfc4", borderRadius: 10, padding: "16px 18px" }}>
+          <h4 style={{ margin: "0 0 6px", color: "#791f1f", fontSize: 15 }}>Zerar a base</h4>
+          <p className="hint" style={{ marginTop: 0 }}>
+            Apaga documentos fiscais, cadastros e todo o controle de ponto, e devolve a numeração para 1.
+            Usuários, empresas e as tabelas de CFOP, NCM e municípios continuam. Não tem como desfazer.
+          </p>
+
+          {contagem?.producao && (
+            <p className="error-text">
+              A emissão está apontando para produção. Nesse caso a base não pode ser zerada: documento
+              autorizado tem valor fiscal e precisa ser guardado por cinco anos.
+            </p>
+          )}
+
+          {contagem?.tabelas && (
+            <table className="data-table" style={{ margin: "12px 0" }}>
+              <tbody>
+                {contagem.tabelas.filter(t => t.total > 0).map(t => (
+                  <tr key={t.tabela}><td>{t.rotulo}</td><td style={{ textAlign: "right" }}>{t.total}</td></tr>
+                ))}
+                <tr><td><strong>Total</strong></td><td style={{ textAlign: "right" }}><strong>{contagem.total}</strong></td></tr>
+              </tbody>
+            </table>
+          )}
+
+          {!contagem?.producao && (
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Sua senha</label>
+                <input type="password" value={senha} onChange={e => setSenha(e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Digite ZERAR para confirmar</label>
+                <input value={confirmacao} onChange={e => setConfirmacao(e.target.value)} placeholder="ZERAR" />
+              </div>
+              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                <button className="btn btn-danger" disabled={processando || confirmacao !== "ZERAR" || !senha}
+                  onClick={zerar}>
+                  {processando ? "Apagando…" : "Zerar agora"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {resultado && (
+            <p className={resultado.ok ? "hint" : "error-text"} style={resultado.ok ? { color: "#00732F" } : undefined}>
+              {resultado.texto}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -31,35 +31,16 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
+const { contarBase, zerarBase, emProducao } = require("../src/lib/zerarBase");
+
 const args = process.argv.slice(2);
 const confirmado = args.includes("--confirmar") && args.includes("ZERAR");
 
-// A ordem importa: primeiro quem depende, depois quem é dependido.
-const TABELAS = [
-  ["cartas_correcao", "cartas de correção"],
-  ["documento_eventos", "eventos de documento"],
-  ["documento_itens", "itens de documento"],
-  ["cte_documentos", "documentos transportados dos CT-es"],
-  ["tratamentos_ponto", "tratamentos de ponto"],
-  ["marcacoes_ponto", "marcações de ponto"],
-  ["biometrias_faciais", "biometrias faciais"],
-  ["jornadas_dias", "dias de jornada"],
-  ["jornadas_trabalho", "jornadas de trabalho"],
-  ["reps", "tablets de ponto"],
-  ["documentos_fiscais", "documentos fiscais"],
-  ["veiculos", "veículos"],
-  ["produtos", "produtos"],
-  ["pessoas", "clientes e fornecedores"],
-  ["transportadoras", "transportadoras"],
-  ["colaboradores", "colaboradores"],
-];
-
 async function main() {
-  const ambiente = process.env.FOCUS_NFE_BASE_URL || "(não configurado)";
-  const producao = /api\.focusnfe/i.test(ambiente);
+  const contagem = await contarBase();
+  console.log(`Provedor fiscal configurado: ${contagem.ambiente || "(não configurado)"}`);
 
-  console.log(`Provedor fiscal configurado: ${ambiente}`);
-  if (producao) {
+  if (emProducao()) {
     console.error(
       "\nABORTADO. A configuração aponta para PRODUÇÃO.\n" +
       "Documentos autorizados em produção não podem ser apagados.\n" +
@@ -69,10 +50,8 @@ async function main() {
   }
 
   console.log(confirmado ? "\nZERANDO A BASE\n" : "\nSIMULAÇÃO — nada será apagado.\n");
-
-  for (const [tabela, rotulo] of TABELAS) {
-    const [{ total }] = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int AS total FROM "${tabela}"`);
-    console.log(`  ${rotulo.padEnd(34)} ${String(total).padStart(6)}`);
+  for (const linha of contagem.tabelas) {
+    console.log(`  ${linha.rotulo.padEnd(34)} ${String(linha.total).padStart(6)}`);
   }
 
   if (!confirmado) {
@@ -81,36 +60,11 @@ async function main() {
     return;
   }
 
-  await prisma.$transaction(async (tx) => {
-    // A tabela de marcações é somente-inserção por trigger; desliga só
-    // durante a limpeza e religa em seguida.
-    await tx.$executeRawUnsafe(`ALTER TABLE "marcacoes_ponto" DISABLE TRIGGER USER`);
-    for (const [tabela] of TABELAS) {
-      await tx.$executeRawUnsafe(`DELETE FROM "${tabela}"`);
-    }
-    await tx.$executeRawUnsafe(`ALTER TABLE "marcacoes_ponto" ENABLE TRIGGER USER`);
-
-    // Endereços que sobraram sem dono.
-    await tx.$executeRawUnsafe(`
-      DELETE FROM "enderecos" e
-       WHERE NOT EXISTS (SELECT 1 FROM "empresas"        x WHERE x."endereco_id" = e."id")
-         AND NOT EXISTS (SELECT 1 FROM "pessoas"         x WHERE x."endereco_id" = e."id")
-         AND NOT EXISTS (SELECT 1 FROM "transportadoras" x WHERE x."endereco_id" = e."id")
-    `);
-
-    // Numeração recomeça do 1.
-    await tx.$executeRawUnsafe(`
-      UPDATE "empresas"
-         SET "nfe_proximo_numero" = 1,
-             "cte_proximo_numero" = 1,
-             "mdfe_proximo_numero" = 1
-    `);
-  });
-
+  await zerarBase();
   console.log("\nBase zerada. Numeração de NF-e, CT-e e MDF-e voltou para 1.");
   console.log("Usuários, empresas e as tabelas de CFOP, NCM e municípios continuam.");
 }
 
 main()
   .catch((e) => { console.error(e); process.exit(1); })
-  .finally(() => prisma.$disconnect());
+  .finally(() => require("../src/lib/prisma").$disconnect());

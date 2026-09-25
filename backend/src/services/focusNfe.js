@@ -1019,13 +1019,15 @@ async function emitirCartaCorrecao({ tipo, ref, texto }) {
 // encerrado, a SEFAZ recusa o próximo da mesma placa ("Existe MDF-e não
 // encerrado para esta placa"). Deve ser feito quando a carga chega ao
 // destino, informando onde e quando terminou a viagem.
-async function encerrarMdfe({ ref, data_encerramento, codigo_municipio, uf }) {
-  const { data } = await client.post(`/v2/mdfe/${ref}/encerramento`, {
-    data_encerramento,
-    codigo_municipio,
-    uf,
+async function encerrarMdfe({ ref, data, sigla_uf, nome_municipio }) {
+  // O caminho é /encerrar (não /encerramento), e a SEFAZ quer o NOME do
+  // município, não o código IBGE.
+  const resposta = await client.post(`/v2/mdfe/${ref}/encerrar`, {
+    data,
+    sigla_uf,
+    nome_municipio,
   });
-  return data;
+  return resposta.data;
 }
 
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho

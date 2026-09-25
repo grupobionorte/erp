@@ -535,7 +535,10 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
   const uf = req.body.uf || documento.ufFim;
   const dataEncerramento = req.body.dataEncerramento || new Date().toISOString().slice(0, 10);
 
-  if (!codigoMunicipio || !uf) {
+  // O encerramento é pelo NOME do município, não pelo código IBGE.
+  const nomeMunicipio = req.body.municipio || documento.municipioDescarregamento;
+
+  if (!nomeMunicipio || !uf) {
     return res.status(400).json({
       erro: "Informe o município e a UF de encerramento",
       detalhe: "O manifesto não tem município de descarregamento salvo para usar como padrão.",
@@ -545,17 +548,17 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
   try {
     const resultado = await focusNfe.encerrarMdfe({
       ref: refDocumento(documento),
-      data_encerramento: dataEncerramento,
-      codigo_municipio: Number(codigoMunicipio),
-      uf,
+      data: dataEncerramento,
+      sigla_uf: uf,
+      nome_municipio: nomeMunicipio,
     });
 
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       data: {
         dataEncerramento: new Date(dataEncerramento),
-        codigoMunicipioEncerramento: String(codigoMunicipio),
-        municipioEncerramento: req.body.municipio || documento.municipioDescarregamento,
+        codigoMunicipioEncerramento: codigoMunicipio ? String(codigoMunicipio) : undefined,
+        municipioEncerramento: nomeMunicipio,
       },
     });
     res.json({ ...atualizado, retornoProvedor: resultado });

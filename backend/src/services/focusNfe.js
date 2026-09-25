@@ -324,21 +324,21 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
   // entra como medida da negociação.
   const codigoPeso = unidadeCarga === "TON" ? UNIDADE.TON : UNIDADE.KG;
 
-  // O tipo de medida sai com a unidade da venda (KG, TON, M3), como nos
-  // emissores que a operação já usa. O peso continua em quilo mesmo quando
-  // a venda é por metro cúbico, por isso a unidade de cada linha é a da
-  // própria medida.
+  // O tipo de medida sai com a unidade da venda (KG, TON, M3). O texto é
+  // curto de propósito: a coluna "TIPO MEDIDA" do DACTe é estreita, e
+  // "PESO LIQUIDO (KG)" não cabe — o gerador do PDF corta o excesso e a
+  // unidade some justamente por isso.
   const rotuloPeso = unidadeCarga === "TON" ? "TON" : "KG";
 
   const medidasDaCarga = [];
   if (pesoDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO BRUTO (${rotuloPeso})`, quantidade: dec(pesoDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `P.Bruto(${rotuloPeso})`, quantidade: dec(pesoDaCarga, 4) });
   }
   if (unidadeCarga === "M3" && volumeDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.M3, tipo_medida: "VOLUME (M3)", quantidade: dec(volumeDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.M3, tipo_medida: "Volume(M3)", quantidade: dec(volumeDaCarga, 4) });
   }
   if (unidadeCarga !== "M3" && pesoLiquidoDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO LIQUIDO (${rotuloPeso})`, quantidade: dec(pesoLiquidoDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `P.Liqu.(${rotuloPeso})`, quantidade: dec(pesoLiquidoDaCarga, 4) });
   }
   // O schema exige ao menos uma medida; sem peso nenhum, sobra a contagem
   // de volumes.

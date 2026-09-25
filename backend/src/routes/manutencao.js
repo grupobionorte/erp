@@ -5,6 +5,7 @@ const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { exigirAdmin } = require("../middleware/auth");
 const { contarBase, zerarBase } = require("../lib/zerarBase");
+const { ambienteDoTipo } = require("../services/focusNfe");
 
 const router = express.Router();
 
@@ -21,6 +22,16 @@ const router = express.Router();
      3. Bloqueada quando a emissão está em produção — documento fiscal
         autorizado precisa ser guardado por cinco anos.
 --------------------------------------------------------------------------- */
+
+// Em que ambiente cada tipo de documento está emitindo. Fica visível na
+// tela porque emitir em produção sem perceber é caro de desfazer.
+router.get("/ambiente", asyncHandler(async (req, res) => {
+  res.json({
+    NFe: ambienteDoTipo("NFe"),
+    CTe: ambienteDoTipo("CTe"),
+    MDFe: ambienteDoTipo("MDFe"),
+  });
+}));
 
 router.get("/base", exigirAdmin, asyncHandler(async (req, res) => {
   res.json(await contarBase());

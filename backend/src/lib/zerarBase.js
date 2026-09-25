@@ -34,8 +34,16 @@ const TABELAS = [
  * Emissão em produção significa documento com valor fiscal, que precisa ser
  * guardado por cinco anos. Nesse caso a limpeza total fica proibida.
  */
+// Basta um tipo de documento em produção para a base não poder ser zerada:
+// se a NF-e já emite de verdade, aquelas notas têm valor fiscal.
 function emProducao() {
-  return /api\.focusnfe/i.test(process.env.FOCUS_NFE_BASE_URL || "");
+  const ambientes = [
+    process.env.FOCUS_NFE_BASE_URL,
+    process.env.FOCUS_AMBIENTE_NFE,
+    process.env.FOCUS_AMBIENTE_CTE,
+    process.env.FOCUS_AMBIENTE_MDFE,
+  ];
+  return ambientes.some((v) => /api\.focusnfe|producao/i.test(v || ""));
 }
 
 async function contarBase() {

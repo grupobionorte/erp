@@ -3,15 +3,51 @@ const axios = require("axios");
 // Cliente HTTP para o provedor de emissão. Tudo que envolve assinatura com
 // certificado digital, comunicação SOAP com a SEFAZ e contingência fica
 // dentro do provedor — daqui só saem chamadas REST simples.
-const client = axios.create({
-  baseURL: process.env.FOCUS_NFE_BASE_URL,
-  auth: { username: process.env.FOCUS_NFE_TOKEN, password: "" },
-  // O charset explícito evita que acentos (ç, ã, í...) se percam — sem
-  // isso, alguns servidores presumem Latin-1 em vez de UTF-8 e os
-  // caracteres acentuados saem corrompidos do outro lado (por exemplo, no
-  // PDF da carta de correção).
-  headers: { "Content-Type": "application/json; charset=utf-8" },
-});
+const URL_HOMOLOGACAO = "https://homologacao.focusnfe.com.br";
+const URL_PRODUCAO = "https://api.focusnfe.com.br";
+
+// Ambiente POR TIPO de documento. Serve para entrar em produção aos poucos:
+// a NF-e pode valer de verdade enquanto o CT-e e o MDF-e continuam em
+// homologação, sendo ajustados sem gerar documento fiscal.
+//
+// Cada ambiente tem token próprio na Focus — não dá para reaproveitar o de
+// homologação em produção. Sem os tokens específicos, vale o FOCUS_NFE_TOKEN.
+const AMBIENTE_PADRAO = /api\.focusnfe/i.test(process.env.FOCUS_NFE_BASE_URL || "")
+  ? "producao"
+  : "homologacao";
+
+function ambienteDoTipo(tipo) {
+  const especifico = process.env[`FOCUS_AMBIENTE_${String(tipo || "").toUpperCase()}`];
+  return /producao/i.test(especifico || "") ? "producao"
+    : /homologacao/i.test(especifico || "") ? "homologacao"
+    : AMBIENTE_PADRAO;
+}
+
+function criarCliente(ambiente) {
+  const producao = ambiente === "producao";
+  return axios.create({
+    baseURL: producao ? URL_PRODUCAO : URL_HOMOLOGACAO,
+    auth: {
+      username: (producao ? process.env.FOCUS_NFE_TOKEN_PRODUCAO : process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO)
+        || process.env.FOCUS_NFE_TOKEN,
+      password: "",
+    },
+    // O charset explícito evita que acentos (ç, ã, í...) se percam — sem
+    // isso, alguns servidores presumem Latin-1 em vez de UTF-8 e os
+    // caracteres acentuados saem corrompidos do outro lado (por exemplo, no
+    // PDF da carta de correção).
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+  });
+}
+
+const CLIENTES = { homologacao: criarCliente("homologacao"), producao: criarCliente("producao") };
+
+// Cliente do tipo de documento. Toda chamada passa por aqui, então não há
+// como um documento sair pelo ambiente errado por esquecimento.
+const clienteDe = (tipo) => CLIENTES[ambienteDoTipo(tipo)];
+
+// Compatibilidade: chamadas antigas sem tipo caem no ambiente padrão.
+const client = CLIENTES[AMBIENTE_PADRAO];
 
 // Tabelas de código da SEFAZ — convertidas a partir dos rótulos em
 // português que aparecem no formulário, pra montar o payload da Focus NFe.
@@ -980,19 +1016,19 @@ const ENDPOINT_POR_TIPO = { NFe: "nfe", CTe: "cte", MDFe: "mdfe" };
 // O mesmo par emitir/consultar serve para os três tipos de documento; só
 // muda o segmento da URL.
 async function emitir({ tipo, ref, payload }) {
-  const { data } = await client.post(`/v2/${ENDPOINT_POR_TIPO[tipo]}?ref=${ref}`, payload);
+  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}?ref=${ref}`, payload);
   return data; // { status: "processando_autorizacao", ... }
 }
 
 async function consultar({ tipo, ref }) {
-  const { data } = await client.get(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`);
+  const { data } = await clienteDe(tipo).get(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`);
   return data; // status pode ser: autorizado | erro_autorizacao | cancelado
 }
 
 // Só existe pra NFe na Focus — manda o DANFE/XML por e-mail pro
 // destinatário (ou pra qualquer e-mail que a gente passar).
 async function enviarPorEmail({ tipo, ref, emails }) {
-  const { data } = await client.post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/email`, { emails });
+  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/email`, { emails });
   return data;
 }
 
@@ -1000,7 +1036,7 @@ async function enviarPorEmail({ tipo, ref, emails }) {
 // SEFAZ, é bem diferente de só apagar um rascunho. A SEFAZ exige uma
 // justificativa entre 15 e 255 caracteres.
 async function cancelar({ tipo, ref, justificativa }) {
-  const { data } = await client.delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
+  const { data } = await clienteDe(tipo).delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
     data: { justificativa },
   });
   return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
@@ -1011,7 +1047,7 @@ async function cancelar({ tipo, ref, justificativa }) {
 // dados cadastrais do emitente/destinatário ou datas — só detalhes como
 // descrição, endereço de entrega, etc.
 async function emitirCartaCorrecao({ tipo, ref, texto }) {
-  const { data } = await client.post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
+  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
   return data;
 }
 
@@ -1022,7 +1058,7 @@ async function emitirCartaCorrecao({ tipo, ref, texto }) {
 async function encerrarMdfe({ ref, data, sigla_uf, nome_municipio }) {
   // O caminho é /encerrar (não /encerramento), e a SEFAZ quer o NOME do
   // município, não o código IBGE.
-  const resposta = await client.post(`/v2/mdfe/${ref}/encerrar`, {
+  const resposta = await clienteDe("MDFe").post(`/v2/mdfe/${ref}/encerrar`, {
     data,
     sigla_uf,
     nome_municipio,
@@ -1041,6 +1077,7 @@ function urlCompleta(caminho) {
 }
 
 module.exports = {
+  ambienteDoTipo,
   montarPayloadNfe,
   montarPayloadCte,
   validarPayloadCte,

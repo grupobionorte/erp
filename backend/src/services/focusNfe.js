@@ -623,6 +623,33 @@ function proprietarioDoVeiculo(v, sufixo = "") {
   };
 }
 
+// Quem contratou o frete em cada CT-e. A SEFAZ exige esse grupo no MDF-e
+// de prestador de serviço (rejeição 578), e a informação já existe: é o
+// tomador do conhecimento.
+function contratantesDosCtes(ctes) {
+  const porDocumento = new Map();
+
+  for (const cte of ctes || []) {
+    const pessoa = {
+      "Remetente": cte.remetente,
+      "Expedidor": cte.expedidor,
+      "Recebedor": cte.recebedor,
+      "Destinatário": cte.destinatario,
+    }[cte.definicaoTomador] || cte.destinatario;
+
+    const doc = somenteDigitos(pessoa?.documento);
+    if (!doc || porDocumento.has(doc)) continue;
+
+    porDocumento.set(doc, {
+      nome: pessoa.nomeRazaoSocial,
+      cpf: doc.length === 11 ? doc : undefined,
+      cnpj: doc.length === 14 ? doc : undefined,
+    });
+  }
+
+  return porDocumento.size ? [...porDocumento.values()] : undefined;
+}
+
 function montarPayloadMdfe({
   empresa,
   veiculo,
@@ -733,6 +760,7 @@ function montarPayloadMdfe({
     // separado). Reboques e condutores são coleções.
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
+      contratantes: contratantesDosCtes(ctes),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,
@@ -818,6 +846,9 @@ function validarPayloadMdfe(payload) {
   // rejeita e a mensagem que volta é pouco clara.
   if (!modal.tara_veiculo) problemas.push("Tara do veículo não preenchida no cadastro de veículos.");
   if (!modal.uf_licenciamento_veiculo) problemas.push("UF de licenciamento do veículo não informada.");
+  if (!modal.contratantes?.length) {
+    problemas.push("Contratante do serviço não identificado. Confira o tomador dos CT-es vinculados.");
+  }
   if (!modal.condutores?.length) {
     problemas.push("Condutor não informado (nome e CPF).");
   } else if (!/^\d{11}$/.test(modal.condutores[0].cpf || "")) {

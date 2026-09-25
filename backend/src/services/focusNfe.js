@@ -676,8 +676,6 @@ function pagamentosDosCtes(ctes) {
         nome: pessoa.nomeRazaoSocial,
         cpf: doc.length === 11 ? doc : undefined,
         cnpj: doc.length === 14 ? doc : undefined,
-        // "Pago" no CT-e significa frete já quitado; o resto é a pagar.
-        aPrazo: !/pago/i.test(cte.formaPagamento || ""),
         valor,
       });
     }
@@ -692,8 +690,11 @@ function pagamentosDosCtes(ctes) {
     // 04 = Frete. Pedágio e impostos teriam componentes próprios.
     componentes: [{ tipo: "04", valor: dec(p.valor) }],
     valor_total_contrato: dec(p.valor),
-    // 0 = à vista, 1 = a prazo.
-    forma_pagamento: p.aPrazo ? "1" : "0",
+    // No MDF-e, "a prazo" quer dizer PARCELADO — e exige o grupo das
+    // parcelas ou os dados bancários no XML. Frete pago na entrega
+    // continua sendo à vista, então é isso que vai aqui. Só mudaria se o
+    // sistema passasse a controlar parcelamento de frete.
+    forma_pagamento: "0",
   }));
 }
 

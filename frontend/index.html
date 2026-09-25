@@ -2883,7 +2883,50 @@ function ModuleView({ moduleKey }) {
       {/* A limpeza da base vive aqui porque o plano do servidor não dá
           acesso ao terminal — sem isso não haveria como zerar os dados de
           teste antes de entrar em produção. */}
+      {moduleKey === "empresas" && <AmbienteFiscal />}
       {moduleKey === "empresas" && <ZerarBase />}
+    </div>
+  );
+}
+
+// Em que ambiente cada documento está emitindo. Fica à vista porque a
+// diferença entre teste e documento fiscal de verdade não pode depender de
+// memória.
+function AmbienteFiscal() {
+  const [ambiente, setAmbiente] = useState(null);
+
+  useEffect(() => {
+    apiRequest("/manutencao/ambiente").then(setAmbiente).catch(() => setAmbiente(null));
+  }, []);
+
+  if (!ambiente) return null;
+
+  const rotulo = { NFe: "NF-e", CTe: "CT-e", MDFe: "MDF-e" };
+
+  return (
+    <div className="nf-section" style={{ marginTop: 24 }}>
+      <h4 className="nf-section-title">Ambiente de emissão</h4>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {["NFe", "CTe", "MDFe"].map(tipo => {
+          const producao = ambiente[tipo] === "producao";
+          return (
+            <span key={tipo} style={{
+              display: "inline-flex", alignItems: "center", gap: 7, fontSize: 13,
+              padding: "7px 13px", borderRadius: 999,
+              background: producao ? "#eaf3de" : "#fbf3e2",
+              color: producao ? "#00732F" : "#7a5205",
+              border: `1px solid ${producao ? "#cde0b8" : "#ecdcb4"}`,
+            }}>
+              <strong>{rotulo[tipo]}</strong>
+              {producao ? "produção" : "homologação"}
+            </span>
+          );
+        })}
+      </div>
+      <p className="hint">
+        Em homologação o documento não tem valor fiscal e sai com tarja de teste. Em produção vale de
+        verdade e o cancelamento tem prazo. O ambiente é definido nas variáveis do servidor.
+      </p>
     </div>
   );
 }

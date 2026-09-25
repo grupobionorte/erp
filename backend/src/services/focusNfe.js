@@ -292,6 +292,44 @@ function blocoPessoaCte(pessoa, prefixo, empresa) {
 const CODIGO_TIPO_CTE = { "CT-e normal": 0, "Complemento de Valores": 1, "Anulação": 2, "Substituto": 3 };
 const CODIGO_TIPO_SERVICO = { "Normal": 0, "Subcontratação": 1, "Redespacho": 2, "Redespacho Intermediário": 3, "Multimodal": 4 };
 
+// Ficha da viagem para as observações gerais do DACTe.
+function montarObservacoesCte(documento) {
+  const linhas = [];
+
+  const descreverVeiculo = (v) =>
+    v ? [v.placa, v.descricao].filter(Boolean).join(" - ") : null;
+
+  const veiculo = descreverVeiculo(documento.veiculo);
+  if (veiculo) linhas.push(`VEICULO: ${veiculo}`);
+
+  // Só os reboques que existirem: bitrem tem um, rodotrem tem dois.
+  [documento.veiculoReboque, documento.veiculoReboque2, documento.veiculoReboque3]
+    .map(descreverVeiculo)
+    .filter(Boolean)
+    .forEach((reboque, i) => linhas.push(`REBOQUE ${i + 1}: ${reboque}`));
+
+  if (documento.nomeMotorista) {
+    const cpf = somenteDigitos(documento.cpfMotorista);
+    const cpfFormatado = cpf?.length === 11
+      ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+      : documento.cpfMotorista;
+    linhas.push(`MOTORISTA: ${documento.nomeMotorista}${cpfFormatado ? ` - CPF ${cpfFormatado}` : ""}`);
+  }
+
+  if (documento.dataTransporte) {
+    const zona = process.env.TZ_FISCAL || "America/Cuiaba";
+    const data = new Date(documento.dataTransporte).toLocaleDateString("pt-BR", { timeZone: zona });
+    linhas.push(`SAIDA: ${data}${documento.horaTransporte ? ` as ${documento.horaTransporte}` : ""}`);
+  }
+
+  // O que o usuário escreveu vem primeiro; a ficha da viagem, depois.
+  const texto = [documento.informacoesComplementares, linhas.join(" | ")]
+    .filter(t => t && String(t).trim())
+    .join(" | ");
+
+  return texto || undefined;
+}
+
 function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
   const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador] ?? 3; // padrão: Destinatário
 
@@ -423,7 +461,11 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // negociação é por metro cúbico; peso líquido, quando é por peso.
     quantidades: medidasDaCarga,
 
-    informacoes_adicionais_fisco: documento.informacoesComplementares || undefined,
+    // Observações gerais do DACTe. Além do que o usuário escreveu, vai a
+    // ficha da viagem: veículo, reboques, motorista e quando saiu. É o que
+    // a fiscalização de estrada procura no papel, e o CT-e não tem campo
+    // próprio para isso no modelo rodoviário.
+    informacoes_adicionais_fisco: montarObservacoesCte(documento),
 
     // NFe(s) que esse CTe está transportando — a chave de acesso de cada
     // uma, já autorizada.

@@ -168,6 +168,10 @@ model Empresa {
 
   // Onde a empresa recebe o frete. O MDF-e exige o grupo de dados
   // bancários no pagamento quando não há adiantamento nem parcelas.
+  // Mensagem fixa que acompanha toda NF-e da empresa, somada ao que já
+  // houver nas informações complementares do documento.
+  observacaoPadraoNfe String? @map("observacao_padrao_nfe")
+
   pixRecebimento String? @map("pix_recebimento")
   bancoNumero    String? @map("banco_numero")
   bancoAgencia   String? @map("banco_agencia")
@@ -195,6 +199,11 @@ model Pessoa {
   eFornecedor      Boolean    @default(false) @map("e_fornecedor")
   ativo            Boolean    @default(true)
   criadoEm         DateTime   @default(now()) @map("criado_em")
+
+  // Texto que sempre acompanha as notas desse cliente — regime especial,
+  // número de contrato, instrução de entrega. Entra automaticamente nas
+  // informações complementares da NF-e.
+  observacaoPadrao String? @map("observacao_padrao")
 
   enderecoId Int?     @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])

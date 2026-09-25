@@ -481,7 +481,9 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     nfes: documento.documentosTransportados?.some((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
       ? documento.documentosTransportados
           .filter((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
-          .map((doc) => ({ chave_nfe: (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso || "").replace(/^NFe/i, "") }))
+          // Só dígitos: chave colada do DANFE vem com espaços, e a que a
+          // Focus devolve vem com o prefixo "NFe".
+          .map((doc) => ({ chave_nfe: somenteDigitos(doc.chaveAcesso || doc.notaFiscal?.chaveAcesso) }))
       : undefined,
 
     // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores
@@ -645,10 +647,14 @@ function montarPayloadMdfe({
       : undefined,
 
     // Prestador de serviço relaciona CT-e; carga própria relaciona NF-e.
+    // Só dígitos: documentos gravados antes guardavam a chave com o
+    // prefixo "CTe", que a SEFAZ recusa.
     conhecimentos_transporte: ctes.length
-      ? ctes.map((d) => ({ chave_cte: d.chaveAcesso }))
+      ? ctes.map((d) => ({ chave_cte: somenteDigitos(d.chaveAcesso) }))
       : undefined,
-    notas_fiscais: nfes.length ? nfes.map((d) => ({ chave_nfe: d.chaveAcesso })) : undefined,
+    notas_fiscais: nfes.length
+      ? nfes.map((d) => ({ chave_nfe: somenteDigitos(d.chaveAcesso) }))
+      : undefined,
     quantidade_total_cte: ctes.length || undefined,
     quantidade_total_nfe: nfes.length || undefined,
 

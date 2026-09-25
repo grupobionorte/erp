@@ -802,11 +802,16 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
     const campos = CAMPOS_POR_TIPO[documento.tipo];
     const primeiroPreenchido = (nomes) => nomes.map((n) => resultado[n]).find(Boolean);
 
+    // A Focus devolve a chave do CT-e com o prefixo "CTe" na frente. Guardar
+    // assim quebrava o MDFe, que espera 44 dígitos limpos — e a chave com
+    // prefixo também não serve para consulta em portal nenhum.
+    const soDigitos = (v) => (v ? String(v).replace(/\D/g, "") || null : null);
+
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       data: {
         status: "autorizado",
-        chaveAcesso: primeiroPreenchido(campos.chave),
+        chaveAcesso: soDigitos(primeiroPreenchido(campos.chave)),
         protocoloAutorizacao: resultado.numero_protocolo || resultado.protocolo,
         dataAutorizacao: new Date(),
         xmlUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.xml)),

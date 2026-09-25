@@ -3128,6 +3128,7 @@ function MdfeView() {
             <tr>
               <th>Número/Série</th>
               <th>Trajeto</th>
+              <th>Veículo</th>
               <th>Documentos</th>
               <th>Status</th>
               <th>Chave / Motivo</th>
@@ -3141,6 +3142,18 @@ function MdfeView() {
                 <td>{mdfe.numero || "—"}/{mdfe.serie || "—"}</td>
                 <td>
                   {mdfe.municipioCarregamento}/{mdfe.ufInicio} → {mdfe.municipioDescarregamento}/{mdfe.ufFim}
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {/* Placa do cavalo; os reboques ficam no tooltip, para
+                      não alargar a linha. */}
+                  {mdfe.veiculo?.placa || "—"}
+                  {(mdfe.veiculoReboque || mdfe.veiculoReboque2 || mdfe.veiculoReboque3) && (
+                    <span className="subtle" style={{ display: "block", fontSize: 11.5 }}
+                      title={[mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3]
+                        .filter(Boolean).map(r => r.placa).join(" · ")}>
+                      +{[mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3].filter(Boolean).length} reboque(s)
+                    </span>
+                  )}
                 </td>
                 <td>{mdfe.documentosVinculados?.length || 0} CT-e</td>
                 <td>

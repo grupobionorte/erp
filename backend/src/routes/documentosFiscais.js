@@ -91,7 +91,12 @@ router.get("/", asyncHandler(async (req, res) => {
       // sem empresa" pra tratar aqui.
       ...(empresaId ? { empresaId } : {}),
     },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true },
+    include: {
+      destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
+      veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+      colaboradorResponsavel: true, itens: { include: { produto: true } },
+      documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
+    },
     orderBy: { dataEmissao: "desc" },
   });
   res.json(documentos);

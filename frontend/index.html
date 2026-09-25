@@ -5095,18 +5095,13 @@ function CteView({ onIrParaMdfe }) {
   };
 
   // Clonar: a mesma rota se repete muito, e redigitar tudo é onde o erro
-  // entra. As notas transportadas só vêm junto se você pedir — cada viagem
-  // costuma carregar notas diferentes.
+  // entra. As notas transportadas ficam de fora — cada viagem carrega
+  // notas diferentes, e repetir chave de NF-e num CT-e novo é erro caro.
   const clonarCte = async (cte) => {
-    const copiarNotas = window.confirm(
-      `Clonar o CTe ${cte.numero || ""}?\n\n` +
-      "OK = trazer também as notas fiscais transportadas\n" +
-      "Cancelar = clonar só o trajeto, pessoas e valores"
-    );
     try {
       const novo = await apiRequest(`/documentos-fiscais/${cte.id}/clonar`, {
         method: "POST",
-        body: JSON.stringify({ copiarNotas }),
+        body: JSON.stringify({ copiarNotas: false }),
       });
       await carregar();
       setEditando(novo);
@@ -5130,34 +5125,65 @@ function CteView({ onIrParaMdfe }) {
 
   // Igual à NFe: depois de emitir, o CTe fica "enviado" enquanto a SEFAZ
   // processa — consulta sozinho de tempos em tempos até resolver.
-  const consultarAteResolver = async (id, tentativa = 0) => {
-    if (tentativa >= 15) { setProcessando(null); return; }
+  const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
+    if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; }
     await new Promise(r => setTimeout(r, 3000));
     try {
       const atualizado = await apiRequest(`/documentos-fiscais/${id}/status`);
       await carregar();
       if (atualizado.status === "enviado") {
-        consultarAteResolver(id, tentativa + 1);
+        consultarAteResolver(id, tentativa + 1, aba);
       } else {
+        // Autorizou: manda o DACTe direto para a aba já aberta. Se voltou
+        // rejeitado, fecha a aba para não deixar página em branco por aí.
+        if (atualizado.status === "autorizado" && atualizado.pdfUrl) abrirNaAba(aba, atualizado.pdfUrl);
+        else fecharAba(aba);
         setProcessando(null);
       }
     } catch {
+      fecharAba(aba);
       setProcessando(null);
     }
   };
 
+  // O DACTe só fica pronto alguns segundos depois do clique, e o navegador
+  // bloqueia abrir janela fora de um clique. Por isso a aba é aberta agora,
+  // no gesto do usuário, e recebe o endereço quando a autorização chega.
+  const abrirAbaDeEspera = () => {
+    try {
+      const aba = window.open("", "_blank");
+      if (aba) {
+        aba.document.write(
+          "<title>Emitindo CT-e…</title>" +
+          "<body style='font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#16293C;color:#EAF1F6;" +
+          "display:flex;align-items:center;justify-content:center;height:100vh;margin:0'>" +
+          "<div style='text-align:center'><h2 style='font-weight:400'>Emitindo CT-e…</h2>" +
+          "<p style='opacity:.7;font-size:14px'>O DACTe abre aqui assim que a SEFAZ autorizar.</p></div></body>"
+        );
+      }
+      return aba;
+    } catch {
+      return null;
+    }
+  };
+  const abrirNaAba = (aba, url) => { if (aba && !aba.closed) aba.location.href = url; else window.open(url, "_blank"); };
+  const fecharAba = (aba) => { try { if (aba && !aba.closed) aba.close(); } catch { /* já fechada */ } };
+
   const emitirCte = async (id) => {
     if (!window.confirm("Emitir esse CTe? Depois de emitido ele não pode mais ser editado.")) return;
+    const aba = abrirAbaDeEspera();
     setProcessando(id);
     try {
       const resultado = await apiRequest(`/documentos-fiscais/${id}/emitir`, { method: "POST" });
       await carregar();
       if (resultado.status === "enviado") {
-        consultarAteResolver(id);
+        consultarAteResolver(id, 0, aba);
       } else {
+        fecharAba(aba);
         setProcessando(null);
       }
     } catch (e) {
+      fecharAba(aba);
       alert(`Não foi possível emitir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
       carregar();
       setProcessando(null);

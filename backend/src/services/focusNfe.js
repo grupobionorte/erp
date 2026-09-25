@@ -635,8 +635,11 @@ function montarPayloadMdfe({
   return {
     // 1 = prestador de serviço de transporte, 2 = carga própria.
     emitente: documento.tipoEmitenteMdfe || "1",
-    // ETC: empresa de transporte de cargas. TAC seria o autônomo.
-    tipo_transporte: documento.tipoTransportador || "1",
+    // Tipo de transportador (tpTransp) só pode ir quando o veículo de
+    // tração tem proprietário declarado — ou seja, quando ele NÃO é da
+    // empresa emitente. Com frota própria, informar isso gera a rejeição
+    // 745. Por isso o campo só sai se for preenchido de propósito.
+    tipo_transporte: documento.tipoTransportador || undefined,
     data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
 
     cnpj_emitente: somenteDigitos(empresa.cnpj),

@@ -184,11 +184,20 @@ const FORMATADOR_MOEDA_3 = new Intl.NumberFormat("pt-BR", {
 });
 
 // Preço de biomassa costuma ter a terceira casa (R$ 0,075 o quilo), e
-// arredondar para centavos muda o total de uma carga inteira.
-function formatarMoeda(valor, casas = 2) {
+// arredondar para centavos muda o total de uma carga inteira. Mas forçar
+// três casas em tudo deixaria "R$ 1.500,000" em toda a tela — então o
+// valor é mostrado com três casas só quando ele realmente as tem.
+function casasDoValor(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return 2;
+  return Math.round(n * 1000) % 10 === 0 ? 2 : 3;
+}
+
+function formatarMoeda(valor, casas = "auto") {
   const n = Number(valor);
   if (valor === "" || valor === null || valor === undefined || Number.isNaN(n)) return "";
-  return (casas === 3 ? FORMATADOR_MOEDA_3 : FORMATADOR_MOEDA).format(n);
+  const usar = casas === "auto" ? casasDoValor(n) : casas;
+  return (usar === 3 ? FORMATADOR_MOEDA_3 : FORMATADOR_MOEDA).format(n);
 }
 
 // "1.234,56" -> 1234.56
@@ -202,7 +211,10 @@ function moedaParaNumero(texto) {
 // formando da direita pra esquerda (centavos primeiro), como em caixa de
 // supermercado. onChange devolve o número como string com ponto decimal,
 // pra não mudar nada de quem consome esse valor.
-function InputMoeda({ value, onChange, placeholder = "0,00", casas = 2, ...resto }) {
+function InputMoeda({ value, onChange, placeholder = "0,00", casas = "auto", ...resto }) {
+  // Quantas casas a digitação aceita. Em "auto", três — quem precisa da
+  // terceira casa consegue digitar, e quem não precisa vê duas.
+  const casasDigitacao = casas === "auto" ? 3 : casas;
   const [texto, setTexto] = useState(() => formatarMoeda(value, casas));
   const [editando, setEditando] = useState(false);
 
@@ -220,8 +232,8 @@ function InputMoeda({ value, onChange, placeholder = "0,00", casas = 2, ...resto
     const partes = limpo.split(",");
     if (partes.length > 2) limpo = `${partes[0]},${partes.slice(1).join("")}`;
     const [inteiro, decimais] = limpo.split(",");
-    if (decimais !== undefined && decimais.length > casas) {
-      limpo = `${inteiro},${decimais.slice(0, casas)}`;
+    if (decimais !== undefined && decimais.length > casasDigitacao) {
+      limpo = `${inteiro},${decimais.slice(0, casasDigitacao)}`;
     }
     setTexto(limpo);
     onChange(limpo === "" || limpo === "," ? "" : String(decimalParaNumero(limpo)));
@@ -642,7 +654,7 @@ const MODULES = {
       { key: "classificacaoTributariaIbsCbs", label: "IBS/CBS — Classificação (cClassTrib)", type: "text", padrao: "000001" },
       // Três casas: biomassa é vendida a preço de centavo fracionado, e
       // arredondar muda o total de uma carga inteira.
-      { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda", casas: 3 },
+      { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda" },
     ],
     columns: ["codigo", "descricao", "ncm", "unidade", "valorUnitario"],
     toApi: (data) => ({
@@ -1386,7 +1398,7 @@ function Field({ field, value, onChange, disabled }) {
           style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
         />
       ) : field.type === "moeda" ? (
-        <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} casas={field.casas ?? 2} />
+        <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} casas={field.casas ?? "auto"} />
       ) : (
         <input
           type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "password" ? "password" : "text"}

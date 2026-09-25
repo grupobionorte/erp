@@ -653,7 +653,7 @@ function contratantesDosCtes(ctes) {
 // Quem paga o frete, quanto e como. A SEFAZ exige esse grupo no MDF-e de
 // carga lotação (rejeição 302) — e os dados são os do próprio CT-e: o
 // tomador paga, e o valor é o da prestação.
-function pagamentosDosCtes(ctes, empresa) {
+function pagamentosDosCtes(ctes) {
   const porDocumento = new Map();
 
   for (const cte of ctes || []) {
@@ -695,13 +695,13 @@ function pagamentosDosCtes(ctes, empresa) {
     forma_pagamento: "0",
 
     // O schema exige ao menos um destes depois da forma de pagamento:
-    // adiantamento, parcelas ou dados bancários. Sem adiantamento e sem
-    // parcelamento, declaramos isso explicitamente — e mandamos os dados
-    // de recebimento da empresa quando estiverem cadastrados.
+    // adiantamento, parcelas ou dados bancários. Declarar "sem
+    // adiantamento" basta e é o que corresponde à realidade.
+    //
+    // Chave PIX e conta bancária ficam de fora de propósito: o layout
+    // recusou o elemento PIX nessa posição, e mandar conta em documento
+    // fiscal não traz benefício nenhum aqui.
     indicador_adiantamento: "0",
-    pix: empresa?.pixRecebimento || undefined,
-    numero_banco: empresa?.bancoNumero || undefined,
-    numero_agencia: empresa?.bancoAgencia || undefined,
   }));
 }
 
@@ -836,7 +836,7 @@ function montarPayloadMdfe({
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
       contratantes: contratantesDosCtes(ctes),
-      pagamentos: pagamentosDosCtes(ctes, empresa),
+      pagamentos: pagamentosDosCtes(ctes),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,

@@ -4506,27 +4506,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </p>
               </div>
             </div>
-
-            {/* Os totais da carga são os da lista de notas abaixo — um valor
-                só, numa origem só. */}
-            <div className="cte-resumo" style={{ marginTop: 4 }}>
-              <div>
-                <span className="cte-resumo-rotulo">Valor da carga</span>
-                <span className="cte-resumo-valor">R$ {formatarMoeda(somaNotas)}</span>
-              </div>
-              <div>
-                <span className="cte-resumo-rotulo">Peso bruto</span>
-                <span className="cte-resumo-valor">{formatarDecimal(somaPesoBruto, 3)} kg</span>
-              </div>
-              <div>
-                <span className="cte-resumo-rotulo">{unidadeMedidaCarga === "M3" ? "Volume" : "Peso líquido"}</span>
-                <span className="cte-resumo-valor">
-                  {unidadeMedidaCarga === "M3"
-                    ? `${formatarDecimal(somaM3, 3)} m³`
-                    : `${formatarDecimal(somaPesoLiquido, 3)} kg`}
-                </span>
-              </div>
-            </div>
           </div>
 
           <div className="nf-section">

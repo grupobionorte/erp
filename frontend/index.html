@@ -178,10 +178,17 @@ const FORMATADOR_MOEDA = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 2,
 });
 
-function formatarMoeda(valor) {
+const FORMATADOR_MOEDA_3 = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 3,
+});
+
+// Preço de biomassa costuma ter a terceira casa (R$ 0,075 o quilo), e
+// arredondar para centavos muda o total de uma carga inteira.
+function formatarMoeda(valor, casas = 2) {
   const n = Number(valor);
   if (valor === "" || valor === null || valor === undefined || Number.isNaN(n)) return "";
-  return FORMATADOR_MOEDA.format(n);
+  return (casas === 3 ? FORMATADOR_MOEDA_3 : FORMATADOR_MOEDA).format(n);
 }
 
 // "1.234,56" -> 1234.56
@@ -196,14 +203,14 @@ function moedaParaNumero(texto) {
 // supermercado. onChange devolve o número como string com ponto decimal,
 // pra não mudar nada de quem consome esse valor.
 function InputMoeda({ value, onChange, placeholder = "0,00", casas = 2, ...resto }) {
-  const [texto, setTexto] = useState(() => formatarMoeda(value));
+  const [texto, setTexto] = useState(() => formatarMoeda(value, casas));
   const [editando, setEditando] = useState(false);
 
   // Fora de edição mostra formatado (5.000,00); ao focar, mostra o número
   // puro para digitar por cima.
   useEffect(() => {
-    if (!editando) setTexto(formatarMoeda(value));
-  }, [value, editando]);
+    if (!editando) setTexto(formatarMoeda(value, casas));
+  }, [value, editando, casas]);
 
   const digitar = (e) => {
     // Só dígitos e uma vírgula. Digitar 5000 vale cinco mil, e os centavos
@@ -630,7 +637,9 @@ const MODULES = {
       // cobrança começar.
       { key: "cstIbsCbs", label: "IBS/CBS — CST (Reforma Tributária)", type: "text", padrao: "000" },
       { key: "classificacaoTributariaIbsCbs", label: "IBS/CBS — Classificação (cClassTrib)", type: "text", padrao: "000001" },
-      { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda" },
+      // Três casas: biomassa é vendida a preço de centavo fracionado, e
+      // arredondar muda o total de uma carga inteira.
+      { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda", casas: 3 },
     ],
     columns: ["codigo", "descricao", "ncm", "unidade", "valorUnitario"],
     toApi: (data) => ({
@@ -1362,7 +1371,7 @@ function Field({ field, value, onChange, disabled }) {
           })}
         </select>
       ) : field.type === "moeda" ? (
-        <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} />
+        <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} casas={field.casas ?? 2} />
       ) : (
         <input
           type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "password" ? "password" : "text"}

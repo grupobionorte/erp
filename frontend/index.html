@@ -5094,6 +5094,28 @@ function CteView({ onIrParaMdfe }) {
     }
   };
 
+  // Clonar: a mesma rota se repete muito, e redigitar tudo é onde o erro
+  // entra. As notas transportadas só vêm junto se você pedir — cada viagem
+  // costuma carregar notas diferentes.
+  const clonarCte = async (cte) => {
+    const copiarNotas = window.confirm(
+      `Clonar o CTe ${cte.numero || ""}?\n\n` +
+      "OK = trazer também as notas fiscais transportadas\n" +
+      "Cancelar = clonar só o trajeto, pessoas e valores"
+    );
+    try {
+      const novo = await apiRequest(`/documentos-fiscais/${cte.id}/clonar`, {
+        method: "POST",
+        body: JSON.stringify({ copiarNotas }),
+      });
+      await carregar();
+      setEditando(novo);
+      setMostrarForm(true);
+    } catch (e) {
+      alert(`Não foi possível clonar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
+
   // Rascunho nunca foi à SEFAZ: pode sumir de vez, em vez de ficar na lista
   // como cancelado.
   const excluirRascunho = async (cte) => {
@@ -5397,6 +5419,9 @@ function CteView({ onIrParaMdfe }) {
                           </button>
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteParaCorrigir(cte); }}>
                             <Pencil size={14} /> Carta de correção
+                          </button>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); clonarCte(cte); }}>
+                            <Plus size={14} /> Clonar para novo CTe
                           </button>
                           {cte.mdfeId ? (
                             <button className="nf-dropdown-item" disabled onClick={() => setMenuAberto(null)}>

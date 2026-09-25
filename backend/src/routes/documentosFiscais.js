@@ -542,6 +542,53 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
   }
 }));
 
+// Clonar: cria um rascunho novo com os mesmos dados de um documento já
+// emitido. A mesma rota se repete muito — mesmo cliente, mesmo trajeto,
+// mesmo veículo —, e redigitar tudo é onde o erro entra.
+router.post("/:id/clonar", asyncHandler(async (req, res) => {
+  const origem = await prisma.documentoFiscal.findUnique({
+    where: { id: Number(req.params.id) },
+    include: { documentosTransportados: true },
+  });
+
+  if (!origem) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (origem.empresaId && origem.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+
+  // Tudo que identifica o documento original fica de fora: numeração,
+  // chave, protocolo, status e o vínculo com um MDFe. O resto é o que vale
+  // a pena aproveitar.
+  const {
+    id, numero, serie, chaveAcesso, status, protocoloAutorizacao, dataEmissao, dataAutorizacao,
+    xmlUrl, pdfUrl, motivoRejeicao, tentativaEnvio, justificativaCancelamento, mdfeId,
+    documentosTransportados, ...dados
+  } = origem;
+
+  // Por padrão as notas transportadas NÃO vêm junto: cada viagem carrega
+  // notas diferentes, e repetir chave de NF-e num CT-e novo é erro caro.
+  const copiarNotas = req.body?.copiarNotas === true;
+
+  const clone = await prisma.documentoFiscal.create({
+    data: {
+      ...dados,
+      status: "rascunho",
+      dataEmissao: new Date(),
+      documentosTransportados: copiarNotas && documentosTransportados.length ? {
+        create: documentosTransportados.map(({ id: _id, cteId, notaFiscalId, ...doc }) => doc),
+      } : undefined,
+    },
+    include: { documentosTransportados: true },
+  });
+
+  res.status(201).json({
+    ...clone,
+    aviso: copiarNotas
+      ? "Rascunho criado com as mesmas notas transportadas — confira antes de emitir."
+      : "Rascunho criado. Vincule as notas fiscais desta viagem antes de emitir.",
+  });
+}));
+
 // Passo 2: envia o rascunho para o provedor de emissão. Fica separado do
 // passo 1 de propósito — permite revisar o rascunho antes de emitir de
 // verdade, já que a emissão é irreversível (exige evento de cancelamento).

@@ -3313,7 +3313,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     <option value="">Nenhum</option>
                     {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
                 </div>
               </div>
               <div className="field-group">
@@ -3345,7 +3345,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     <option value="">Selecione…</option>
                     {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setDestinatarioId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setDestinatarioId })}><Plus size={14} /></button>
                 </div>
                 {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
               </div>
@@ -3402,7 +3402,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     <option value="">Nenhuma</option>
                     {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar transportadora nova" onClick={() => setQuickAdd({ tipo: "transportadoras", setter: setTransportadoraId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar transportadora nova" onClick={() => setQuickAdd({ tipo: "transportadoras", setter: setTransportadoraId })}><Plus size={14} /></button>
                 </div>
               </div>
               <div className="field-group">
@@ -3412,7 +3412,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                     <option value="">Nenhum</option>
                     {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
                 </div>
               </div>
             </div>
@@ -4784,7 +4784,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                     <option value="">Nenhum</option>
                     {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
                 </div>
               </div>
               <div className="field-group">
@@ -4826,7 +4826,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                       <option value="">{vazio}</option>
                       {opcoesPessoas}
                     </select>
-                    <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo"
+                    <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo"
                       onClick={() => setQuickAdd({ tipo: "clientes", setter })}><Plus size={14} /></button>
                   </div>
                   <button
@@ -4896,7 +4896,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                     <option value="">Nenhum</option>
                     {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                   </select>
-                  <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
                 </div>
               </div>
               {[
@@ -4911,7 +4911,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                       <option value="">Nenhum</option>
                       {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                     </select>
-                    <button type="button" className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo"
+                    <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo"
                       onClick={() => setQuickAdd({ tipo: "veiculos", setter })}><Plus size={14} /></button>
                   </div>
                 </div>

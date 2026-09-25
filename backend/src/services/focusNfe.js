@@ -332,13 +332,13 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 
   const medidasDaCarga = [];
   if (pesoDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO BRUTO ${rotuloPeso}`, quantidade: dec(pesoDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO BRUTO (${rotuloPeso})`, quantidade: dec(pesoDaCarga, 4) });
   }
   if (unidadeCarga === "M3" && volumeDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.M3, tipo_medida: "VOLUME M3", quantidade: dec(volumeDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: UNIDADE.M3, tipo_medida: "VOLUME (M3)", quantidade: dec(volumeDaCarga, 4) });
   }
   if (unidadeCarga !== "M3" && pesoLiquidoDaCarga) {
-    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO LIQUIDO ${rotuloPeso}`, quantidade: dec(pesoLiquidoDaCarga, 4) });
+    medidasDaCarga.push({ codigo_unidade_medida: codigoPeso, tipo_medida: `PESO LIQUIDO (${rotuloPeso})`, quantidade: dec(pesoLiquidoDaCarga, 4) });
   }
   // O schema exige ao menos uma medida; sem peso nenhum, sobra a contagem
   // de volumes.

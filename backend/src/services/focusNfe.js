@@ -323,11 +323,12 @@ function montarObservacoesCte(documento) {
   }
 
   // O que o usuário escreveu vem primeiro; a ficha da viagem, depois.
+  // xObs aceita 2000 caracteres.
   const texto = [documento.informacoesComplementares, linhas.join(" | ")]
     .filter(t => t && String(t).trim())
     .join(" | ");
 
-  return texto || undefined;
+  return texto ? texto.slice(0, 2000) : undefined;
 }
 
 function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
@@ -461,11 +462,12 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     // negociação é por metro cúbico; peso líquido, quando é por peso.
     quantidades: medidasDaCarga,
 
-    // Observações gerais do DACTe. Além do que o usuário escreveu, vai a
-    // ficha da viagem: veículo, reboques, motorista e quando saiu. É o que
-    // a fiscalização de estrada procura no papel, e o CT-e não tem campo
-    // próprio para isso no modelo rodoviário.
-    informacoes_adicionais_fisco: montarObservacoesCte(documento),
+    // Observações gerais do DACTe: tag xObs, que é a caixa "OBSERVAÇÕES
+    // GERAIS" do documento. Não confundir com informacoes_adicionais_fisco
+    // (infAdFisco), que é a caixa de interesse do Fisco, logo acima — foi
+    // onde isso caiu antes e por isso não aparecia.
+    // Vai a ficha da viagem: veículo, reboques, motorista e quando saiu.
+    observacao: montarObservacoesCte(documento),
 
     // NFe(s) que esse CTe está transportando — a chave de acesso de cada
     // uma, já autorizada.

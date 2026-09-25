@@ -4000,6 +4000,21 @@ function NotasFiscaisView() {
     }
   };
 
+  // Rascunho nunca foi à SEFAZ: não tem número nem valor fiscal, então pode
+  // sumir de vez em vez de ficar na lista como cancelado.
+  const excluirRascunho = async (nota) => {
+    if (!window.confirm(
+      `Excluir o rascunho da nota ${nota.numero || ""}?\n\n` +
+      "Ele será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro."
+    )) return;
+    try {
+      await apiRequest(`/documentos-fiscais/${nota.id}?definitivo=1`, { method: "DELETE" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
+
   // Nota já autorizada — cancelar manda um evento de verdade pra SEFAZ, e
   // ela exige uma justificativa com pelo menos 15 caracteres.
   const cancelarNotaAutorizada = async (id) => {
@@ -4200,9 +4215,15 @@ Detalhe: ${e.detalhe}` : ""}`);
                           >
                             <FileText size={14} /> {processando === nota.id ? "Aguardando SEFAZ…" : nota.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir nota"}
                           </button>
-                          <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarNota(nota.id); }}>
-                            <Trash2 size={14} /> Cancelar
-                          </button>
+                          {nota.status === "rascunho" ? (
+                            <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); excluirRascunho(nota); }}>
+                              <Trash2 size={14} /> Excluir rascunho
+                            </button>
+                          ) : (
+                            <button className="nf-dropdown-item nf-dropdown-item-danger" onClick={() => { setMenuAberto(null); cancelarNota(nota.id); }}>
+                              <Trash2 size={14} /> Cancelar
+                            </button>
+                          )}
                         </>
                       )}
                       {nota.status === "enviado" && (

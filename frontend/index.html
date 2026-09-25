@@ -623,6 +623,10 @@ const MODULES = {
       { key: "ie", label: "Inscrição Estadual", type: "text" },
       { key: "im", label: "Inscrição Municipal", type: "text" },
       { key: "rntrc", label: "RNTRC (obrigatório pra emitir CTe)", type: "text" },
+      // Usados no grupo de pagamento do MDF-e, quando exigido.
+      { key: "pixRecebimento", label: "Chave PIX de recebimento", type: "text" },
+      { key: "bancoNumero", label: "Banco (número)", type: "text" },
+      { key: "bancoAgencia", label: "Agência", type: "text" },
       { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true },
       { key: "endereco", label: "Endereço", type: "endereco" },
       { key: "nfeSerie", label: "NFe — Série", type: "text" },
@@ -640,6 +644,9 @@ const MODULES = {
       ie: data.ie || undefined,
       im: data.im || undefined,
       rntrc: data.rntrc || undefined,
+      pixRecebimento: data.pixRecebimento || undefined,
+      bancoNumero: data.bancoNumero || undefined,
+      bancoAgencia: data.bancoAgencia || undefined,
       logoUrl: data.logo || undefined,
       regimeTributario: data.regime === "Lucro Presumido" ? "lucro_presumido"
         : data.regime === "Lucro Real" ? "lucro_real" : "simples_nacional",
@@ -659,6 +666,9 @@ const MODULES = {
       ie: r.ie,
       im: r.im,
       rntrc: r.rntrc,
+      pixRecebimento: r.pixRecebimento,
+      bancoNumero: r.bancoNumero,
+      bancoAgencia: r.bancoAgencia,
       logo: r.logoUrl,
       regime: r.regimeTributario === "lucro_presumido" ? "Lucro Presumido"
         : r.regimeTributario === "lucro_real" ? "Lucro Real" : "Simples Nacional",

@@ -165,6 +165,12 @@ model Empresa {
 
   usuarios Usuario[] @relation("UsuarioEmpresas")
 
+  // Onde a empresa recebe o frete. O MDF-e exige o grupo de dados
+  // bancários no pagamento quando não há adiantamento nem parcelas.
+  pixRecebimento String? @map("pix_recebimento")
+  bancoNumero    String? @map("banco_numero")
+  bancoAgencia   String? @map("banco_agencia")
+
   reps Rep[]
 
   @@map("empresas")

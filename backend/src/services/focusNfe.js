@@ -653,7 +653,7 @@ function contratantesDosCtes(ctes) {
 // Quem paga o frete, quanto e como. A SEFAZ exige esse grupo no MDF-e de
 // carga lotação (rejeição 302) — e os dados são os do próprio CT-e: o
 // tomador paga, e o valor é o da prestação.
-function pagamentosDosCtes(ctes) {
+function pagamentosDosCtes(ctes, empresa) {
   const porDocumento = new Map();
 
   for (const cte of ctes || []) {
@@ -691,10 +691,17 @@ function pagamentosDosCtes(ctes) {
     componentes: [{ tipo: "04", valor: dec(p.valor) }],
     valor_total_contrato: dec(p.valor),
     // No MDF-e, "a prazo" quer dizer PARCELADO — e exige o grupo das
-    // parcelas ou os dados bancários no XML. Frete pago na entrega
-    // continua sendo à vista, então é isso que vai aqui. Só mudaria se o
-    // sistema passasse a controlar parcelamento de frete.
+    // parcelas no XML. Frete pago na entrega continua sendo à vista.
     forma_pagamento: "0",
+
+    // O schema exige ao menos um destes depois da forma de pagamento:
+    // adiantamento, parcelas ou dados bancários. Sem adiantamento e sem
+    // parcelamento, declaramos isso explicitamente — e mandamos os dados
+    // de recebimento da empresa quando estiverem cadastrados.
+    indicador_adiantamento: "0",
+    pix: empresa?.pixRecebimento || undefined,
+    numero_banco: empresa?.bancoNumero || undefined,
+    numero_agencia: empresa?.bancoAgencia || undefined,
   }));
 }
 
@@ -829,7 +836,7 @@ function montarPayloadMdfe({
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
       contratantes: contratantesDosCtes(ctes),
-      pagamentos: pagamentosDosCtes(ctes),
+      pagamentos: pagamentosDosCtes(ctes, empresa),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,

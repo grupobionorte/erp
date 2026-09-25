@@ -174,6 +174,7 @@ model Empresa {
   reps Rep[]
 
   @@map("empresas")
+  motoristas Motorista[]
 }
 
 model Pessoa {
@@ -233,7 +234,7 @@ model Colaborador {
   usuario                   Usuario?
   marcacoesPonto            MarcacaoPonto[]
   jornadas                  JornadaTrabalho[]
-  veiculosComoMotorista     Veiculo[]         @relation("VeiculosDoMotorista")
+  motorista                 Motorista?
   tratamentosPonto          TratamentoPonto[]
   biometriaFacial           BiometriaFacial?
 
@@ -267,6 +268,7 @@ model Transportadora {
 
   @@unique([cnpj, empresaId])
   @@map("transportadoras")
+  motoristas     Motorista[]
 }
 
 model Veiculo {
@@ -307,8 +309,8 @@ model Veiculo {
   // Motorista habitual, vindo do cadastro de colaboradores: nome e CPF
   // ficam num lugar só, e o CT-e aproveita os mesmos dados. Os campos de
   // texto abaixo ficaram de versões anteriores e não são mais usados.
-  motoristaId   Int?         @map("motorista_id")
-  motorista     Colaborador? @relation("VeiculosDoMotorista", fields: [motoristaId], references: [id])
+  motoristaId   Int?       @map("motorista_id")
+  motorista     Motorista? @relation(fields: [motoristaId], references: [id])
   motoristaNome String?      @map("motorista_nome")
   motoristaCpf  String?      @map("motorista_cpf")
 
@@ -798,4 +800,42 @@ model JornadaDia {
 
   @@unique([jornadaId, diaSemana])
   @@map("jornadas_dias")
+}
+
+// Motorista. Separado de colaborador de propósito: boa parte dos motoristas
+// é de caminhão agregado ou de terceiro, não tem vínculo com a empresa e não
+// entra no controle de ponto. Misturar os dois cadastros faria o ponto
+// cobrar jornada de quem não é funcionário.
+model Motorista {
+  id     Int     @id @default(autoincrement())
+  nome   String
+  cpf    String
+  // funcionario | agregado | terceiro
+  vinculo String @default("terceiro")
+
+  cnh           String?
+  categoriaCnh  String?   @map("categoria_cnh")
+  validadeCnh   DateTime? @map("validade_cnh")
+  telefone      String?
+
+  // Quando o motorista é funcionário, aponta para o colaborador — assim o
+  // ponto e o CT-e falam da mesma pessoa em vez de duplicá-la.
+  colaboradorId Int?         @unique @map("colaborador_id")
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+
+  // Transportadora do agregado, quando houver.
+  transportadoraId Int?            @map("transportadora_id")
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  ativo     Boolean  @default(true)
+  observacao String?
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  veiculos Veiculo[]
+
+  @@index([empresaId, nome])
+  @@map("motoristas")
 }

@@ -453,8 +453,8 @@ const MODULES = {
       // o CT-e preenche nome e CPF.
       {
         key: "motoristaId", label: "Motorista", type: "vinculo",
-        fonte: "/colaboradores", vazio: "Nenhum",
-        rotulo: (c) => [c.nome, c.cargo].filter(Boolean).join(" — "),
+        fonte: "/motoristas", vazio: "Nenhum",
+        rotulo: (m) => [m.nome, m.cnh && `CNH ${m.cnh}`].filter(Boolean).join(" — "),
       },
       // Transportadora ficou reservada para subcontratação futura; a frota
       // hoje é própria, então saiu do topo e não é mais obrigatória.
@@ -510,6 +510,57 @@ const MODULES = {
       motoristaId: r.motoristaId ?? null,
       motoristaNome: r.motorista?.nome || "—",
       motoristaCpf: r.motorista?.cpf || "",
+    }),
+  },
+  motoristas: {
+    label: "Motoristas",
+    icon: Users,
+    color: "amber",
+    apiPath: "/motoristas",
+    // Cadastro separado de colaboradores: boa parte é de caminhão agregado
+    // ou de terceiro, sem vínculo com a empresa e fora do controle de ponto.
+    fields: [
+      { key: "nome", label: "Nome", type: "text", required: true },
+      { key: "cpf", label: "CPF", type: "text", required: true },
+      { key: "vinculo", label: "Vínculo", type: "select", options: ["Funcionário", "Agregado", "Terceiro"] },
+      { key: "cnh", label: "CNH", type: "text" },
+      { key: "categoriaCnh", label: "Categoria da CNH", type: "select", options: ["A", "B", "C", "D", "E", "AB", "AC", "AD", "AE"] },
+      { key: "validadeCnh", label: "Validade da CNH", type: "date" },
+      { key: "telefone", label: "Telefone", type: "text" },
+      { key: "transportadoraId", label: "Transportadora (agregado)", type: "transportadora-select" },
+      {
+        key: "colaboradorId", label: "Colaborador vinculado (se for funcionário)", type: "vinculo",
+        fonte: "/colaboradores", vazio: "Nenhum",
+        rotulo: (c) => [c.nome, c.cargo].filter(Boolean).join(" — "),
+      },
+      { key: "observacao", label: "Observação", type: "text" },
+    ],
+    columns: ["nome", "cpf", "vinculo", "transportadoraNome"],
+    toApi: (data) => ({
+      nome: data.nome,
+      cpf: data.cpf,
+      vinculo: { "Funcionário": "funcionario", "Agregado": "agregado", "Terceiro": "terceiro" }[data.vinculo] || "terceiro",
+      cnh: data.cnh || undefined,
+      categoriaCnh: data.categoriaCnh || undefined,
+      validadeCnh: data.validadeCnh || null,
+      telefone: data.telefone || undefined,
+      transportadoraId: data.transportadoraId ? Number(data.transportadoraId) : null,
+      colaboradorId: data.colaboradorId ?? null,
+      observacao: data.observacao || undefined,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      nome: r.nome,
+      cpf: r.cpf,
+      vinculo: { funcionario: "Funcionário", agregado: "Agregado", terceiro: "Terceiro" }[r.vinculo] || "Terceiro",
+      cnh: r.cnh,
+      categoriaCnh: r.categoriaCnh,
+      validadeCnh: r.validadeCnh ? String(r.validadeCnh).slice(0, 10) : "",
+      telefone: r.telefone,
+      transportadoraId: r.transportadoraId,
+      transportadoraNome: r.transportadora?.razaoSocial || "—",
+      colaboradorId: r.colaboradorId,
+      observacao: r.observacao,
     }),
   },
   produtos: {
@@ -4299,7 +4350,7 @@ function NfeCteField({ onSelecionar }) {
   );
 }
 
-function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
+function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
@@ -4473,7 +4524,7 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   // com o colaborador é o que evita digitar errado.
   const escolherMotorista = (id) => {
     setMotoristaId(id);
-    const pessoa = (colaboradores || []).find(c => String(c.id) === String(id));
+    const pessoa = (motoristas || []).find(m => String(m.id) === String(id));
     setNomeMotorista(pessoa?.nome || "");
     setCpfMotorista(pessoa?.cpf ? formatCPF(pessoa.cpf) : "");
   };
@@ -5113,7 +5164,11 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={motoristaId} onChange={e => escolherMotorista(e.target.value)} style={{ flex: 1 }}>
                     <option value="">{nomeMotorista || "Selecione…"}</option>
-                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    {(motoristas || []).map(m => (
+                      <option key={m.id} value={m.id}>
+                        {m.nome}{m.vinculo && m.vinculo !== "funcionario" ? ` (${m.vinculo})` : ""}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -5234,6 +5289,7 @@ function CteView({ onIrParaMdfe }) {
   const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
   const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
   const { items: colaboradores } = useApiCollection("colaboradores");
+  const { items: motoristas } = useApiCollection("motoristas");
 
   const [ctes, setCtes] = useState(null);
   const [erro, setErro] = useState(null);
@@ -5672,6 +5728,7 @@ function CteView({ onIrParaMdfe }) {
           cte={editando}
           clientes={clientes}
           produtos={produtos}
+          motoristas={motoristas}
           transportadoras={transportadoras}
           veiculos={veiculos}
           colaboradores={colaboradores}
@@ -5755,7 +5812,7 @@ function ErpBiomassa() {
   const navItems = [
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
     { divider: true },
-    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "colaboradores"]),
+    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores"]),
     { divider: true },
     { key: "notasFiscais", label: "Vendas/NFe", icon: FileText },
     { key: "cte", label: "CTe", icon: Truck },

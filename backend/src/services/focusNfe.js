@@ -173,7 +173,10 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     // Mesmo limite de 60 caracteres vale para a NF-e.
     natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
     data_emissao: (documento.dataEmissao || new Date()).toISOString(),
-    data_entrada_saida: documento.dataSaida ? documento.dataSaida.toISOString() : undefined,
+    // Data E HORA da saída: o DANFE tem campo próprio para a hora, e sem o
+    // fuso da operação ela sai zerada ou trocada. Mesmo tratamento da data
+    // de emissão.
+    data_entrada_saida: documento.dataSaida ? dataEmissaoSefaz(documento.dataSaida) : undefined,
     tipo_documento: 1, // 1 = saída
     finalidade_emissao: CODIGO_FINALIDADE[documento.finalidadeOperacao] ?? 1,
     consumidor_final: documento.consumidorFinal ? 1 : 0,
@@ -223,7 +226,14 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     icms_base_calculo_st: documento.baseCalculoIcmsSt || undefined,
     icms_valor_total_st: documento.valorIcmsSt || undefined,
 
-    informacoes_adicionais_contribuinte: documento.informacoesComplementares || undefined,
+    // Mensagem fixa da empresa + o que foi escrito na nota. A fixa vem
+    // depois porque o texto específico daquela venda é o que o destinatário
+    // procura primeiro. Limite do campo: 5000 caracteres.
+    informacoes_adicionais_contribuinte: [documento.informacoesComplementares, empresa.observacaoPadraoNfe]
+      .map((t) => (t || "").trim())
+      .filter(Boolean)
+      .join(" | ")
+      .slice(0, 5000) || undefined,
 
     items: itens.map((item, indice) => ({
       numero_item: indice + 1,

@@ -334,6 +334,7 @@ const MODULES = {
       telefone: data.telefone || undefined,
       email: data.email || undefined,
       eCliente: true,
+      observacaoPadrao: data.observacaoPadrao || undefined,
       endereco: data.endereco || undefined,
     }),
     fromApi: (r) => ({
@@ -347,6 +348,7 @@ const MODULES = {
       telefone: r.telefone,
       email: r.email,
       endereco: mapEndereco(r.endereco),
+      observacaoPadrao: r.observacaoPadrao,
     }),
   },
   fornecedores: {
@@ -376,6 +378,7 @@ const MODULES = {
       telefone: data.telefone || undefined,
       email: data.email || undefined,
       eFornecedor: true,
+      observacaoPadrao: data.observacaoPadrao || undefined,
       endereco: data.endereco || undefined,
     }),
     fromApi: (r) => ({
@@ -742,6 +745,8 @@ const MODULES = {
       { key: "cteProximoNumero", label: "CTe — Próximo número", type: "number" },
       { key: "mdfeSerie", label: "MDFe — Série", type: "text" },
       { key: "mdfeProximoNumero", label: "MDFe — Próximo número", type: "number" },
+      // Vai em toda NF-e, somada ao que for escrito na nota.
+      { key: "observacaoPadraoNfe", label: "Mensagem fixa nas informações complementares da NF-e", type: "texto-longo" },
     ],
     columns: ["nome", "cnpj", "regime", "endereco.cidade"],
     toApi: (data) => ({
@@ -764,6 +769,7 @@ const MODULES = {
       cteProximoNumero: data.cteProximoNumero ? Number(data.cteProximoNumero) : undefined,
       mdfeSerie: data.mdfeSerie || undefined,
       mdfeProximoNumero: data.mdfeProximoNumero ? Number(data.mdfeProximoNumero) : undefined,
+      observacaoPadraoNfe: data.observacaoPadraoNfe || undefined,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -786,6 +792,7 @@ const MODULES = {
       cteProximoNumero: r.cteProximoNumero,
       mdfeSerie: r.mdfeSerie,
       mdfeProximoNumero: r.mdfeProximoNumero,
+      observacaoPadraoNfe: r.observacaoPadraoNfe,
       ativo: r.ativo !== false,
     }),
     // Exclusão de empresa é só uma marca: dá pra ver as inativas e trazer
@@ -1370,6 +1377,14 @@ function Field({ field, value, onChange, disabled }) {
             return <option key={valorOpcao} value={valorOpcao}>{rotuloOpcao}</option>;
           })}
         </select>
+      ) : field.type === "texto-longo" ? (
+        <textarea
+          rows={3}
+          value={value ?? ""}
+          disabled={disabled}
+          onChange={e => onChange(e.target.value)}
+          style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+        />
       ) : field.type === "moeda" ? (
         <InputMoeda value={value ?? ""} onChange={onChange} disabled={disabled} casas={field.casas ?? 2} />
       ) : (
@@ -1862,6 +1877,20 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
                 <span className="field-label">E-mail</span>
                 <input type="email" value={data.email || ""} onChange={e => set("email", e.target.value)} />
                 <p className="pf-ajuda">Usado para enviar o DANFE e o DACTE automaticamente.</p>
+              </label>
+              <label className="pf-campo pf-c12">
+                <span className="field-label">Observação padrão nas notas</span>
+                {/* Texto que acompanha toda nota desse cliente: regime
+                    especial, número de contrato, instrução de entrega. */}
+                <textarea
+                  rows={3}
+                  value={data.observacaoPadrao || ""}
+                  onChange={e => set("observacaoPadrao", e.target.value)}
+                  style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+                />
+                <p className="pf-ajuda">
+                  Entra sozinho nas informações complementares da NF-e quando esse cliente é escolhido.
+                </p>
               </label>
             </div>
             {erro && <p className="pf-aviso">{erro}</p>}
@@ -3530,7 +3559,27 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
+  // A hora vem junto da data no banco; aqui os dois campos são separados
+  // porque é assim que se preenche.
+  const [horaSaida, setHoraSaida] = useState(() => {
+    if (!nota?.dataSaida) return "";
+    const d = new Date(nota.dataSaida);
+    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  });
   const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
+
+  // Escolher o cliente traz a observação padrão dele. Só preenche quando o
+  // campo está vazio ou ainda tem a observação de outro cliente — texto
+  // digitado à mão para esta nota não é sobrescrito.
+  const escolherDestinatario = (id) => {
+    const anterior = (clientes || []).find(c => String(c.id) === String(destinatarioId));
+    setDestinatarioId(id);
+
+    const novo = (clientes || []).find(c => String(c.id) === String(id));
+    const podeTrocar = !informacoesComplementares
+      || informacoesComplementares === (anterior?.observacaoPadrao || "");
+    if (podeTrocar) setInformacoesComplementares(novo?.observacaoPadrao || "");
+  };
   const [finalidadeOperacao, setFinalidadeOperacao] = useState(nota?.finalidadeOperacao || "Normal");
   const [consumidorFinal, setConsumidorFinal] = useState(nota?.consumidorFinal ?? false);
   const [indicadorPresenca, setIndicadorPresenca] = useState(nota?.indicadorPresenca || "Não se aplica");
@@ -3599,6 +3648,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         naturezaOperacao,
         modalidadeFrete,
         dataSaida: dataSaida || undefined,
+        horaSaida: horaSaida || undefined,
         informacoesComplementares,
         finalidadeOperacao,
         consumidorFinal,
@@ -3671,6 +3721,12 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
               </div>
               <div className="field-group">
+                <label className="field-label">Hora de saída</label>
+                {/* O DANFE tem campo próprio para a hora; em branco ele sai
+                    zerado, o que estranha numa conferência de estrada. */}
+                <input type="time" value={horaSaida} onChange={e => setHoraSaida(e.target.value)} />
+              </div>
+              <div className="field-group">
                 <label className="field-label">Data de emissão</label>
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
@@ -3683,7 +3739,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               <div className="field-group">
                 <label className="field-label">Cliente<span className="req">*</span></label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={destinatarioId} onChange={e => setDestinatarioId(e.target.value)} style={{ flex: 1 }}>
+                  <select value={destinatarioId} onChange={e => escolherDestinatario(e.target.value)} style={{ flex: 1 }}>
                     <option value="">Selecione…</option>
                     {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
@@ -3833,7 +3889,18 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             </div>
             <div className="field-group" style={{ marginBottom: 0 }}>
               <label className="field-label">Informações complementares</label>
-              <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
+              {/* Texto longo por natureza: regime especial, número de
+                  contrato, instrução de entrega. Uma linha só obrigava a
+                  rolar o campo para reler. */}
+              <textarea
+                rows={4}
+                value={informacoesComplementares}
+                onChange={e => setInformacoesComplementares(e.target.value)}
+                style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+              />
+              <p className="hint">
+                A mensagem fixa cadastrada em Configurações é acrescentada automaticamente ao emitir.
+              </p>
             </div>
           </div>
 

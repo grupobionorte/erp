@@ -119,7 +119,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    destinatarioId, transportadoraId, veiculoId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
+    destinatarioId, transportadoraId, veiculoId, naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
     dataEmissao, colaboradorResponsavelId,
@@ -184,7 +184,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
       naturezaOperacao: naturezaOperacao || undefined,
       modalidadeFrete: modalidadeFrete || undefined,
-      dataSaida: dataSaida ? new Date(dataSaida) : undefined,
+      dataSaida: dataHoraNoFuso(dataSaida, horaSaida),
       informacoesComplementares: informacoesComplementares || undefined,
       finalidadeOperacao: finalidadeOperacao || undefined,
       consumidorFinal: typeof consumidorFinal === "boolean" ? consumidorFinal : undefined,
@@ -365,6 +365,23 @@ async function ncmDoProduto(descricao, empresaId) {
     select: { ncm: true },
   });
   return produto?.ncm || null;
+}
+
+// Junta data e hora no fuso da operação. Sem isso, "2026-09-25" vira
+// meia-noite em UTC e a hora de saída sai zerada (ou no dia anterior) no
+// DANFE.
+function dataHoraNoFuso(data, hora) {
+  if (!data) return undefined;
+  const referencia = new Date(`${data}T12:00:00Z`);
+  const offsetMin = -new Intl.DateTimeFormat("en-US", {
+    timeZone: process.env.TZ_FISCAL || "America/Cuiaba",
+    timeZoneName: "longOffset",
+  }).formatToParts(referencia).find((p) => p.type === "timeZoneName").value
+    .replace("GMT", "").split(":").reduce((h, m) => Number(h) * 60 + Math.sign(Number(h)) * Number(m));
+  const sinal = offsetMin > 0 ? "-" : "+";
+  const abs = Math.abs(offsetMin);
+  const pad = (n) => String(n).padStart(2, "0");
+  return new Date(`${data}T${hora || "00:00"}:00${sinal}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`);
 }
 
 // Gera um rascunho de MDFe já preenchido a partir de CT-e(s) autorizados.
@@ -896,7 +913,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   }
 
   const {
-    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, informacoesComplementares, itens,
+    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
@@ -1003,7 +1020,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       destinoPercurso: destinoPercurso ?? undefined,
       naturezaOperacao: naturezaOperacao ?? undefined,
       modalidadeFrete: modalidadeFrete ?? undefined,
-      dataSaida: dataSaida ? new Date(dataSaida) : undefined,
+      dataSaida: dataHoraNoFuso(dataSaida, horaSaida),
       informacoesComplementares: informacoesComplementares ?? undefined,
       finalidadeOperacao: finalidadeOperacao ?? undefined,
       consumidorFinal: typeof consumidorFinal === "boolean" ? consumidorFinal : undefined,

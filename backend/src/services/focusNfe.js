@@ -590,6 +590,21 @@ function validarPayloadCte(payload) {
 // Unidade de medida do peso no MDFe: "01" KG, "02" TON.
 const UNIDADE_PESO_MDFE = { KG: "01", TON: "02" };
 
+// Códigos do modal rodoviário. O cadastro guarda o rótulo que a operação
+// usa; o XML quer o código da tabela.
+const TIPO_RODADO_MDFE = {
+  "TRUCK": "01", "TOCO": "02", "CAVALO MECANICO": "03", "CAVALO MECÂNICO": "03",
+  "VAN": "04", "UTILITARIO": "05", "UTILITÁRIO": "05", "OUTROS": "06",
+};
+const TIPO_CARROCERIA_MDFE = {
+  "NAO APLICAVEL": "00", "NÃO APLICÁVEL": "00", "ABERTA": "01",
+  "FECHADA/BAU": "02", "FECHADA/BAÚ": "02", "GRANELEIRA": "03",
+  "PORTA CONTAINER": "04", "SIDER": "05",
+};
+
+const codigoDe = (tabela, valor, padrao) =>
+  tabela[String(valor || "").trim().toUpperCase()] || padrao;
+
 function montarPayloadMdfe({
   empresa,
   veiculo,
@@ -614,10 +629,14 @@ function montarPayloadMdfe({
   const ctes = chavesPorTipo("CTe");
   const nfes = chavesPorTipo("NFe");
 
+  const ufEmpresa = empresa.endereco?.uf;
+  const listaReboques = (reboques || [veiculoReboque]).filter(Boolean).slice(0, 3);
+
   return {
     // 1 = prestador de serviço de transporte, 2 = carga própria.
     emitente: documento.tipoEmitenteMdfe || "1",
-    modal: "1", // rodoviário
+    // ETC: empresa de transporte de cargas. TAC seria o autônomo.
+    tipo_transporte: documento.tipoTransportador || "1",
     data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
 
     cnpj_emitente: somenteDigitos(empresa.cnpj),
@@ -631,7 +650,7 @@ function montarPayloadMdfe({
     codigo_municipio_emitente: empresa.endereco?.codigoIbgeCidade || undefined,
     municipio_emitente: empresa.endereco?.cidade,
     cep_emitente: somenteDigitos(empresa.endereco?.cep),
-    uf_emitente: empresa.endereco?.uf,
+    uf_emitente: ufEmpresa,
     telefone_emitente: somenteDigitos(empresa.telefone),
     email_emitente: empresa.email || undefined,
 
@@ -642,25 +661,29 @@ function montarPayloadMdfe({
     municipios_carregamento: documento.codigoMunicipioCarregamento
       ? [{ codigo: Number(documento.codigoMunicipioCarregamento), nome: documento.municipioCarregamento }]
       : undefined,
+
+    // Os documentos vão DENTRO do município de descarregamento — é assim
+    // que o MDF-e se organiza: cada município de entrega lista o que será
+    // descarregado nele.
     municipios_descarregamento: documento.codigoMunicipioDescarregamento
-      ? [{ codigo: Number(documento.codigoMunicipioDescarregamento), nome: documento.municipioDescarregamento }]
+      ? [{
+          codigo: Number(documento.codigoMunicipioDescarregamento),
+          nome: documento.municipioDescarregamento,
+          conhecimentos_transporte: ctes.length
+            ? ctes.map((d) => ({ chave_cte: somenteDigitos(d.chaveAcesso) }))
+            : undefined,
+          notas_fiscais: nfes.length
+            ? nfes.map((d) => ({ chave_nfe: somenteDigitos(d.chaveAcesso) }))
+            : undefined,
+        }]
       : undefined,
 
-    // Prestador de serviço relaciona CT-e; carga própria relaciona NF-e.
-    // Só dígitos: documentos gravados antes guardavam a chave com o
-    // prefixo "CTe", que a SEFAZ recusa.
-    conhecimentos_transporte: ctes.length
-      ? ctes.map((d) => ({ chave_cte: somenteDigitos(d.chaveAcesso) }))
-      : undefined,
-    notas_fiscais: nfes.length
-      ? nfes.map((d) => ({ chave_nfe: somenteDigitos(d.chaveAcesso) }))
-      : undefined,
     quantidade_total_cte: ctes.length || undefined,
     quantidade_total_nfe: nfes.length || undefined,
 
     // Totalizadores da carga.
     valor_total_carga: dec(documento.valorTotalCarga),
-    codigo_unidade_medida_peso_bruto: documento.unidadeMedidaPeso || UNIDADE_PESO_MDFE.KG,
+    codigo_unidade_medida_peso_bruto: documento.unidadeMedidaPeso || "01",
     peso_bruto: dec(documento.pesoBrutoCarga, 4),
     tipo_carga: documento.tipoCarga || undefined,
     descricao_produto: documento.produtoPredominante || undefined,
@@ -680,41 +703,45 @@ function montarPayloadMdfe({
         ]
       : undefined,
 
-    rodoviario: {
-      rntrc: somenteDigitos(empresa.rntrc),
-      ciot: documento.ciot ? [{ codigo: documento.ciot, cnpj: somenteDigitos(empresa.cnpj) }] : undefined,
-      veiculo_tracao: {
-        placa: veiculo?.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
-        renavam: somenteDigitos(veiculo?.renavam),
-        tara: veiculo?.taraKg ? Math.round(veiculo.taraKg) : undefined,
-        capacidade_kg: veiculo?.capacidadeKg ? Math.round(veiculo.capacidadeKg) : undefined,
-        capacidade_m3: veiculo?.capacidadeM3 ? Math.round(veiculo.capacidadeM3) : undefined,
-        tipo_rodado: veiculo?.tipoRodado || undefined,
-        tipo_carroceria: veiculo?.tipoCarroceria || undefined,
-        uf: veiculo?.uf || empresa.endereco?.uf,
-        condutores: nomeMotorista
-          ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
-          : undefined,
-      },
-      // Bitrem e rodotrem levam mais de um engate; a lista aceita os três.
-      veiculos_reboque: (() => {
-        const lista = (reboques || [veiculoReboque]).filter(Boolean);
-        if (!lista.length) return undefined;
-        return lista.map((r) => ({
-          placa: r.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
-          renavam: somenteDigitos(r.renavam),
-          tara: r.taraKg ? Math.round(r.taraKg) : undefined,
-          capacidade_kg: r.capacidadeKg ? Math.round(r.capacidadeKg) : undefined,
-          capacidade_m3: r.capacidadeM3 ? Math.round(r.capacidadeM3) : undefined,
-          tipo_carroceria: r.tipoCarroceria || undefined,
-          uf: r.uf || empresa.endereco?.uf,
-        }));
-      })(),
+    // Modal rodoviário: o nome do grupo é modal_rodoviario, e os dados do
+    // veículo de tração são campos planos aqui dentro (não um objeto
+    // separado). Reboques e condutores são coleções.
+    modal_rodoviario: {
+      registro_nacional_transporte: somenteDigitos(empresa.rntrc),
+      ciot: documento.ciot
+        ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
+        : undefined,
+
+      placa_veiculo: veiculo?.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+      renavam_veiculo: somenteDigitos(veiculo?.renavam),
+      tara_veiculo: veiculo?.taraKg ? Math.round(veiculo.taraKg) : undefined,
+      capacidade_kg_veiculo: veiculo?.capacidadeKg ? Math.round(veiculo.capacidadeKg) : undefined,
+      capacidade_m3_veiculo: veiculo?.capacidadeM3 ? Math.round(veiculo.capacidadeM3) : undefined,
+      tipo_rodado_veiculo: codigoDe(TIPO_RODADO_MDFE, veiculo?.tipoRodado, "06"),
+      tipo_carroceria_veiculo: codigoDe(TIPO_CARROCERIA_MDFE, veiculo?.tipoCarroceria, "00"),
+      uf_licenciamento_veiculo: veiculo?.uf || ufEmpresa,
+
+      condutores: nomeMotorista
+        ? [{ nome: nomeMotorista, cpf: somenteDigitos(cpfMotorista) }]
+        : undefined,
+
+      veiculos_reboque: listaReboques.length
+        ? listaReboques.map((r) => ({
+            placa: r.placa?.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+            renavam: somenteDigitos(r.renavam),
+            tara: r.taraKg ? Math.round(r.taraKg) : undefined,
+            capacidade_kg: r.capacidadeKg ? Math.round(r.capacidadeKg) : undefined,
+            capacidade_m3: r.capacidadeM3 ? Math.round(r.capacidadeM3) : undefined,
+            tipo_carroceria: codigoDe(TIPO_CARROCERIA_MDFE, r.tipoCarroceria, "00"),
+            uf_licenciamento: r.uf || ufEmpresa,
+          }))
+        : undefined,
     },
 
     informacao_complementar: documento.informacoesComplementares || undefined,
   };
 }
+
 
 // Conferência do MDFe antes do envio, no mesmo espírito da do CT-e.
 function validarPayloadMdfe(payload) {
@@ -729,15 +756,20 @@ function validarPayloadMdfe(payload) {
   if (!payload.municipios_descarregamento?.length) {
     problemas.push("Município de descarregamento não informado (precisa do código IBGE).");
   }
-  if (!payload.conhecimentos_transporte?.length && !payload.notas_fiscais?.length) {
+
+  // Os documentos ficam dentro de cada município de descarregamento.
+  const ctes = (payload.municipios_descarregamento || []).flatMap((m) => m.conhecimentos_transporte || []);
+  const nfes = (payload.municipios_descarregamento || []).flatMap((m) => m.notas_fiscais || []);
+
+  if (!ctes.length && !nfes.length) {
     problemas.push("Nenhum CT-e ou NF-e vinculado ao manifesto.");
   }
-  for (const cte of payload.conhecimentos_transporte || []) {
+  for (const cte of ctes) {
     if (!/^\d{44}$/.test(cte.chave_cte || "")) {
       problemas.push(`Chave de CT-e inválida: ${cte.chave_cte || "vazia"}`);
     }
   }
-  for (const nfe of payload.notas_fiscais || []) {
+  for (const nfe of nfes) {
     if (!/^\d{44}$/.test(nfe.chave_nfe || "")) {
       problemas.push(`Chave de NF-e inválida: ${nfe.chave_nfe || "vazia"}`);
     }
@@ -748,14 +780,22 @@ function validarPayloadMdfe(payload) {
   if (!payload.peso_bruto) {
     problemas.push("Peso bruto da carga não informado.");
   }
-  if (!/^\d{8}$/.test(payload.rodoviario?.rntrc || "")) {
+  const modal = payload.modal_rodoviario || {};
+  if (!/^\d{8}$/.test(modal.registro_nacional_transporte || "")) {
     problemas.push("RNTRC não preenchido (8 dígitos) no cadastro da empresa emitente.");
   }
-  if (!payload.rodoviario?.veiculo_tracao?.placa) {
-    problemas.push("Veículo de tração sem placa.");
-  }
-  if (!payload.rodoviario?.veiculo_tracao?.condutores?.length) {
+  if (!modal.placa_veiculo) problemas.push("Veículo de tração sem placa.");
+  // Tara e UF de licenciamento são obrigatórias no XML; sem elas a SEFAZ
+  // rejeita e a mensagem que volta é pouco clara.
+  if (!modal.tara_veiculo) problemas.push("Tara do veículo não preenchida no cadastro de veículos.");
+  if (!modal.uf_licenciamento_veiculo) problemas.push("UF de licenciamento do veículo não informada.");
+  if (!modal.condutores?.length) {
     problemas.push("Condutor não informado (nome e CPF).");
+  } else if (!/^\d{11}$/.test(modal.condutores[0].cpf || "")) {
+    problemas.push("CPF do condutor inválido.");
+  }
+  for (const reboque of modal.veiculos_reboque || []) {
+    if (!reboque.tara) problemas.push(`Tara não preenchida no cadastro do reboque ${reboque.placa || ""}.`);
   }
   if (!payload.seguros_carga?.length) {
     problemas.push(

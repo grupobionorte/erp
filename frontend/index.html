@@ -91,7 +91,48 @@ const CSOSN = [
   { value: "500", label: "500 - ICMS cobrado anteriormente por substituição tributária ou por antecipação" },
   { value: "900", label: "900 - Outros" },
 ];
-const CST_PIS_COFINS = ["01","02","03","04","05","06","07","08","09","49","50","51","52","53","54","55","56","60","61","62","63","64","65","66","67","70","71","72","73","74","75","98","99"];
+// CST de PIS e COFINS com a descrição junto: o código sozinho não diz nada
+// para quem não decorou a tabela, e escolher errado aqui muda o imposto.
+const CST_PIS_COFINS = [
+  "01 - Operação tributável com alíquota básica",
+  "02 - Operação tributável com alíquota diferenciada",
+  "03 - Operação tributável por quantidade",
+  "04 - Operação tributável monofásica, alíquota zero",
+  "05 - Operação tributável por substituição tributária",
+  "06 - Operação tributável a alíquota zero",
+  "07 - Operação isenta da contribuição",
+  "08 - Operação sem incidência da contribuição",
+  "09 - Operação com suspensão da contribuição",
+  "49 - Outras operações de saída",
+  "50 - Crédito vinculado a receita tributada no mercado interno",
+  "51 - Crédito vinculado a receita não tributada no mercado interno",
+  "52 - Crédito vinculado a receita de exportação",
+  "53 - Crédito vinculado a receitas tributadas e não tributadas no mercado interno",
+  "54 - Crédito vinculado a receitas no mercado interno e de exportação",
+  "55 - Crédito vinculado a receitas não tributadas no mercado interno e de exportação",
+  "56 - Crédito vinculado a receitas tributadas e não tributadas, e de exportação",
+  "60 - Crédito presumido sobre receita tributada no mercado interno",
+  "61 - Crédito presumido sobre receita não tributada no mercado interno",
+  "62 - Crédito presumido sobre receita de exportação",
+  "63 - Crédito presumido sobre receitas tributadas e não tributadas no mercado interno",
+  "64 - Crédito presumido sobre receitas no mercado interno e de exportação",
+  "65 - Crédito presumido sobre receitas não tributadas no mercado interno e de exportação",
+  "66 - Crédito presumido sobre receitas tributadas e não tributadas, e de exportação",
+  "67 - Crédito presumido — outras operações",
+  "70 - Operação de aquisição sem direito a crédito",
+  "71 - Operação de aquisição com isenção",
+  "72 - Operação de aquisição com suspensão",
+  "73 - Operação de aquisição a alíquota zero",
+  "74 - Operação de aquisição sem incidência da contribuição",
+  "75 - Operação de aquisição por substituição tributária",
+  "98 - Outras operações de entrada",
+  "99 - Outras operações",
+];
+
+// O XML quer só o código; a tela mostra a descrição junto.
+const soCodigo = (valor) => (valor ? String(valor).split(" - ")[0].trim() : valor);
+const comDescricao = (lista, codigo) =>
+  (codigo ? lista.find(item => item.startsWith(`${codigo} -`)) || codigo : "");
 
 const emptyEndereco = { cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", uf: "MT" };
 
@@ -584,8 +625,11 @@ const MODULES = {
       { key: "pisAliquota", label: "PIS — Alíquota (%)", type: "number" },
       { key: "cofinsCst", label: "COFINS — Situação Tributária", type: "select", options: CST_PIS_COFINS },
       { key: "cofinsAliquota", label: "COFINS — Alíquota (%)", type: "number" },
-      { key: "cstIbsCbs", label: "IBS/CBS — CST (Reforma Tributária)", type: "text" },
-      { key: "classificacaoTributariaIbsCbs", label: "IBS/CBS — Classificação (cClassTrib)", type: "text" },
+      // Enquanto a Reforma Tributária não entra em vigor, todo produto usa a
+      // mesma combinação. Vem preenchido e pode ser alterado quando a
+      // cobrança começar.
+      { key: "cstIbsCbs", label: "IBS/CBS — CST (Reforma Tributária)", type: "text", padrao: "000" },
+      { key: "classificacaoTributariaIbsCbs", label: "IBS/CBS — Classificação (cClassTrib)", type: "text", padrao: "000001" },
       { key: "valorUnitario", label: "Valor unitário (R$)", type: "moeda" },
     ],
     columns: ["codigo", "descricao", "ncm", "unidade", "valorUnitario"],
@@ -598,9 +642,9 @@ const MODULES = {
       origemMercadoria: data.origem || undefined,
       cstIcms: data.cst || undefined,
       csosn: data.csosn || undefined,
-      pisCst: data.pisCst || undefined,
+      pisCst: soCodigo(data.pisCst) || undefined,
       pisAliquota: data.pisAliquota !== undefined && data.pisAliquota !== "" ? Number(data.pisAliquota) : undefined,
-      cofinsCst: data.cofinsCst || undefined,
+      cofinsCst: soCodigo(data.cofinsCst) || undefined,
       cofinsAliquota: data.cofinsAliquota !== undefined && data.cofinsAliquota !== "" ? Number(data.cofinsAliquota) : undefined,
       cstIbsCbs: data.cstIbsCbs || undefined,
       classificacaoTributariaIbsCbs: data.classificacaoTributariaIbsCbs || undefined,
@@ -616,9 +660,9 @@ const MODULES = {
       origem: r.origemMercadoria,
       cst: r.cstIcms,
       csosn: r.csosn,
-      pisCst: r.pisCst,
+      pisCst: comDescricao(CST_PIS_COFINS, r.pisCst),
       pisAliquota: r.pisAliquota,
-      cofinsCst: r.cofinsCst,
+      cofinsCst: comDescricao(CST_PIS_COFINS, r.cofinsCst),
       cofinsAliquota: r.cofinsAliquota,
       cstIbsCbs: r.cstIbsCbs,
       classificacaoTributariaIbsCbs: r.classificacaoTributariaIbsCbs,
@@ -1843,7 +1887,16 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   // Alguns campos só fazem sentido na criação (ex: senha de um usuário
   // novo) — escondemos eles ao editar um registro existente.
   const camposVisiveis = config.fields.filter(f => !(f.hideOnEdit && editando));
-  const [data, setData] = useState(() => record || {});
+  // Cadastro novo já nasce com os valores padrão declarados nos campos —
+  // evita digitar o mesmo código em todo produto.
+  const [data, setData] = useState(() => {
+    if (record) return record;
+    const inicial = {};
+    for (const campo of config.fields) {
+      if (campo.padrao !== undefined) inicial[campo.key] = campo.padrao;
+    }
+    return inicial;
+  });
   const [error, setError] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [aba, setAba] = useState("dados");

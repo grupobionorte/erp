@@ -610,9 +610,15 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       veiculoReboque2: true,
       veiculoReboque3: true,
       documentosTransportados: { include: { notaFiscal: true } },
-      // Os contratantes do MDF-e saem do tomador de cada CT-e vinculado.
+      // Os contratantes do MDF-e saem do tomador de cada CT-e vinculado, e
+      // os CEPs de carga lotação saem dos endereços dessas pessoas.
       documentosVinculados: {
-        include: { destinatario: true, remetente: true, expedidor: true, recebedor: true },
+        include: {
+          destinatario: { include: { endereco: true } },
+          remetente: { include: { endereco: true } },
+          expedidor: { include: { endereco: true } },
+          recebedor: { include: { endereco: true } },
+        },
       },
     },
   });

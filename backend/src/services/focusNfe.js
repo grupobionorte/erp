@@ -675,6 +675,15 @@ function montarPayloadMdfe({
   const nfes = chavesPorTipo("NFe");
 
   const ufEmpresa = empresa.endereco?.uf;
+
+  // Um documento só = carga lotação.
+  const cargaLotacao = ctes.length + nfes.length === 1;
+  const unico = ctes[0] || nfes[0];
+  const cepCarregamento = unico?.remetente?.endereco?.cep
+    || unico?.expedidor?.endereco?.cep
+    || empresa.endereco?.cep;
+  const cepDescarregamento = unico?.destinatario?.endereco?.cep
+    || unico?.recebedor?.endereco?.cep;
   const listaReboques = (reboques || [veiculoReboque]).filter(Boolean).slice(0, 3);
 
   return {
@@ -732,6 +741,15 @@ function montarPayloadMdfe({
 
     quantidade_total_cte: ctes.length || undefined,
     quantidade_total_nfe: nfes.length || undefined,
+
+    // Carga lotação: manifesto com um único documento. Nesse caso a SEFAZ
+    // exige saber o ponto exato onde a carga foi pega e onde será
+    // entregue — o município não basta (rejeição 726). Usamos o CEP do
+    // remetente e do destinatário do CT-e.
+    ...(cargaLotacao ? {
+      cep_carregamento: somenteDigitos(cepCarregamento),
+      cep_descarregamento: somenteDigitos(cepDescarregamento),
+    } : {}),
 
     // Totalizadores da carga.
     valor_total_carga: dec(documento.valorTotalCarga),
@@ -846,6 +864,14 @@ function validarPayloadMdfe(payload) {
   // rejeita e a mensagem que volta é pouco clara.
   if (!modal.tara_veiculo) problemas.push("Tara do veículo não preenchida no cadastro de veículos.");
   if (!modal.uf_licenciamento_veiculo) problemas.push("UF de licenciamento do veículo não informada.");
+  // Carga lotação: sem os CEPs, a SEFAZ recusa com a rejeição 726.
+  const umDocumentoSo = (payload.quantidade_total_cte || 0) + (payload.quantidade_total_nfe || 0) === 1;
+  if (umDocumentoSo && (!payload.cep_carregamento || !payload.cep_descarregamento)) {
+    problemas.push(
+      "Manifesto com um documento só (carga lotação) exige o CEP de carregamento e de descarregamento. " +
+      "Preencha o CEP no cadastro do remetente e do destinatário do CT-e."
+    );
+  }
   if (!modal.contratantes?.length) {
     problemas.push("Contratante do serviço não identificado. Confira o tomador dos CT-es vinculados.");
   }

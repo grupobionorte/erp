@@ -138,7 +138,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   if (totalEmpresas === 0) {
     return res.json({
       token: gerarToken(usuario, null),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: null,
     });
   }
@@ -158,7 +158,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     const unica = empresasPermitidas[0];
     return res.json({
       token: gerarToken(usuario, unica.id),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: unica,
     });
   }
@@ -176,7 +176,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   res.json({
     token: gerarToken(usuario, empresaEscolhida.id),
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel },
+    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
     empresa: empresaEscolhida,
   });
 }));
@@ -191,7 +191,14 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
       select: { id: true, razaoSocial: true, logoUrl: true },
     });
   }
-  res.json({ ...req.usuario, empresa });
+  // O colaborador vinculado vem junto: é ele que os documentos usam como
+  // responsável, preenchido a partir de quem está logado.
+  const dados = await prisma.usuario.findUnique({
+    where: { id: req.usuario.id },
+    select: { colaboradorId: true, colaborador: { select: { id: true, nome: true } } },
+  });
+
+  res.json({ ...req.usuario, ...dados, empresa });
 }));
 
 module.exports = router;

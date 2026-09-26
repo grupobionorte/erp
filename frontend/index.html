@@ -967,6 +967,29 @@ function abrirAbaDeEspera(documento, anexo) {
 const abrirNaAba = (aba, url) => { if (aba && !aba.closed) aba.location.href = url; else window.open(url, "_blank"); };
 const fecharAba = (aba) => { try { if (aba && !aba.closed) aba.close(); } catch { /* já fechada */ } };
 
+// Quem está logado. Guardado aqui fora porque os formulários de documento
+// precisam disso para preencher o responsável, e passar por props atravessaria
+// meia dúzia de componentes sem nenhum outro uso.
+let usuarioLogado = null;
+const definirUsuarioLogado = (u) => { usuarioLogado = u; };
+const colaboradorDoUsuario = () =>
+  (usuarioLogado?.colaboradorId ? String(usuarioLogado.colaboradorId) : "");
+
+// Nome seguido do CNPJ/CPF. Nas listas de seleção, empresa com nome
+// parecido — ou a mesma razão social em duas filiais — só se distingue pelo
+// documento.
+const rotuloPessoa = (p) => {
+  if (!p) return "";
+  const doc = String(p.documento || "").replace(/\D/g, "");
+  if (doc.length === 14) {
+    return `${p.nome} - ${doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}`;
+  }
+  if (doc.length === 11) {
+    return `${p.nome} - ${doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}`;
+  }
+  return p.nome;
+};
+
 function getPath(obj, path) {
   return path.split(".").reduce((o, k) => (o ? o[k] : undefined), obj);
 }
@@ -3557,7 +3580,11 @@ const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
-  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : "");
+  // Documento novo já nasce com o colaborador de quem está emitindo — o
+  // vínculo vem do cadastro do usuário.
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
+    nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : colaboradorDoUsuario()
+  );
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
@@ -3572,11 +3599,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
   // A hora vem junto da data no banco; aqui os dois campos são separados
-  // porque é assim que se preenche.
+  // porque é assim que se preenche. Em nota nova, começa na hora de agora:
+  // a emissão costuma acontecer no momento em que o caminhão sai, e em
+  // branco o DANFE saía com 00:00.
   const [horaSaida, setHoraSaida] = useState(() => {
-    if (!nota?.dataSaida) return "";
-    const d = new Date(nota.dataSaida);
-    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (!nota?.dataSaida) {
+      return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return new Date(nota.dataSaida).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   });
   const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
 
@@ -3729,6 +3759,10 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             </div>
             <div className="endereco-grid">
               <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              </div>
+              <div className="field-group">
                 <label className="field-label">Data de saída</label>
                 <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
               </div>
@@ -3737,10 +3771,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {/* O DANFE tem campo próprio para a hora; em branco ele sai
                     zerado, o que estranha numa conferência de estrada. */}
                 <input type="time" value={horaSaida} onChange={e => setHoraSaida(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Data de emissão</label>
-                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
             </div>
           </div>
@@ -3753,7 +3783,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={destinatarioId} onChange={e => escolherDestinatario(e.target.value)} style={{ flex: 1 }}>
                     <option value="">Selecione…</option>
-                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
                   </select>
                   <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setDestinatarioId })}><Plus size={14} /></button>
                 </div>
@@ -4561,7 +4591,11 @@ function NfeCteField({ onSelecionar }) {
 function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
-  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
+  // Documento novo já nasce com o colaborador de quem está emitindo — o
+  // vínculo vem do cadastro do usuário.
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
+    cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : colaboradorDoUsuario()
+  );
   // A natureza da operação é a própria descrição do CFOP — ter os dois na
   // tela só criava chance de um contradizer o outro. O campo saiu e o valor
   // passa a vir do CFOP escolhido.
@@ -4856,7 +4890,7 @@ naturezaOperacao: naturezaOperacao || undefined,
     }
   };
 
-  const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
+  const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>);
 
   const [produtoPredominante, setProdutoPredominante] = useState(cte?.produtoPredominante || "");
   // Como o produto é negociado: decide quais medidas saem no DACTe.
@@ -5966,6 +6000,8 @@ function ErpBiomassa() {
   const [counts, setCounts] = useState({});
   const [carregandoContagens, setCarregandoContagens] = useState(true);
   const [usuario, setUsuario] = useState(null);
+  // Mantém o usuário disponível fora do React, para os formulários.
+  useEffect(() => { definirUsuarioLogado(usuario); }, [usuario]);
   const [verificandoSessao, setVerificandoSessao] = useState(true);
 
   useEffect(() => {

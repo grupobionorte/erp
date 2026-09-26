@@ -37,6 +37,8 @@ function Truck(props) { return <IconBase {...props}><rect x="1" y="3" width="15"
 function Package(props) { return <IconBase {...props}><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></IconBase>; }
 function Building2(props) { return <IconBase {...props}><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M14 9h1"/><path d="M14 13h1"/><path d="M9 21v-4h6v4"/></IconBase>; }
 function UserCog(props) { return <IconBase {...props}><circle cx="10" cy="8" r="4"/><path d="M2 21v-1a7 7 0 0 1 12.5-4.3"/><circle cx="19" cy="16" r="2.5"/><path d="M19 12.5v1M19 18.5v1M22 16h-1M17 16h-1M21.1 13.9l-.7.7M16.6 18.4l-.7.7M21.1 18.1l-.7-.7M16.6 13.6l-.7-.7"/></IconBase>; }
+// Ícone do envio por mensagem.
+function Send(props) { return <IconBase {...props}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></IconBase>; }
 function FileText(props) { return <IconBase {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></IconBase>; }
 function LayoutDashboard(props) { return <IconBase {...props}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></IconBase>; }
 function Plus(props) { return <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>; }
@@ -966,6 +968,38 @@ function abrirAbaDeEspera(documento, anexo) {
 }
 const abrirNaAba = (aba, url) => { if (aba && !aba.closed) aba.location.href = url; else window.open(url, "_blank"); };
 const fecharAba = (aba) => { try { if (aba && !aba.closed) aba.close(); } catch { /* já fechada */ } };
+
+// Quem está logado. Guardado aqui fora porque os formulários de documento
+// precisam disso para preencher o responsável, e passar por props atravessaria
+// meia dúzia de componentes sem nenhum outro uso.
+let usuarioLogado = null;
+const definirUsuarioLogado = (u) => { usuarioLogado = u; };
+const colaboradorDoUsuario = () =>
+  (usuarioLogado?.colaboradorId ? String(usuarioLogado.colaboradorId) : "");
+
+// Nome seguido do CNPJ/CPF. Nas listas de seleção, empresa com nome
+// parecido — ou a mesma razão social em duas filiais — só se distingue pelo
+// documento.
+const rotuloPessoa = (p) => {
+  if (!p) return "";
+  const doc = String(p.documento || "").replace(/\D/g, "");
+  if (doc.length === 14) {
+    return `${p.nome} - ${doc.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}`;
+  }
+  if (doc.length === 11) {
+    return `${p.nome} - ${doc.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}`;
+  }
+  return p.nome;
+};
+
+// Monta o link do WhatsApp. O número vai só com dígitos e com o código do
+// país; sem o 55 na frente o WhatsApp abre uma conversa vazia.
+function linkWhatsApp(telefone, mensagem) {
+  const digitos = String(telefone || "").replace(/\D/g, "");
+  if (digitos.length < 10) return null;
+  const comPais = digitos.startsWith("55") ? digitos : `55${digitos}`;
+  return `https://wa.me/${comPais}?text=${encodeURIComponent(mensagem)}`;
+}
 
 function getPath(obj, path) {
   return path.split(".").reduce((o, k) => (o ? o[k] : undefined), obj);
@@ -3557,7 +3591,11 @@ const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
-  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : "");
+  // Documento novo já nasce com o colaborador de quem está emitindo — o
+  // vínculo vem do cadastro do usuário.
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
+    nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : colaboradorDoUsuario()
+  );
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
@@ -3572,11 +3610,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
   // A hora vem junto da data no banco; aqui os dois campos são separados
-  // porque é assim que se preenche.
+  // porque é assim que se preenche. Em nota nova, começa na hora de agora:
+  // a emissão costuma acontecer no momento em que o caminhão sai, e em
+  // branco o DANFE saía com 00:00.
   const [horaSaida, setHoraSaida] = useState(() => {
-    if (!nota?.dataSaida) return "";
-    const d = new Date(nota.dataSaida);
-    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (!nota?.dataSaida) {
+      return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    }
+    return new Date(nota.dataSaida).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   });
   const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
 
@@ -3727,7 +3768,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
             </div>
-            <div className="endereco-grid">
+            {/* Três colunas: com a grade de duas, a hora caía sozinha na
+                linha de baixo. */}
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              </div>
               <div className="field-group">
                 <label className="field-label">Data de saída</label>
                 <input type="date" value={dataSaida} onChange={e => setDataSaida(e.target.value)} />
@@ -3737,10 +3784,6 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {/* O DANFE tem campo próprio para a hora; em branco ele sai
                     zerado, o que estranha numa conferência de estrada. */}
                 <input type="time" value={horaSaida} onChange={e => setHoraSaida(e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Data de emissão</label>
-                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
             </div>
           </div>
@@ -3753,7 +3796,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={destinatarioId} onChange={e => escolherDestinatario(e.target.value)} style={{ flex: 1 }}>
                     <option value="">Selecione…</option>
-                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
                   </select>
                   <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar cliente novo" onClick={() => setQuickAdd({ tipo: "clientes", setter: setDestinatarioId })}><Plus size={14} /></button>
                 </div>
@@ -3865,7 +3908,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   <div key={index} className="nf-item-row">
                     <select value={item.produtoId} onChange={e => atualizarItem(index, "produtoId", e.target.value)}>
                       <option value="">Selecione…</option>
-                      {(produtosDisponiveis || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
+                      {/* A unidade junto do nome evita lançar 40.000 quando o
+                          produto é vendido por tonelada, e vice-versa. */}
+                      {(produtosDisponiveis || []).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.descricao}{p.unidade ? ` - ${p.unidade}` : ""}
+                        </option>
+                      ))}
                     </select>
                     <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
                     <InputMoeda value={item.valorUnitario} onChange={v => atualizarItem(index, "valorUnitario", v)} />
@@ -4228,6 +4277,14 @@ function NotasFiscaisView() {
   // enquanto a SEFAZ processa — aqui a gente consulta sozinho de tempos em
   // tempos, sem o usuário precisar ficar clicando, até sair desse status
   // (virar autorizado ou rejeitado) ou desistir depois de um tempo.
+  // Padrão: número maior primeiro — a nota recém-emitida é a que se procura.
+  // Rascunho ainda não tem número e fica no topo, que é onde ele precisa
+  // estar para virar nota.
+  const notasOrdenadas = (notas || []).slice().sort((a, b) => {
+    const numero = (n) => (n.numero == null ? Infinity : Number(n.numero));
+    return numero(b) - numero(a);
+  });
+
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; } // ~45s, desiste e deixa o botão manual
     await new Promise(r => setTimeout(r, 3000));
@@ -4360,7 +4417,7 @@ Detalhe: ${e.detalhe}` : ""}`);
             </tr>
           </thead>
           <tbody>
-            {notas.map(nota => (
+            {notasOrdenadas.map(nota => (
               <tr key={nota.id}>
                 <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
@@ -4434,6 +4491,35 @@ Detalhe: ${e.detalhe}` : ""}`);
                               <FileText size={14} /> {processando === nota.id ? "Corrigindo…" : "Corrigir link do DANFE"}
                             </button>
                           )}
+                          {/* Envio ao motorista: abre o WhatsApp com o número
+                              e a mensagem prontos; quem confirma o envio é a
+                              pessoa. O telefone vem do cadastro do motorista
+                              vinculado ao veículo da nota. */}
+                          {nota.pdfUrl?.startsWith("http") && (() => {
+                            const motorista = nota.veiculo?.motorista;
+                            const link = linkWhatsApp(
+                              motorista?.telefone,
+                              `Nota fiscal ${nota.numero || ""} — ${nota.destinatario?.nomeRazaoSocial || ""}\n` +
+                              `Placa ${nota.veiculo?.placa || ""}\n\nDANFE: ${nota.pdfUrl}`
+                            );
+                            if (!link) {
+                              return (
+                                <button className="nf-dropdown-item" disabled title={
+                                  motorista
+                                    ? "Motorista sem telefone cadastrado"
+                                    : "Nenhum motorista no veículo dessa nota"
+                                }>
+                                  <Send size={14} /> Enviar ao motorista
+                                </button>
+                              );
+                            }
+                            return (
+                              <a className="nf-dropdown-item" href={link} target="_blank" rel="noreferrer"
+                                onClick={() => setMenuAberto(null)}>
+                                <Send size={14} /> Enviar ao motorista ({motorista.nome.split(" ")[0]})
+                              </a>
+                            );
+                          })()}
                           {nota.xmlUrl?.startsWith("http") ? (
                             <a className="nf-dropdown-item" href={nota.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
                               <FileText size={14} /> Baixar XML
@@ -4561,7 +4647,11 @@ function NfeCteField({ onSelecionar }) {
 function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
-  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : "");
+  // Documento novo já nasce com o colaborador de quem está emitindo — o
+  // vínculo vem do cadastro do usuário.
+  const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
+    cte?.colaboradorResponsavelId ? String(cte.colaboradorResponsavelId) : colaboradorDoUsuario()
+  );
   // A natureza da operação é a própria descrição do CFOP — ter os dois na
   // tela só criava chance de um contradizer o outro. O campo saiu e o valor
   // passa a vir do CFOP escolhido.
@@ -4856,7 +4946,7 @@ naturezaOperacao: naturezaOperacao || undefined,
     }
   };
 
-  const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>);
+  const opcoesPessoas = (clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>);
 
   const [produtoPredominante, setProdutoPredominante] = useState(cte?.produtoPredominante || "");
   // Como o produto é negociado: decide quais medidas saem no DACTe.
@@ -5966,6 +6056,8 @@ function ErpBiomassa() {
   const [counts, setCounts] = useState({});
   const [carregandoContagens, setCarregandoContagens] = useState(true);
   const [usuario, setUsuario] = useState(null);
+  // Mantém o usuário disponível fora do React, para os formulários.
+  useEffect(() => { definirUsuarioLogado(usuario); }, [usuario]);
   const [verificandoSessao, setVerificandoSessao] = useState(true);
 
   useEffect(() => {

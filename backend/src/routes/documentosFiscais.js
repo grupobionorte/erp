@@ -93,7 +93,7 @@ router.get("/", asyncHandler(async (req, res) => {
     },
     include: {
       destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
-      veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+      veiculo: { include: { motorista: true } }, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
       colaboradorResponsavel: true, itens: { include: { produto: true } },
       documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
     },
@@ -105,7 +105,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
+    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: { include: { motorista: true } }, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);
@@ -206,7 +206,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       valorTotal,
       itens: { create: itensCalculados },
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true },
+    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: { include: { motorista: true } }, veiculoReboque: true, colaboradorResponsavel: true },
   });
 
   res.status(201).json(documento);
@@ -305,7 +305,7 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
     },
     include: {
       destinatario: true, remetente: true, expedidor: true, recebedor: true,
-      transportadora: true, veiculo: true, veiculoReboque: true,
+      transportadora: true, veiculo: { include: { motorista: true } }, veiculoReboque: true,
       documentosTransportados: { include: { notaFiscal: true } },
     },
   });
@@ -397,7 +397,7 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   const ctes = await prisma.documentoFiscal.findMany({
     where: { id: { in: cteIds }, tipo: "CTe", empresaId: req.usuario.empresaId },
     include: {
-      veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+      veiculo: { include: { motorista: true } }, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
       documentosTransportados: true, empresa: { include: { endereco: true } },
     },
   });
@@ -869,17 +869,50 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
     // prefixo também não serve para consulta em portal nenhum.
     const soDigitos = (v) => (v ? String(v).replace(/\D/g, "") || null : null);
 
+    // Quem numera de verdade é o provedor, com a sequência cadastrada lá —
+    // o número que geramos ao criar o rascunho é só uma previsão. Se os
+    // dois divergirem, o do documento autorizado é o que vale: é ele que
+    // está no XML, no DANFE e na SEFAZ.
+    const chaveAutorizada = soDigitos(primeiroPreenchido(campos.chave));
+    // Na chave de acesso, o número ocupa as posições 26 a 34.
+    const numeroDaChave = chaveAutorizada?.length === 44 ? Number(chaveAutorizada.slice(25, 34)) : null;
+    const serieDaChave = chaveAutorizada?.length === 44 ? Number(chaveAutorizada.slice(22, 25)) : null;
+
+    const numeroAutorizado = Number(resultado.numero) || numeroDaChave || null;
+    const serieAutorizada = Number(resultado.serie) || serieDaChave || null;
+
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       data: {
         status: "autorizado",
-        chaveAcesso: soDigitos(primeiroPreenchido(campos.chave)),
+        chaveAcesso: chaveAutorizada,
+        numero: numeroAutorizado || undefined,
+        serie: serieAutorizada || undefined,
         protocoloAutorizacao: resultado.numero_protocolo || resultado.protocolo,
         dataAutorizacao: new Date(),
         xmlUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.xml)),
         pdfUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.pdf)),
       },
     });
+
+    // Recoloca o contador à frente do último número autorizado, para o
+    // próximo rascunho já nascer com a previsão certa.
+    if (numeroAutorizado && documento.empresaId) {
+      const campoContador = {
+        NFe: "nfeProximoNumero", CTe: "cteProximoNumero", MDFe: "mdfeProximoNumero",
+      }[documento.tipo];
+      const empresaAtual = await prisma.empresa.findUnique({
+        where: { id: documento.empresaId },
+        select: { [campoContador]: true },
+      });
+      if (empresaAtual && empresaAtual[campoContador] <= numeroAutorizado) {
+        await prisma.empresa.update({
+          where: { id: documento.empresaId },
+          data: { [campoContador]: numeroAutorizado + 1 },
+        });
+      }
+    }
+
     return res.json(atualizado);
   }
 
@@ -1044,7 +1077,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorTotal,
       ...dadosItens,
     },
-    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: true, veiculoReboque: true, colaboradorResponsavel: true, documentosTransportados: { include: { notaFiscal: true } } },
+    include: { itens: { include: { produto: true } }, destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: { include: { motorista: true } }, veiculoReboque: true, colaboradorResponsavel: true, documentosTransportados: { include: { notaFiscal: true } } },
   });
 
   res.json(documento);

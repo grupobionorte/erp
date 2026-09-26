@@ -3757,7 +3757,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
             </div>
-            <div className="endereco-grid">
+            {/* Três colunas: com a grade de duas, a hora caía sozinha na
+                linha de baixo. */}
+            <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Data de emissão</label>
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />

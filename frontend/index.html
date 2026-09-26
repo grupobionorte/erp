@@ -3897,7 +3897,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   <div key={index} className="nf-item-row">
                     <select value={item.produtoId} onChange={e => atualizarItem(index, "produtoId", e.target.value)}>
                       <option value="">Selecione…</option>
-                      {(produtosDisponiveis || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
+                      {/* A unidade junto do nome evita lançar 40.000 quando o
+                          produto é vendido por tonelada, e vice-versa. */}
+                      {(produtosDisponiveis || []).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.descricao}{p.unidade ? ` - ${p.unidade}` : ""}
+                        </option>
+                      ))}
                     </select>
                     <input type="number" value={item.quantidade} onChange={e => atualizarItem(index, "quantidade", e.target.value)} />
                     <InputMoeda value={item.valorUnitario} onChange={v => atualizarItem(index, "valorUnitario", v)} />

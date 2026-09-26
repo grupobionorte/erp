@@ -4266,6 +4266,14 @@ function NotasFiscaisView() {
   // enquanto a SEFAZ processa — aqui a gente consulta sozinho de tempos em
   // tempos, sem o usuário precisar ficar clicando, até sair desse status
   // (virar autorizado ou rejeitado) ou desistir depois de um tempo.
+  // Padrão: número maior primeiro — a nota recém-emitida é a que se procura.
+  // Rascunho ainda não tem número e fica no topo, que é onde ele precisa
+  // estar para virar nota.
+  const notasOrdenadas = (notas || []).slice().sort((a, b) => {
+    const numero = (n) => (n.numero == null ? Infinity : Number(n.numero));
+    return numero(b) - numero(a);
+  });
+
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; } // ~45s, desiste e deixa o botão manual
     await new Promise(r => setTimeout(r, 3000));
@@ -4398,7 +4406,7 @@ Detalhe: ${e.detalhe}` : ""}`);
             </tr>
           </thead>
           <tbody>
-            {notas.map(nota => (
+            {notasOrdenadas.map(nota => (
               <tr key={nota.id}>
                 <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>

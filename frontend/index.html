@@ -4042,7 +4042,9 @@ const STATUS_DOCUMENTO_COR = {
   enviado: "#b57a12",
   autorizado: "#1a7f37",
   rejeitado: "#c62828",
-  cancelado: "#8a887f",
+  // Vermelho como o rejeitado: documento cancelado precisa saltar aos
+  // olhos na lista, não passar por cinza de desativado.
+  cancelado: "#c62828",
 };
 
 function StatusDocumento({ status }) {

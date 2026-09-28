@@ -4725,13 +4725,13 @@ Detalhe: ${e.detalhe}` : ""}`);
         <table className="data-table tabela-compacta">
           <thead>
             <tr>
-              <th>Número</th>
+              <th style={{ width: 80 }}>Número</th>
               <th>Cliente</th>
-              <th>Valor total</th>
-              <th>Status</th>
-              <th>Guia Florestal</th>
+              <th style={{ width: 120 }}>Valor total</th>
+              <th style={{ width: 110 }}>Status</th>
+              <th style={{ width: 130 }}>Guia Florestal</th>
               <th>Chave / Motivo</th>
-              <th>Emissão</th>
+              <th style={{ width: 90 }}>Emissão</th>
               <th className="actions-col"></th>
             </tr>
           </thead>
@@ -4757,7 +4757,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                     return <span style={{ fontSize: 12, color: gf.cor }}>{gf.texto}</span>;
                   })() : "—"}
                 </td>
-                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
+                <td style={{ maxWidth: 180 }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
                     ? `Cancelada: ${nota.justificativaCancelamento}`
                     : nota.chaveAcesso || (nota.status === "rejeitado" ? nota.motivoRejeicao : null) || "—"}
@@ -6571,8 +6571,14 @@ function ErpBiomassa() {
            baixas cabem mais notas na tela sem virar linha ilegível.
            No lugar da borda entre as linhas, faixas alternadas — separam
            igual e não ocupam altura nenhuma. */
-        .tabela-compacta th { padding: 5px 10px; }
-        .tabela-compacta td { padding: 3px 10px; line-height: 1.3; border-bottom: none; }
+        .tabela-compacta { table-layout: fixed; }
+        .tabela-compacta th { padding: 5px 10px; white-space: nowrap; }
+        /* Uma linha por registro: sem isso, uma coluna estreita quebra o
+           texto em duas linhas e a altura volta ao que era antes. */
+        .tabela-compacta td {
+          padding: 3px 10px; line-height: 1.3; border-bottom: none;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
         .tabela-compacta tbody tr:nth-child(even) { background: #faf9f5; }
         .tabela-compacta tbody tr:hover { background: #f1efe7; }
         .tabela-compacta .subtle { line-height: 1.15; }

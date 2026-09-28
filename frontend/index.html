@@ -6631,6 +6631,10 @@ function ErpBiomassa() {
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem
            28px de largura e estava deixando um vão até a data. */
         .tabela-compacta .actions-col { width: 34px; padding-right: 4px; }
+        /* A célula de ações precisa deixar o menu transbordar: com o
+           overflow escondido das demais, o menu abria recortado dentro da
+           célula e parecia que o botão não funcionava. */
+        .tabela-compacta td.actions-col { overflow: visible; }
         /* Colunas mais juntas: com largura fixa, o respiro lateral grande
            só afastava dado de dado. */
         .tabela-compacta th { padding: 5px 6px; white-space: nowrap; }

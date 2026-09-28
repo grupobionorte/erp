@@ -591,7 +591,7 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
 router.post("/:id/clonar", asyncHandler(async (req, res) => {
   const origem = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { documentosTransportados: true },
+    include: { documentosTransportados: true, itens: true },
   });
 
   if (!origem) return res.status(404).json({ erro: "Documento não encontrado" });
@@ -605,31 +605,44 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   const {
     id, numero, serie, chaveAcesso, status, protocoloAutorizacao, dataEmissao, dataAutorizacao,
     xmlUrl, pdfUrl, motivoRejeicao, tentativaEnvio, justificativaCancelamento, mdfeId,
-    documentosTransportados, ...dados
+    documentosTransportados, itens, ...dados
   } = origem;
 
   // Por padrão as notas transportadas NÃO vêm junto: cada viagem carrega
   // notas diferentes, e repetir chave de NF-e num CT-e novo é erro caro.
   const copiarNotas = req.body?.copiarNotas === true;
 
+  // Na NF-e os itens vêm por padrão: quem repete uma venda repete o
+  // produto. No CT-e é o contrário — cada viagem carrega notas diferentes.
+  const copiarItens = req.body?.copiarItens !== false;
+
   const clone = await prisma.documentoFiscal.create({
     data: {
       ...dados,
       status: "rascunho",
+      // Só as datas mudam: o documento novo é de hoje, não do dia do
+      // original. O resto vem inteiro do documento clonado.
       dataEmissao: new Date(),
+      dataSaida: origem.dataSaida ? new Date() : undefined,
       documentosTransportados: copiarNotas && documentosTransportados.length ? {
         create: documentosTransportados.map(({ id: _id, cteId, notaFiscalId, ...doc }) => doc),
       } : undefined,
+      itens: copiarItens && itens?.length ? {
+        create: itens.map(({ id: _id, documentoId, ...item }) => item),
+      } : undefined,
     },
-    include: { documentosTransportados: true },
+    include: { documentosTransportados: true, itens: true },
   });
 
-  res.status(201).json({
-    ...clone,
-    aviso: copiarNotas
-      ? "Rascunho criado com as mesmas notas transportadas — confira antes de emitir."
-      : "Rascunho criado. Vincule as notas fiscais desta viagem antes de emitir.",
-  });
+  const aviso = origem.tipo === "NFe"
+    ? (copiarItens
+        ? "Rascunho criado com os mesmos itens — confira quantidades e valores antes de emitir."
+        : "Rascunho criado sem itens. Acrescente os produtos desta venda.")
+    : (copiarNotas
+        ? "Rascunho criado com as mesmas notas transportadas — confira antes de emitir."
+        : "Rascunho criado. Vincule as notas fiscais desta viagem antes de emitir.");
+
+  res.status(201).json({ ...clone, aviso });
 }));
 
 // Passo 2: envia o rascunho para o provedor de emissão. Fica separado do

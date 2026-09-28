@@ -4733,8 +4733,8 @@ Detalhe: ${e.detalhe}` : ""}`);
               <th style={{ width: 105, textAlign: "right" }}>Valor total</th>
               <th style={{ width: 95 }}>Status</th>
               <th style={{ width: 115 }}>Guia Florestal</th>
-              <th style={{ width: 150 }}>Chave / Motivo</th>
-              <th style={{ width: 85 }}>Emissão</th>
+              <th style={{ width: 130 }}>Chave / Motivo</th>
+              <th style={{ width: 78 }}>Emissão</th>
               <th className="actions-col"></th>
             </tr>
           </thead>
@@ -6575,6 +6575,9 @@ function ErpBiomassa() {
            No lugar da borda entre as linhas, faixas alternadas — separam
            igual e não ocupam altura nenhuma. */
         .tabela-compacta { table-layout: fixed; }
+        /* Na lista compacta o botão de ações não precisa de 70px: ele tem
+           28px de largura e estava deixando um vão até a data. */
+        .tabela-compacta .actions-col { width: 34px; padding-right: 4px; }
         /* Colunas mais juntas: com largura fixa, o respiro lateral grande
            só afastava dado de dado. */
         .tabela-compacta th { padding: 5px 6px; white-space: nowrap; }

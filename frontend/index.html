@@ -4724,7 +4724,7 @@ Detalhe: ${e.detalhe}` : ""}`);
         <table className="data-table tabela-compacta">
           <thead>
             <tr>
-              <th>Número/Série</th>
+              <th>Número</th>
               <th>Cliente</th>
               <th>Valor total</th>
               <th>Status</th>
@@ -4736,7 +4736,9 @@ Detalhe: ${e.detalhe}` : ""}`);
           <tbody>
             {notasOrdenadas.map(nota => (
               <tr key={nota.id}>
-                <td>{nota.numero ? `${nota.numero}/${nota.serie ?? "—"}` : "—"}</td>
+                {/* Série sai da coluna: é sempre a mesma e só ocupava
+                    espaço. Fica no tooltip para quem precisar conferir. */}
+                <td title={nota.serie ? `Série ${nota.serie}` : undefined}>{nota.numero || "—"}</td>
                 <td>{nota.destinatario?.nomeRazaoSocial || "—"}</td>
                 <td>{nota.valorTotal != null ? `R$ ${formatarMoeda(nota.valorTotal)}` : "—"}</td>
                 <td>

@@ -1,4 +1,5 @@
 const express = require("express");
+const archiver = require("archiver");
 
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
@@ -98,6 +99,75 @@ router.get("/nfe", asyncHandler(async (req, res) => {
       }, {})
     ).sort((a, b) => b.valor - a.valor),
   });
+}));
+
+/**
+ * Pacote com os XMLs do período, para enviar ao contador.
+ *
+ * Os arquivos ficam no provedor; aqui eles são baixados e compactados em
+ * memória. É um zip por mês, com dezenas de arquivos pequenos — não
+ * compensa gravar nada em disco.
+ */
+router.get("/nfe/xmls", asyncHandler(async (req, res) => {
+  const { de, ate, status: statusPedido } = req.query;
+  if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+
+  const { inicio, fim } = intervaloNoFuso(de, ate);
+  const status = statusPedido === "todas" ? ["autorizado", "cancelado"]
+    : statusPedido === "cancelado" ? ["cancelado"]
+    : ["autorizado"];
+
+  const notas = await prisma.documentoFiscal.findMany({
+    where: {
+      tipo: "NFe",
+      empresaId: req.usuario.empresaId || undefined,
+      status: { in: status },
+      dataEmissao: { gte: inicio, lte: fim },
+      xmlUrl: { not: null },
+    },
+    select: { numero: true, chaveAcesso: true, xmlUrl: true, status: true },
+    orderBy: { numero: "asc" },
+  });
+
+  if (!notas.length) {
+    return res.status(404).json({ erro: "Nenhuma nota com XML no período" });
+  }
+
+  const nomeArquivo = `XMLs-NFe-${de}-a-${ate}.zip`;
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
+
+  const pacote = archiver("zip", { zlib: { level: 9 } });
+  const falhas = [];
+  pacote.on("warning", (e) => console.warn("[xmls]", e.message));
+  pacote.on("error", (e) => { console.error("[xmls]", e); res.destroy(); });
+  pacote.pipe(res);
+
+  for (const nota of notas) {
+    try {
+      const resposta = await fetch(nota.xmlUrl);
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const xml = Buffer.from(await resposta.arrayBuffer());
+      // Nome com número e chave: o contador acha pelo número, e a chave
+      // garante que dois arquivos nunca colidam.
+      const nome = `${nota.status === "cancelado" ? "CANCELADA-" : ""}` +
+        `NFe-${String(nota.numero || "s-n").padStart(6, "0")}-${nota.chaveAcesso || ""}.xml`;
+      pacote.append(xml, { name: nome });
+    } catch (erro) {
+      falhas.push(`NF-e ${nota.numero}: ${erro.message}`);
+    }
+  }
+
+  // Um aviso dentro do próprio zip: melhor o contador saber que faltou
+  // arquivo do que descobrir na conferência.
+  if (falhas.length) {
+    pacote.append(
+      `Não foi possível baixar ${falhas.length} arquivo(s):\n\n${falhas.join("\n")}\n`,
+      { name: "ARQUIVOS-QUE-FALTARAM.txt" }
+    );
+  }
+
+  await pacote.finalize();
 }));
 
 module.exports = router;

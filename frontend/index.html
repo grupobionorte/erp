@@ -835,6 +835,32 @@ function setToken(token) {
   } catch { /* localStorage indisponível — sessão não persiste ao recarregar */ }
 }
 
+// Baixa um arquivo da API (zip, PDF) respeitando o login. Não dá para usar
+// um link direto: o token vai no cabeçalho, e link não carrega cabeçalho.
+async function apiDownload(path, nomeSugerido) {
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    let mensagem = res.statusText;
+    try { mensagem = (await res.json()).erro || mensagem; } catch { /* resposta não era JSON */ }
+    throw new Error(mensagem);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeSugerido;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Espera o navegador iniciar o download antes de soltar a memória.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 async function apiRequest(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -4301,10 +4327,24 @@ function RelatorioNfeModal({ onFechar }) {
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
   const { items: clientes } = useApiCollection("clientes");
-  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", incluirCanceladas: false });
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", status: "autorizado" });
   const [dadosAtuais, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
+
+  const [baixando, setBaixando] = useState(false);
+
+  // O zip é montado no servidor, que busca cada XML no provedor. Pode levar
+  // alguns segundos num mês cheio.
+  const baixarXmls = async () => {
+    setErro(""); setBaixando(true);
+    try {
+      const params = new URLSearchParams({ de: filtro.de, ate: filtro.ate, status: filtro.status });
+      await apiDownload(`/relatorios/nfe/xmls?${params}`, `XMLs-NFe-${filtro.de}-a-${filtro.ate}.zip`);
+    } catch (e) {
+      setErro(e.message);
+    } finally { setBaixando(false); }
+  };
 
   // Gerar já manda para a impressão: a tela intermediária com a lista era
   // um passo a mais para ver a mesma coisa que sai no papel.
@@ -4315,7 +4355,7 @@ function RelatorioNfeModal({ onFechar }) {
         de: filtro.de,
         ate: filtro.ate,
         ...(filtro.destinatarioId ? { destinatarioId: filtro.destinatarioId } : {}),
-        ...(filtro.incluirCanceladas ? { incluirCanceladas: "1" } : {}),
+        status: filtro.status,
       });
       const resultado = await apiRequest(`/relatorios/nfe?${params}`);
       setDados(resultado);
@@ -4416,7 +4456,7 @@ function RelatorioNfeModal({ onFechar }) {
       </div>
       <div className="modal-body">
       <div className="nf-section">
-        <div className="nf-grid-4">
+        <div className="nf-grid-3">
           <div className="field-group">
             <label className="field-label">De</label>
             <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
@@ -4426,24 +4466,35 @@ function RelatorioNfeModal({ onFechar }) {
             <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
           </div>
           <div className="field-group">
-            <label className="field-label">Cliente</label>
-            <select value={filtro.destinatarioId} onChange={e => setFiltro(f => ({ ...f, destinatarioId: e.target.value }))}>
-              <option value="">Todos</option>
-              {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
+            <label className="field-label">Status</label>
+            {/* Substitui a caixa de "mostrar canceladas": aqui dá para
+                pedir só as canceladas, que é o caso de conferência. */}
+            <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}>
+              <option value="autorizado">Autorizadas</option>
+              <option value="cancelado">Canceladas</option>
+              <option value="todas">Todas</option>
             </select>
           </div>
-          <div className="field-group" style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
-            <button className="btn btn-primary" onClick={gerar} disabled={carregando}>
-              {carregando ? "Buscando…" : "Gerar"}
-            </button>
-            {dadosAtuais && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
-          </div>
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
-          <input type="checkbox" style={{ width: "auto" }} checked={filtro.incluirCanceladas}
-            onChange={e => setFiltro(f => ({ ...f, incluirCanceladas: e.target.checked }))} />
-          Mostrar também as canceladas
-        </label>
+
+        <div className="field-group">
+          <label className="field-label">Cliente</label>
+          <select value={filtro.destinatarioId} onChange={e => setFiltro(f => ({ ...f, destinatarioId: e.target.value }))}>
+            <option value="">Todos</option>
+            {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <button className="btn btn-primary" onClick={gerar} disabled={carregando}>
+            {carregando ? "Buscando…" : "Gerar"}
+          </button>
+          {dadosAtuais && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
+          {/* Pacote de XMLs: é o que o contador pede todo mês. */}
+          <button className="btn" onClick={baixarXmls} disabled={baixando}>
+            {baixando ? "Compactando…" : "Baixar XMLs do período"}
+          </button>
+        </div>
       </div>
 
       {erro && <p className="error-text">{erro}</p>}

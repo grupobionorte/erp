@@ -4178,6 +4178,188 @@ function CartaCorrecaoModal({ nota, onClose }) {
   );
 }
 
+// ---------- Relatórios ----------
+// O PDF sai pela impressão do próprio navegador: abre uma janela formatada
+// para A4 e o usuário escolhe imprimir ou salvar como PDF. Evita uma
+// biblioteca de PDF no servidor para um documento que é, no fundo, uma
+// tabela.
+function RelatoriosView() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const primeiroDia = `${hoje.slice(0, 8)}01`;
+
+  const { items: clientes } = useApiCollection("clientes");
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", incluirCanceladas: false });
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  const gerar = async () => {
+    setErro(""); setCarregando(true);
+    try {
+      const params = new URLSearchParams({
+        de: filtro.de,
+        ate: filtro.ate,
+        ...(filtro.destinatarioId ? { destinatarioId: filtro.destinatarioId } : {}),
+        ...(filtro.incluirCanceladas ? { incluirCanceladas: "1" } : {}),
+      });
+      setDados(await apiRequest(`/relatorios/nfe?${params}`));
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+      setDados(null);
+    } finally { setCarregando(false); }
+  };
+
+  const dataBr = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" });
+
+  const imprimir = () => {
+    if (!dados) return;
+    const cliente = clientes?.find(c => String(c.id) === String(filtro.destinatarioId));
+    const janela = window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+
+    const linhas = dados.linhas.map(l => `
+      <tr${l.status === "cancelado" ? ' class="cancelada"' : ""}>
+        <td>${l.numero || "—"}/${l.serie || "—"}</td>
+        <td>${dataBr(l.dataEmissao)}</td>
+        <td>${l.cliente}</td>
+        <td class="doc">${l.documentoCliente || ""}</td>
+        <td>${l.naturezaOperacao || ""}</td>
+        <td class="num">${l.status === "cancelado" ? "CANCELADA" : `R$ ${formatarMoeda(l.valorTotal)}`}</td>
+      </tr>`).join("");
+
+    const porCliente = dados.porCliente.map(c => `
+      <tr><td>${c.cliente}</td><td class="doc">${c.documento || ""}</td>
+      <td class="num">${c.notas}</td><td class="num">R$ ${formatarMoeda(c.valor)}</td></tr>`).join("");
+
+    janela.document.write(`
+      <html><head><meta charset="utf-8"><title>Relação de NF-e</title>
+      <style>
+        @page { size: A4; margin: 14mm; }
+        body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #23231F; font-size: 11px; }
+        h1 { font-size: 15px; margin: 0 0 2px; }
+        .sub { color: #6B6B68; font-size: 11px; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .3px;
+             color: #55534C; border-bottom: 1px solid #23231F; padding: 5px 4px; }
+        td { padding: 4px; border-bottom: 1px solid #E5E3DA; }
+        .num { text-align: right; white-space: nowrap; }
+        .doc { color: #6B6B68; white-space: nowrap; }
+        .cancelada td { color: #9A9A96; text-decoration: line-through; }
+        .totais { margin-top: 10px; font-size: 12px; }
+        .totais strong { font-size: 14px; }
+        h2 { font-size: 12px; margin: 18px 0 6px; }
+        tfoot td { font-weight: 600; border-top: 1px solid #23231F; }
+      </style></head><body>
+        <h1>Relação de notas fiscais emitidas</h1>
+        <div class="sub">
+          Período de ${dataBr(`${filtro.de}T12:00:00Z`)} a ${dataBr(`${filtro.ate}T12:00:00Z`)}
+          ${cliente ? ` · Cliente: ${cliente.nome}` : ""}
+          · Emitido em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Cuiaba" })}
+        </div>
+
+        <table>
+          <thead><tr>
+            <th>Número/Série</th><th>Emissão</th><th>Cliente</th><th>CNPJ/CPF</th>
+            <th>Natureza</th><th class="num">Valor</th>
+          </tr></thead>
+          <tbody>${linhas || '<tr><td colspan="6">Nenhuma nota no período.</td></tr>'}</tbody>
+        </table>
+
+        <div class="totais">
+          ${dados.totais.autorizadas} nota(s) autorizada(s)${dados.totais.canceladas ? ` · ${dados.totais.canceladas} cancelada(s)` : ""}
+          — total <strong>R$ ${formatarMoeda(dados.totais.valorTotal)}</strong>
+        </div>
+
+        ${dados.porCliente.length > 1 ? `
+          <h2>Resumo por cliente</h2>
+          <table>
+            <thead><tr><th>Cliente</th><th>CNPJ/CPF</th><th class="num">Notas</th><th class="num">Valor</th></tr></thead>
+            <tbody>${porCliente}</tbody>
+            <tfoot><tr><td colspan="2">Total</td>
+              <td class="num">${dados.totais.autorizadas}</td>
+              <td class="num">R$ ${formatarMoeda(dados.totais.valorTotal)}</td></tr></tfoot>
+          </table>` : ""}
+      </body></html>`);
+    janela.document.close();
+    janela.focus();
+    setTimeout(() => janela.print(), 250);
+  };
+
+  return (
+    <div>
+      <div className="module-header">
+        <div>
+          <h2 className="module-title">Relatórios</h2>
+          <p className="module-subtitle">Relação de NF-e emitidas por período e cliente</p>
+        </div>
+      </div>
+
+      <div className="nf-section">
+        <div className="nf-grid-4">
+          <div className="field-group">
+            <label className="field-label">De</label>
+            <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Até</label>
+            <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Cliente</label>
+            <select value={filtro.destinatarioId} onChange={e => setFiltro(f => ({ ...f, destinatarioId: e.target.value }))}>
+              <option value="">Todos</option>
+              {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
+            </select>
+          </div>
+          <div className="field-group" style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+            <button className="btn btn-primary" onClick={gerar} disabled={carregando}>
+              {carregando ? "Buscando…" : "Gerar"}
+            </button>
+            {dados && <button className="btn" onClick={imprimir}>Imprimir / PDF</button>}
+          </div>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
+          <input type="checkbox" style={{ width: "auto" }} checked={filtro.incluirCanceladas}
+            onChange={e => setFiltro(f => ({ ...f, incluirCanceladas: e.target.checked }))} />
+          Mostrar também as canceladas
+        </label>
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+
+      {dados && (
+        <>
+          <div className="cte-resumo" style={{ marginBottom: 14 }}>
+            <div><span className="cte-resumo-rotulo">Notas</span><span className="cte-resumo-valor">{dados.totais.autorizadas}</span></div>
+            {dados.totais.canceladas > 0 && (
+              <div><span className="cte-resumo-rotulo">Canceladas</span><span className="cte-resumo-valor">{dados.totais.canceladas}</span></div>
+            )}
+            <div><span className="cte-resumo-rotulo">Faturamento</span><span className="cte-resumo-valor">R$ {formatarMoeda(dados.totais.valorTotal)}</span></div>
+          </div>
+
+          <table className="data-table">
+            <thead>
+              <tr><th>Número/Série</th><th>Emissão</th><th>Cliente</th><th>Natureza</th><th style={{ textAlign: "right" }}>Valor</th></tr>
+            </thead>
+            <tbody>
+              {dados.linhas.map(l => (
+                <tr key={l.id} style={l.status === "cancelado" ? { opacity: 0.5, textDecoration: "line-through" } : undefined}>
+                  <td>{l.numero || "—"}/{l.serie || "—"}</td>
+                  <td>{dataBr(l.dataEmissao)}</td>
+                  <td>{l.cliente}<span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{l.documentoCliente}</span></td>
+                  <td>{l.naturezaOperacao || "—"}</td>
+                  <td style={{ textAlign: "right" }}>R$ {formatarMoeda(l.valorTotal)}</td>
+                </tr>
+              ))}
+              {!dados.linhas.length && <tr><td colSpan={5}>Nenhuma nota no período.</td></tr>}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  );
+}
+
 function NotasFiscaisView() {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
@@ -6139,6 +6321,7 @@ function ErpBiomassa() {
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },
+    { key: "relatorios", label: "Relatórios", icon: FileText },
     { divider: true },
     ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];
@@ -6487,6 +6670,7 @@ function ErpBiomassa() {
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
         {view === "ponto" && <PontoView />}
+        {view === "relatorios" && <RelatoriosView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>
     </div>

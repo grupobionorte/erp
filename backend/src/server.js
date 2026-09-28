@@ -18,6 +18,7 @@ const { router: pontoRouter, routerTablet: pontoTabletRouter } = require("./rout
 const { carregarTabelasDeApoio } = require("./lib/cargaInicial");
 const manutencaoRouter = require("./routes/manutencao");
 const motoristasRouter = require("./routes/motoristas");
+const relatoriosRouter = require("./routes/relatorios");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -66,6 +67,7 @@ app.use("/municipios", municipiosRouter);
 app.use("/usuarios", usuariosRouter);
 app.use("/manutencao", manutencaoRouter);
 app.use("/motoristas", motoristasRouter);
+app.use("/relatorios", relatoriosRouter);
 app.use("/empresas", empresasRouter);
 app.use("/ponto", pontoRouter);
 

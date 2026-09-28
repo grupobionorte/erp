@@ -404,6 +404,15 @@ model DocumentoFiscal {
   dataSaida               DateTime? @map("data_saida")
   informacoesComplementares String? @map("informacoes_complementares")
 
+  // Guia Florestal (SISFLORA/SEMA-MT). A GF é emitida no sistema do órgão,
+  // a partir da NF-e; aqui ficam o número e os prazos, porque guia não
+  // recebida no prazo restringe comprar e vender no SISFLORA.
+  gfNumero          String?   @map("gf_numero")
+  gfDataEmissao     DateTime? @map("gf_data_emissao")
+  gfValidade        DateTime? @map("gf_validade")
+  gfDataRecebimento DateTime? @map("gf_data_recebimento")
+  gfObservacao      String?   @map("gf_observacao")
+
   // Mais campos de cabeçalho da NFe.
   finalidadeOperacao  String?  @map("finalidade_operacao") // Normal, Devolução, Complementar, Ajuste
   consumidorFinal     Boolean? @default(false) @map("consumidor_final")

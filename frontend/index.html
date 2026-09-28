@@ -4183,6 +4183,117 @@ function CartaCorrecaoModal({ nota, onClose }) {
 // para A4 e o usuário escolhe imprimir ou salvar como PDF. Evita uma
 // biblioteca de PDF no servidor para um documento que é, no fundo, uma
 // tabela.
+// ---------- Guia Florestal ----------
+// A guia é emitida no SISFLORA; aqui só se registra o número e os prazos.
+// Guia não recebida no prazo restringe comprar e vender no sistema do
+// órgão, e é esse esquecimento que este controle evita.
+function GuiaFlorestalModal({ nota, onFechar, onSalvo }) {
+  const paraInput = (v) => (v ? String(v).slice(0, 10) : "");
+  const [dados, setDados] = useState({
+    gfNumero: nota.gfNumero || "",
+    gfDataEmissao: paraInput(nota.gfDataEmissao),
+    gfValidade: paraInput(nota.gfValidade),
+    gfDataRecebimento: paraInput(nota.gfDataRecebimento),
+    gfObservacao: nota.gfObservacao || "",
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+
+  // Guia interna em MT vale 15 dias; preenche sozinho ao informar a
+  // emissão, e continua editável.
+  const definirEmissao = (valor) => {
+    setDados(d => {
+      if (!valor) return { ...d, gfDataEmissao: "" };
+      const validade = new Date(`${valor}T12:00:00Z`);
+      validade.setUTCDate(validade.getUTCDate() + 15);
+      return {
+        ...d,
+        gfDataEmissao: valor,
+        gfValidade: d.gfValidade || validade.toISOString().slice(0, 10),
+      };
+    });
+  };
+
+  const salvar = async () => {
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/documentos-fiscais/${nota.id}/guia-florestal`, {
+        method: "PUT",
+        body: JSON.stringify(dados),
+      });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3>Guia Florestal — NF-e {nota.numero || ""}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginTop: 0 }}>
+            A GF é emitida no SISFLORA. Registre aqui o número e os prazos para o sistema avisar
+            quando a guia estiver perto de vencer sem ter sido recebida.
+          </p>
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Número da GF</label>
+              <input value={dados.gfNumero} onChange={e => set("gfNumero", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Emissão</label>
+              <input type="date" value={dados.gfDataEmissao} onChange={e => definirEmissao(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Validade</label>
+              <input type="date" value={dados.gfValidade} onChange={e => set("gfValidade", e.target.value)} />
+            </div>
+          </div>
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Recebida em</label>
+              <input type="date" value={dados.gfDataRecebimento} onChange={e => set("gfDataRecebimento", e.target.value)} />
+              <p className="hint">Data em que o destinatário deu o recebimento no SISFLORA.</p>
+            </div>
+            <div className="field-group" style={{ gridColumn: "span 2" }}>
+              <label className="field-label">Observação</label>
+              <input value={dados.gfObservacao} onChange={e => set("gfObservacao", e.target.value)} />
+            </div>
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Situação da guia de uma nota, para colorir a lista e avisar do prazo.
+function situacaoGuia(nota) {
+  if (nota.gfDataRecebimento) return { texto: "GF recebida", cor: "#00732F" };
+  if (!nota.gfNumero) return { texto: "sem GF", cor: "#c62828" };
+
+  if (nota.gfValidade) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const validade = new Date(String(nota.gfValidade).slice(0, 10) + "T12:00:00Z");
+    const dias = Math.round((validade - hoje) / 86400000);
+    if (dias < 0) return { texto: `GF vencida há ${Math.abs(dias)}d`, cor: "#c62828" };
+    if (dias <= 3) return { texto: `GF vence em ${dias}d`, cor: "#b57a12" };
+  }
+  return { texto: `GF ${nota.gfNumero}`, cor: "#6b6b68" };
+}
+
 function RelatoriosView() {
   const hoje = new Date().toISOString().slice(0, 10);
   const primeiroDia = `${hoje.slice(0, 8)}01`;
@@ -4415,6 +4526,8 @@ function NotasFiscaisView() {
     }
   };
 
+  const [notaParaGuia, setNotaParaGuia] = useState(null);
+
   // Clonar: venda que se repete — mesmo cliente, mesmo produto — não
   // precisa ser redigitada. Os itens vêm junto, ao contrário do CT-e, onde
   // cada viagem carrega notas diferentes.
@@ -4626,6 +4739,16 @@ Detalhe: ${e.detalhe}` : ""}`);
                   {processando === nota.id && nota.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
+                  {/* Situação da Guia Florestal: só nas autorizadas, que são
+                      as que exigem guia. */}
+                  {nota.status === "autorizado" && (() => {
+                    const gf = situacaoGuia(nota);
+                    return (
+                      <span style={{ display: "block", fontSize: 11.5, color: gf.cor, marginTop: 2 }}>
+                        {gf.texto}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
@@ -4696,6 +4819,9 @@ Detalhe: ${e.detalhe}` : ""}`);
                               vinculado ao veículo da nota. */}
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); clonarNota(nota); }}>
                             <Plus size={14} /> Clonar para nova nota
+                          </button>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setNotaParaGuia(nota); }}>
+                            <FileText size={14} /> {nota.gfNumero ? "Guia Florestal" : "Registrar Guia Florestal"}
                           </button>
                           {nota.pdfUrl?.startsWith("http") && (() => {
                             const motorista = nota.veiculo?.motorista;
@@ -4784,6 +4910,13 @@ Detalhe: ${e.detalhe}` : ""}`);
       )}
       {notaParaCorrigir && (
         <CartaCorrecaoModal nota={notaParaCorrigir} onClose={() => setNotaParaCorrigir(null)} />
+      )}
+      {notaParaGuia && (
+        <GuiaFlorestalModal
+          nota={notaParaGuia}
+          onFechar={() => setNotaParaGuia(null)}
+          onSalvo={() => { setNotaParaGuia(null); carregar(); }}
+        />
       )}
     </div>
   );

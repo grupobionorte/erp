@@ -645,6 +645,34 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   res.status(201).json({ ...clone, aviso });
 }));
 
+// Guia Florestal: emitida no SISFLORA, registrada aqui. O sistema não emite
+// a guia — o órgão não abre integração para isso —, mas controlar número e
+// prazo evita a restrição por guia não recebida.
+router.put("/:id/guia-florestal", asyncHandler(async (req, res) => {
+  const { gfNumero, gfDataEmissao, gfValidade, gfDataRecebimento, gfObservacao } = req.body;
+  const id = Number(req.params.id);
+
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id }, select: { id: true, empresaId: true } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+
+  const data = (v) => (v === null || v === "" ? null : v ? new Date(v) : undefined);
+
+  const atualizado = await prisma.documentoFiscal.update({
+    where: { id },
+    data: {
+      gfNumero: gfNumero === "" ? null : gfNumero ?? undefined,
+      gfDataEmissao: data(gfDataEmissao),
+      gfValidade: data(gfValidade),
+      gfDataRecebimento: data(gfDataRecebimento),
+      gfObservacao: gfObservacao === "" ? null : gfObservacao ?? undefined,
+    },
+  });
+  res.json(atualizado);
+}));
+
 // Passo 2: envia o rascunho para o provedor de emissão. Fica separado do
 // passo 1 de propósito — permite revisar o rascunho antes de emitir de
 // verdade, já que a emissão é irreversível (exige evento de cancelamento).

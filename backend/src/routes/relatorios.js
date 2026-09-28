@@ -52,7 +52,9 @@ router.get("/nfe", asyncHandler(async (req, res) => {
     },
     include: {
       destinatario: { select: { id: true, nomeRazaoSocial: true, documento: true } },
-      itens: { select: { quantidade: true, valorTotal: true, descricao: true } },
+      // Só a contagem interessa aqui — os itens em si não entram na
+      // relação, e pedir campos que o modelo não tem quebrava a consulta.
+      itens: { select: { id: true } },
     },
     orderBy: [{ numero: "asc" }],
   });

@@ -4685,8 +4685,9 @@ Detalhe: ${e.detalhe}` : ""}`);
           {/* Relatórios de venda ficam junto da listagem de notas, não num
               menu separado: é aqui que se pensa neles. */}
           <div className="nf-menu" style={{ position: "relative" }}>
-            <button className="btn" onClick={() => setMenuRelatorios(v => !v)}>
-              <FileText size={16} /> Relatórios
+            <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }}
+              onClick={() => setMenuRelatorios(v => !v)}>
+              <FileText size={14} /> Relatórios
             </button>
             {menuRelatorios && (
               <>
@@ -4728,6 +4729,7 @@ Detalhe: ${e.detalhe}` : ""}`);
               <th>Cliente</th>
               <th>Valor total</th>
               <th>Status</th>
+              <th>Guia Florestal</th>
               <th>Chave / Motivo</th>
               <th>Emissão</th>
               <th className="actions-col"></th>
@@ -4746,16 +4748,14 @@ Detalhe: ${e.detalhe}` : ""}`);
                   {processando === nota.id && nota.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
-                  {/* Situação da Guia Florestal: só nas autorizadas, que são
-                      as que exigem guia. */}
-                  {nota.status === "autorizado" && (() => {
+                </td>
+                {/* Guia Florestal em coluna própria: é informação de
+                    controle, não de status do documento. */}
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {nota.status === "autorizado" ? (() => {
                     const gf = situacaoGuia(nota);
-                    return (
-                      <span style={{ display: "block", fontSize: 11.5, color: gf.cor, marginTop: 2 }}>
-                        {gf.texto}
-                      </span>
-                    );
-                  })()}
+                    return <span style={{ fontSize: 12, color: gf.cor }}>{gf.texto}</span>;
+                  })() : "—"}
                 </td>
                 <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
@@ -4764,12 +4764,15 @@ Detalhe: ${e.detalhe}` : ""}`);
                 </td>
                 <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
                 <td className="actions-col" style={{ position: "relative" }}>
+                  {/* Menor que o padrão: numa lista compacta, o botão de
+                      ações é o que mais estica a altura da linha. */}
                   <button
                     className="icon-btn nf-menu-trigger"
+                    style={{ padding: 2 }}
                     aria-label="Ações"
                     onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === nota.id ? null : nota.id); }}
                   >
-                    <MoreVertical size={16} />
+                    <MoreVertical size={14} />
                   </button>
                   {menuAberto === nota.id && (
                     <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>

@@ -4294,7 +4294,7 @@ function situacaoGuia(nota) {
   return { texto: `GF ${nota.gfNumero}`, cor: "#6b6b68" };
 }
 
-function RelatoriosView() {
+function RelatorioNfeModal({ onFechar }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
@@ -4397,14 +4397,13 @@ function RelatoriosView() {
   };
 
   return (
-    <div>
-      <div className="module-header">
-        <div>
-          <h2 className="module-title">Relatórios</h2>
-          <p className="module-subtitle">Relação de NF-e emitidas por período e cliente</p>
-        </div>
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 1000 }}>
+      <div className="modal-header">
+        <h3>Relação de NF-e emitidas</h3>
+        <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
       </div>
-
+      <div className="modal-body">
       <div className="nf-section">
         <div className="nf-grid-4">
           <div className="field-group">
@@ -4467,6 +4466,12 @@ function RelatoriosView() {
           </table>
         </>
       )}
+      </div>
+      <div className="modal-footer">
+        <button className="btn" onClick={onFechar}>Fechar</button>
+        {dados && <button className="btn btn-primary" onClick={imprimir}>Imprimir / PDF</button>}
+      </div>
+      </div>
     </div>
   );
 }
@@ -4527,6 +4532,8 @@ function NotasFiscaisView() {
   };
 
   const [notaParaGuia, setNotaParaGuia] = useState(null);
+  const [menuRelatorios, setMenuRelatorios] = useState(false);
+  const [relatorio, setRelatorio] = useState(null);
 
   // Clonar: venda que se repete — mesmo cliente, mesmo produto — não
   // precisa ser redigitada. Os itens vêm junto, ao contrário do CT-e, onde
@@ -4695,9 +4702,28 @@ Detalhe: ${e.detalhe}` : ""}`);
             <p className="subtle">{notas.length} nota{notas.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditando(null); setMostrarForm(true); }}>
-          <Plus size={16} /> Nova Nota Fiscal
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Relatórios de venda ficam junto da listagem de notas, não num
+              menu separado: é aqui que se pensa neles. */}
+          <div className="nf-menu" style={{ position: "relative" }}>
+            <button className="btn" onClick={() => setMenuRelatorios(v => !v)}>
+              <FileText size={16} /> Relatórios
+            </button>
+            {menuRelatorios && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 10 }} onClick={() => setMenuRelatorios(false)} />
+                <div className="nf-dropdown" style={{ zIndex: 11 }}>
+                  <button className="nf-dropdown-item" onClick={() => { setMenuRelatorios(false); setRelatorio("nfe"); }}>
+                    <FileText size={14} /> Relação de NF-e emitidas
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <button className="btn btn-primary" onClick={() => { setEditando(null); setMostrarForm(true); }}>
+            <Plus size={16} /> Nova Nota Fiscal
+          </button>
+        </div>
       </div>
 
       {erro && (
@@ -4911,6 +4937,7 @@ Detalhe: ${e.detalhe}` : ""}`);
       {notaParaCorrigir && (
         <CartaCorrecaoModal nota={notaParaCorrigir} onClose={() => setNotaParaCorrigir(null)} />
       )}
+      {relatorio === "nfe" && <RelatorioNfeModal onFechar={() => setRelatorio(null)} />}
       {notaParaGuia && (
         <GuiaFlorestalModal
           nota={notaParaGuia}
@@ -6454,7 +6481,6 @@ function ErpBiomassa() {
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },
-    { key: "relatorios", label: "Relatórios", icon: FileText },
     { divider: true },
     ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];
@@ -6803,7 +6829,6 @@ function ErpBiomassa() {
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
         {view === "ponto" && <PontoView />}
-        {view === "relatorios" && <RelatoriosView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>
     </div>

@@ -4233,6 +4233,23 @@ function NotasFiscaisView() {
     }
   };
 
+  // Clonar: venda que se repete — mesmo cliente, mesmo produto — não
+  // precisa ser redigitada. Os itens vêm junto, ao contrário do CT-e, onde
+  // cada viagem carrega notas diferentes.
+  const clonarNota = async (nota) => {
+    try {
+      const nova = await apiRequest(`/documentos-fiscais/${nota.id}/clonar`, {
+        method: "POST",
+        body: JSON.stringify({ copiarItens: true }),
+      });
+      await carregar();
+      setEditando(nova);
+      setMostrarForm(true);
+    } catch (e) {
+      alert(`Não foi possível clonar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
+
   // Rascunho nunca foi à SEFAZ: não tem número nem valor fiscal, então pode
   // sumir de vez em vez de ficar na lista como cancelado.
   const excluirRascunho = async (nota) => {
@@ -4495,6 +4512,9 @@ Detalhe: ${e.detalhe}` : ""}`);
                               e a mensagem prontos; quem confirma o envio é a
                               pessoa. O telefone vem do cadastro do motorista
                               vinculado ao veículo da nota. */}
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); clonarNota(nota); }}>
+                            <Plus size={14} /> Clonar para nova nota
+                          </button>
                           {nota.pdfUrl?.startsWith("http") && (() => {
                             const motorista = nota.veiculo?.motorista;
                             const link = linkWhatsApp(

@@ -4300,10 +4300,12 @@ function RelatorioNfeModal({ onFechar }) {
 
   const { items: clientes } = useApiCollection("clientes");
   const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", incluirCanceladas: false });
-  const [dados, setDados] = useState(null);
+  const [dadosAtuais, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
 
+  // Gerar já manda para a impressão: a tela intermediária com a lista era
+  // um passo a mais para ver a mesma coisa que sai no papel.
   const gerar = async () => {
     setErro(""); setCarregando(true);
     try {
@@ -4313,7 +4315,13 @@ function RelatorioNfeModal({ onFechar }) {
         ...(filtro.destinatarioId ? { destinatarioId: filtro.destinatarioId } : {}),
         ...(filtro.incluirCanceladas ? { incluirCanceladas: "1" } : {}),
       });
-      setDados(await apiRequest(`/relatorios/nfe?${params}`));
+      const resultado = await apiRequest(`/relatorios/nfe?${params}`);
+      setDados(resultado);
+      if (!resultado.linhas.length) {
+        setErro("Nenhuma nota encontrada nesse período.");
+        return;
+      }
+      imprimir(resultado);
     } catch (e) {
       setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
       setDados(null);
@@ -4322,7 +4330,8 @@ function RelatorioNfeModal({ onFechar }) {
 
   const dataBr = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" });
 
-  const imprimir = () => {
+  const imprimir = (resultado) => {
+    const dados = resultado || dadosAtuais;
     if (!dados) return;
     const cliente = clientes?.find(c => String(c.id) === String(filtro.destinatarioId));
     const janela = window.open("", "_blank");
@@ -4398,7 +4407,7 @@ function RelatorioNfeModal({ onFechar }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 1000 }}>
+      <div className="modal" style={{ maxWidth: 720 }}>
       <div className="modal-header">
         <h3>Relação de NF-e emitidas</h3>
         <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
@@ -4425,7 +4434,7 @@ function RelatorioNfeModal({ onFechar }) {
             <button className="btn btn-primary" onClick={gerar} disabled={carregando}>
               {carregando ? "Buscando…" : "Gerar"}
             </button>
-            {dados && <button className="btn" onClick={imprimir}>Imprimir / PDF</button>}
+            {dadosAtuais && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
           </div>
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginTop: 4 }}>
@@ -4437,39 +4446,9 @@ function RelatorioNfeModal({ onFechar }) {
 
       {erro && <p className="error-text">{erro}</p>}
 
-      {dados && (
-        <>
-          <div className="cte-resumo" style={{ marginBottom: 14 }}>
-            <div><span className="cte-resumo-rotulo">Notas</span><span className="cte-resumo-valor">{dados.totais.autorizadas}</span></div>
-            {dados.totais.canceladas > 0 && (
-              <div><span className="cte-resumo-rotulo">Canceladas</span><span className="cte-resumo-valor">{dados.totais.canceladas}</span></div>
-            )}
-            <div><span className="cte-resumo-rotulo">Faturamento</span><span className="cte-resumo-valor">R$ {formatarMoeda(dados.totais.valorTotal)}</span></div>
-          </div>
-
-          <table className="data-table">
-            <thead>
-              <tr><th>Número/Série</th><th>Emissão</th><th>Cliente</th><th>Natureza</th><th style={{ textAlign: "right" }}>Valor</th></tr>
-            </thead>
-            <tbody>
-              {dados.linhas.map(l => (
-                <tr key={l.id} style={l.status === "cancelado" ? { opacity: 0.5, textDecoration: "line-through" } : undefined}>
-                  <td>{l.numero || "—"}/{l.serie || "—"}</td>
-                  <td>{dataBr(l.dataEmissao)}</td>
-                  <td>{l.cliente}<span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{l.documentoCliente}</span></td>
-                  <td>{l.naturezaOperacao || "—"}</td>
-                  <td style={{ textAlign: "right" }}>R$ {formatarMoeda(l.valorTotal)}</td>
-                </tr>
-              ))}
-              {!dados.linhas.length && <tr><td colSpan={5}>Nenhuma nota no período.</td></tr>}
-            </tbody>
-          </table>
-        </>
-      )}
       </div>
       <div className="modal-footer">
         <button className="btn" onClick={onFechar}>Fechar</button>
-        {dados && <button className="btn btn-primary" onClick={imprimir}>Imprimir / PDF</button>}
       </div>
       </div>
     </div>

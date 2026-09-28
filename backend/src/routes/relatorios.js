@@ -33,14 +33,16 @@ function intervaloNoFuso(de, ate) {
  * Relação de NF-e emitidas, por período e opcionalmente por cliente.
  */
 router.get("/nfe", asyncHandler(async (req, res) => {
-  const { de, ate, destinatarioId, incluirCanceladas } = req.query;
+  const { de, ate, destinatarioId, status: statusPedido } = req.query;
   if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
 
   const { inicio, fim } = intervaloNoFuso(de, ate);
 
   // Só o que virou documento: rascunho e rejeitado não entram numa relação
   // de notas emitidas.
-  const status = incluirCanceladas === "1" ? ["autorizado", "cancelado"] : ["autorizado"];
+  const status = statusPedido === "todas" ? ["autorizado", "cancelado"]
+    : statusPedido === "cancelado" ? ["cancelado"]
+    : ["autorizado"];
 
   const notas = await prisma.documentoFiscal.findMany({
     where: {

@@ -740,29 +740,29 @@ const MODULES = {
     adminOnly: true,
     apiPath: "/empresas",
     fields: [
-      { key: "nome", label: "Razão Social", type: "text", required: true },
-      { key: "fantasia", label: "Nome Fantasia", type: "text" },
-      { key: "logo", label: "Logo da Empresa", type: "imagem-upload" },
-      { key: "cnpj", label: "CNPJ", type: "text", required: true },
-      { key: "ie", label: "Inscrição Estadual", type: "text" },
-      { key: "im", label: "Inscrição Municipal", type: "text" },
-      { key: "rntrc", label: "RNTRC (obrigatório pra emitir CTe)", type: "text" },
+      { key: "nome", label: "Razão Social", type: "text", required: true, secao: "Identificação" },
+      { key: "fantasia", label: "Nome Fantasia", type: "text", secao: "Identificação" },
+      { key: "logo", label: "Logo da Empresa", type: "imagem-upload", secao: "Identificação" },
+      { key: "cnpj", label: "CNPJ", type: "text", required: true, secao: "Identificação" },
+      { key: "ie", label: "Inscrição Estadual", type: "text", secao: "Identificação" },
+      { key: "im", label: "Inscrição Municipal", type: "text", secao: "Identificação" },
+      { key: "rntrc", label: "RNTRC", type: "text", secao: "Identificação" },
       // Usados no grupo de pagamento do MDF-e, quando exigido.
-      { key: "pixRecebimento", label: "Chave PIX de recebimento", type: "text" },
-      { key: "bancoNumero", label: "Banco (número)", type: "text" },
-      { key: "bancoAgencia", label: "Agência", type: "text" },
-      { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true },
-      { key: "endereco", label: "Endereço", type: "endereco" },
-      { key: "nfeSerie", label: "NFe — Série", type: "text", aba: "fiscal" },
-      { key: "nfeProximoNumero", label: "NFe — Próximo número", type: "number", aba: "fiscal" },
-      { key: "cteSerie", label: "CTe — Série", type: "text", aba: "fiscal" },
-      { key: "cteProximoNumero", label: "CTe — Próximo número", type: "number", aba: "fiscal" },
+      { key: "pixRecebimento", label: "Chave PIX de recebimento", type: "text", secao: "Recebimento" },
+      { key: "bancoNumero", label: "Banco (número)", type: "text", secao: "Recebimento" },
+      { key: "bancoAgencia", label: "Agência", type: "text", secao: "Recebimento" },
+      { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true, secao: "Identificação" },
+      { key: "endereco", label: "Endereço", type: "endereco", secao: "Endereço" },
+      { key: "nfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
+      { key: "nfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
+      { key: "cteSerie", label: "Série", type: "text", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
+      { key: "cteProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
       // CFOP que todo CT-e novo já traz preenchido.
-      { key: "cfopPadraoCte", label: "CTe — CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal" },
-      { key: "mdfeSerie", label: "MDFe — Série", type: "text", aba: "fiscal" },
-      { key: "mdfeProximoNumero", label: "MDFe — Próximo número", type: "number", aba: "fiscal" },
+      { key: "cfopPadraoCte", label: "CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
+      { key: "mdfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
+      { key: "mdfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       // Vai em toda NF-e, somada ao que for escrito na nota.
-      { key: "observacaoPadraoNfe", label: "NFe — Mensagem fixa nas informações complementares", type: "texto-longo", aba: "fiscal" },
+      { key: "observacaoPadraoNfe", label: "Mensagem fixa nas informações complementares", type: "texto-longo", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
     ],
     columns: ["nome", "cnpj", "regime", "endereco.cidade"],
     toApi: (data) => ({
@@ -1992,6 +1992,46 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
   );
 }
 
+// Campos agrupados por seção. Sem isso, cadastro grande vira uma lista
+// corrida onde identificação, banco e configuração fiscal se misturam.
+function CamposEmSecoes({ campos, data, setField, editando }) {
+  const secoes = [];
+  for (const campo of campos) {
+    const titulo = campo.secao || "";
+    const atual = secoes.find(s => s.titulo === titulo);
+    if (atual) atual.campos.push(campo);
+    else secoes.push({ titulo, campos: [campo] });
+  }
+
+  return (
+    <>
+      {secoes.map((secao, i) => (
+        <section key={secao.titulo || i} className="pf-secao">
+          {secao.titulo && <h4 className="pf-secao-titulo">{secao.titulo}</h4>}
+          <div className="cadastro-fields-grid">
+            {/* O rótulo é responsabilidade do próprio Field — aqui só o
+                agrupamento e a largura de cada campo. */}
+            {secao.campos.map(f => (
+              <div
+                key={f.key}
+                style={["endereco", "empresas-multiselect", "imagem-upload", "texto-longo"].includes(f.type)
+                  ? { gridColumn: "1 / -1" } : undefined}
+              >
+                <Field
+                  field={f}
+                  value={data[f.key]}
+                  onChange={v => setField(f.key, v)}
+                  disabled={f.readOnlyOnEdit && editando}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </>
+  );
+}
+
 function RecordForm({ moduleKey, record, onSave, onCancel }) {
   // Clientes e fornecedores têm formulário próprio (campos que reagem ao
   // tipo de pessoa e à situação fiscal); o resto segue o genérico.
@@ -2072,32 +2112,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
-            <div className="cadastro-fields-grid">
-              {camposVisiveis.filter(f => f.aba === "fiscal").map(f => (
-                <div key={f.key} className={`field-group ${f.type === "endereco" || f.type === "texto-longo" ? "col-span-2" : ""}`}>
-                  <label className="field-label">
-                    {f.label}{f.required && <span className="req">*</span>}
-                  </label>
-                  <Field field={f} value={data[f.key]} onChange={v => setField(f.key, v)} />
-                </div>
-              ))}
-            </div>
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} />
           )}
 
-          <div className="cadastro-fields-grid" hidden={(temJornada || temAbaFiscal) && aba !== "dados"}>
-            {camposVisiveis.filter(f => f.aba !== "fiscal").map(f => (
-              <div
-                key={f.key}
-                style={["endereco", "empresas-multiselect", "imagem-upload"].includes(f.type) ? { gridColumn: "1 / -1" } : undefined}
-              >
-                <Field
-                  field={f}
-                  value={data[f.key]}
-                  onChange={v => setField(f.key, v)}
-                  disabled={f.readOnlyOnEdit && editando}
-                />
-              </div>
-            ))}
+          <div hidden={(temJornada || temAbaFiscal) && aba !== "dados"}>
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} />
           </div>
           {error && <p className="error-text">{error}</p>}
         </div>

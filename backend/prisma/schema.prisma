@@ -172,6 +172,10 @@ model Empresa {
   // houver nas informações complementares do documento.
   observacaoPadraoNfe String? @map("observacao_padrao_nfe")
 
+  // CFOP que todo CT-e novo já traz preenchido. O da prestação muda pouco
+  // na operação, e digitar o mesmo código toda vez é onde o erro entra.
+  cfopPadraoCte String? @map("cfop_padrao_cte")
+
   pixRecebimento String? @map("pix_recebimento")
   bancoNumero    String? @map("banco_numero")
   bancoAgencia   String? @map("banco_agencia")

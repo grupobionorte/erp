@@ -753,14 +753,16 @@ const MODULES = {
       { key: "bancoAgencia", label: "Agência", type: "text" },
       { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true },
       { key: "endereco", label: "Endereço", type: "endereco" },
-      { key: "nfeSerie", label: "NFe — Série", type: "text" },
-      { key: "nfeProximoNumero", label: "NFe — Próximo número", type: "number" },
-      { key: "cteSerie", label: "CTe — Série", type: "text" },
-      { key: "cteProximoNumero", label: "CTe — Próximo número", type: "number" },
-      { key: "mdfeSerie", label: "MDFe — Série", type: "text" },
-      { key: "mdfeProximoNumero", label: "MDFe — Próximo número", type: "number" },
+      { key: "nfeSerie", label: "NFe — Série", type: "text", aba: "fiscal" },
+      { key: "nfeProximoNumero", label: "NFe — Próximo número", type: "number", aba: "fiscal" },
+      { key: "cteSerie", label: "CTe — Série", type: "text", aba: "fiscal" },
+      { key: "cteProximoNumero", label: "CTe — Próximo número", type: "number", aba: "fiscal" },
+      // CFOP que todo CT-e novo já traz preenchido.
+      { key: "cfopPadraoCte", label: "CTe — CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal" },
+      { key: "mdfeSerie", label: "MDFe — Série", type: "text", aba: "fiscal" },
+      { key: "mdfeProximoNumero", label: "MDFe — Próximo número", type: "number", aba: "fiscal" },
       // Vai em toda NF-e, somada ao que for escrito na nota.
-      { key: "observacaoPadraoNfe", label: "Mensagem fixa nas informações complementares da NF-e", type: "texto-longo" },
+      { key: "observacaoPadraoNfe", label: "NFe — Mensagem fixa nas informações complementares", type: "texto-longo", aba: "fiscal" },
     ],
     columns: ["nome", "cnpj", "regime", "endereco.cidade"],
     toApi: (data) => ({
@@ -770,6 +772,7 @@ const MODULES = {
       ie: data.ie || undefined,
       im: data.im || undefined,
       rntrc: data.rntrc || undefined,
+      cfopPadraoCte: data.cfopPadraoCte || undefined,
       pixRecebimento: data.pixRecebimento || undefined,
       bancoNumero: data.bancoNumero || undefined,
       bancoAgencia: data.bancoAgencia || undefined,
@@ -793,6 +796,7 @@ const MODULES = {
       ie: r.ie,
       im: r.im,
       rntrc: r.rntrc,
+      cfopPadraoCte: r.cfopPadraoCte,
       pixRecebimento: r.pixRecebimento,
       bancoNumero: r.bancoNumero,
       bancoAgencia: r.bancoAgencia,
@@ -1002,6 +1006,9 @@ let usuarioLogado = null;
 const definirUsuarioLogado = (u) => { usuarioLogado = u; };
 const colaboradorDoUsuario = () =>
   (usuarioLogado?.colaboradorId ? String(usuarioLogado.colaboradorId) : "");
+// Configuração fiscal da empresa, para os documentos novos já nascerem
+// preenchidos.
+const cfopPadraoCte = () => usuarioLogado?.empresa?.cfopPadraoCte || "";
 
 // Nome seguido do CNPJ/CPF. Nas listas de seleção, empresa com nome
 // parecido — ou a mesma razão social em duas filiais — só se distingue pelo
@@ -2012,6 +2019,9 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   const [aba, setAba] = useState("dados");
   // Colaborador tem jornada de trabalho; os outros cadastros, não.
   const temJornada = moduleKey === "colaboradores";
+  // Empresa separa cadastro de configuração fiscal: são coisas que se
+  // mexem em momentos diferentes.
+  const temAbaFiscal = config.fields.some(f => f.aba === "fiscal");
 
   const setField = (key, value) => setData(d => ({ ...d, [key]: value }));
 
@@ -2042,20 +2052,40 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
-        {temJornada && (
+        {(temJornada || temAbaFiscal) && (
           <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
             <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
-            <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
-              Horários de trabalho
-            </button>
+            {temJornada && (
+              <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
+                Horários de trabalho
+              </button>
+            )}
+            {temAbaFiscal && (
+              <button type="button" className="cte-aba" aria-selected={aba === "fiscal"} onClick={() => setAba("fiscal")}>
+                Notas fiscais e CT-e
+              </button>
+            )}
           </div>
         )}
 
         <div className="modal-body">
           {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
 
-          <div className="cadastro-fields-grid" hidden={temJornada && aba !== "dados"}>
-            {camposVisiveis.map(f => (
+          {temAbaFiscal && aba === "fiscal" && (
+            <div className="cadastro-fields-grid">
+              {camposVisiveis.filter(f => f.aba === "fiscal").map(f => (
+                <div key={f.key} className={`field-group ${f.type === "endereco" || f.type === "texto-longo" ? "col-span-2" : ""}`}>
+                  <label className="field-label">
+                    {f.label}{f.required && <span className="req">*</span>}
+                  </label>
+                  <Field field={f} value={data[f.key]} onChange={v => setField(f.key, v)} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="cadastro-fields-grid" hidden={(temJornada || temAbaFiscal) && aba !== "dados"}>
+            {camposVisiveis.filter(f => f.aba !== "fiscal").map(f => (
               <div
                 key={f.key}
                 style={["endereco", "empresas-multiselect", "imagem-upload"].includes(f.type) ? { gridColumn: "1 / -1" } : undefined}
@@ -5074,7 +5104,8 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   // tela só criava chance de um contradizer o outro. O campo saiu e o valor
   // passa a vir do CFOP escolhido.
   const [naturezaOperacao, setNaturezaOperacao] = useState(cte?.naturezaOperacao || "");
-  const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || "");
+  // CT-e novo já nasce com o CFOP configurado em Configurações.
+  const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || cfopPadraoCte());
   const [tipoServico, setTipoServico] = useState(cte?.tipoServico || "Normal");
   const [dataTransporte, setDataTransporte] = useState(cte?.dataTransporte ? cte.dataTransporte.slice(0, 10) : hoje);
   const [horaTransporte, setHoraTransporte] = useState(cte?.horaTransporte || "");

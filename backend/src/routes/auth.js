@@ -188,7 +188,8 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
   if (req.usuario.empresaId) {
     empresa = await prisma.empresa.findUnique({
       where: { id: req.usuario.empresaId },
-      select: { id: true, razaoSocial: true, logoUrl: true },
+      // O CFOP padrão vem junto: é ele que preenche o CT-e novo.
+      select: { id: true, razaoSocial: true, logoUrl: true, cfopPadraoCte: true },
     });
   }
   // O colaborador vinculado vem junto: é ele que os documentos usam como

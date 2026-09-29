@@ -4508,7 +4508,7 @@ function RelatorioNfeModal({ onFechar }) {
   );
 }
 
-function NotasFiscaisView() {
+function NotasFiscaisView({ onIrParaCte }) {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
   const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
@@ -4564,6 +4564,19 @@ function NotasFiscaisView() {
   };
 
   const [notaParaGuia, setNotaParaGuia] = useState(null);
+
+  // A nota autorizada já traz o que o CT-e precisa; o rascunho nasce daqui
+  // e só falta o valor do frete.
+  const gerarCte = async (nota) => {
+    if (!window.confirm(`Gerar um CT-e para a nota ${nota.numero || ""}?`)) return;
+    try {
+      const r = await apiRequest(`/documentos-fiscais/${nota.id}/gerar-cte`, { method: "POST" });
+      alert(r.aviso || "Rascunho de CT-e criado.");
+      if (onIrParaCte) onIrParaCte();
+    } catch (e) {
+      alert(`Não foi possível gerar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    }
+  };
   const [menuRelatorios, setMenuRelatorios] = useState(false);
   const [relatorio, setRelatorio] = useState(null);
 
@@ -4885,6 +4898,9 @@ Detalhe: ${e.detalhe}` : ""}`);
                               vinculado ao veículo da nota. */}
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); clonarNota(nota); }}>
                             <Plus size={14} /> Clonar para nova nota
+                          </button>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); gerarCte(nota); }}>
+                            <Truck size={14} /> Gerar CT-e
                           </button>
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setNotaParaGuia(nota); }}>
                             <FileText size={14} /> {nota.gfNumero ? "Guia Florestal" : "Registrar Guia Florestal"}
@@ -6890,7 +6906,7 @@ function ErpBiomassa() {
 
       <div className="main">
         {view === "dashboard" && <Dashboard counts={counts} carregandoContagens={carregandoContagens} onNavigate={setView} usuario={usuario} />}
-        {view === "notasFiscais" && <NotasFiscaisView />}
+        {view === "notasFiscais" && <NotasFiscaisView onIrParaCte={() => setView("cte")} />}
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
         {view === "ponto" && <PontoView />}

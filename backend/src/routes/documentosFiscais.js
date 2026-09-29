@@ -384,6 +384,116 @@ function dataHoraNoFuso(data, hora) {
   return new Date(`${data}T${hora || "00:00"}:00${sinal}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`);
 }
 
+// Gera um rascunho de CT-e a partir de uma NF-e autorizada.
+//
+// A nota já tem quase tudo que o conhecimento precisa: quem manda, quem
+// recebe, o que vai, quanto pesa e quanto vale. O que sobra para preencher
+// à mão é o valor do frete e o CFOP da prestação — que dependem da
+// negociação, não da nota.
+router.post("/:id/gerar-cte", asyncHandler(async (req, res) => {
+  const nota = await prisma.documentoFiscal.findUnique({
+    where: { id: Number(req.params.id) },
+    include: {
+      destinatario: { include: { endereco: true } },
+      remetente: { include: { endereco: true } },
+      empresa: { include: { endereco: true } },
+      veiculo: { include: { motorista: true } },
+      itens: { include: { produto: true } },
+    },
+  });
+
+  if (!nota) return res.status(404).json({ erro: "Nota não encontrada" });
+  if (nota.tipo !== "NFe") return res.status(400).json({ erro: "Esse documento não é uma NF-e" });
+  if (nota.status !== "autorizado") {
+    return res.status(400).json({
+      erro: "A nota precisa estar autorizada",
+      detalhe: "O CT-e transporta a nota pela chave de acesso, que só existe depois da autorização.",
+    });
+  }
+
+  const empresaId = req.usuario.empresaId;
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+  if (!empresa) return res.status(400).json({ erro: "Empresa inválida" });
+
+  const empresaAtualizada = await prisma.empresa.update({
+    where: { id: empresaId },
+    data: { cteProximoNumero: { increment: 1 } },
+  });
+  const numero = empresaAtualizada.cteProximoNumero - 1;
+  const serie = Number.parseInt(empresa.cteSerie, 10);
+
+  // Quem despacha é quem emitiu a nota; o trajeto sai dos endereços.
+  const origem = nota.empresa?.endereco;
+  const destino = nota.destinatario?.endereco;
+
+  const somar = (campo) => nota.itens.reduce((t, i) => t + (Number(i[campo]) || 0), 0);
+  const produtoPredominante = nota.itens[0]?.produto?.descricao || null;
+  const unidade = String(nota.itens[0]?.produto?.unidade || "").toUpperCase();
+
+  const cte = await prisma.documentoFiscal.create({
+    data: {
+      tipo: "CTe",
+      status: "rascunho",
+      empresaId,
+      numero,
+      serie: Number.isNaN(serie) ? undefined : serie,
+      dataEmissao: new Date(),
+
+      // Remetente fica em branco de propósito: quem despacha é a própria
+      // empresa emitente, e o campo espera um cadastro de pessoa. O CT-e
+      // resolve isso na emissão, usando os dados da empresa.
+      destinatarioId: nota.destinatarioId,
+      definicaoTomador: "Destinatário",
+
+      origemPercurso: origem?.cidade || undefined,
+      ufInicio: origem?.uf || undefined,
+      destinoPercurso: destino?.cidade || undefined,
+      ufFim: destino?.uf || undefined,
+
+      veiculoId: nota.veiculoId || undefined,
+      nomeMotorista: nota.veiculo?.motorista?.nome || undefined,
+      cpfMotorista: nota.veiculo?.motorista?.cpf || undefined,
+
+      produtoPredominante: produtoPredominante || undefined,
+      unidadeMedidaCarga: ["M3", "TON", "KG"].includes(unidade) ? unidade : "KG",
+      valorTotalCarga: Number(nota.valorTotal) || undefined,
+
+      dataTransporte: nota.dataSaida || new Date(),
+      colaboradorResponsavelId: nota.colaboradorResponsavelId || undefined,
+
+      // Reforma Tributária: mesma combinação fixa usada nos demais CT-es.
+      cstIbsCbsPrestacao: "000",
+      classificacaoTributariaIbsCbsPrestacao: "000001",
+
+      // A nota entra como documento transportado, que é o vínculo que a
+      // SEFAZ confere.
+      documentosTransportados: {
+        create: [{
+          tipo: "Fiscal",
+          notaFiscalId: nota.id,
+          chaveAcesso: nota.chaveAcesso,
+          numeroDocumento: nota.numero ? String(nota.numero) : undefined,
+          modelo: "55",
+          serie: nota.serie ? String(nota.serie) : undefined,
+          dataEmissao: nota.dataEmissao,
+          cfopPredominante: nota.itens[0]?.cfopUtilizado || undefined,
+          naturezaMercadoria: produtoPredominante || undefined,
+          valorTotalProdutos: somar("valorTotal") || undefined,
+          valorTotalNota: Number(nota.valorTotal) || undefined,
+          pesoBruto: nota.pesoBrutoTotal || undefined,
+          pesoLiquido: nota.pesoLiquidoTotal || undefined,
+        }],
+      },
+    },
+    include: { documentosTransportados: true },
+  });
+
+  res.status(201).json({
+    ...cte,
+    aviso: "Rascunho de CT-e criado. Falta informar o valor do frete e o CFOP da prestação.",
+  });
+}));
+
 // Gera um rascunho de MDFe já preenchido a partir de CT-e(s) autorizados.
 // É o caminho prático: quase tudo que a SEFAZ exige no manifesto já está
 // no CT-e — trajeto, veículo, motorista, carga. O usuário só confere.

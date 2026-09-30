@@ -29,7 +29,10 @@ async function main() {
 
   console.log(confirmar ? "CORRIGINDO\n" : "SIMULAÇÃO — nada será alterado.\n");
 
-  const maiorPorTipo = {};
+  // Numeração é por empresa: cada uma tem a sua sequência na SEFAZ. Somar
+  // tudo num balde só faria o contador de uma empresa saltar por causa dos
+  // documentos de outra.
+  const maiorPorEmpresaTipo = {};
   let divergentes = 0;
 
   for (const doc of documentos) {
@@ -40,7 +43,10 @@ async function main() {
     const serie = Number(chave.slice(22, 25));
     const numero = Number(chave.slice(25, 34));
 
-    maiorPorTipo[doc.tipo] = Math.max(maiorPorTipo[doc.tipo] || 0, numero);
+    if (doc.empresaId) {
+      const chave = `${doc.empresaId}|${doc.tipo}`;
+      maiorPorEmpresaTipo[chave] = Math.max(maiorPorEmpresaTipo[chave] || 0, numero);
+    }
 
     if (doc.numero === numero && doc.serie === serie) continue;
     divergentes++;
@@ -53,16 +59,20 @@ async function main() {
 
   console.log(`\nDocumentos conferidos: ${documentos.length} · divergentes: ${divergentes}`);
 
-  // Contadores por empresa.
-  for (const [tipo, maior] of Object.entries(maiorPorTipo)) {
+  // Contadores: cada empresa recebe o maior número DELA.
+  console.log("\nContadores:");
+  for (const [chave, maior] of Object.entries(maiorPorEmpresaTipo)) {
+    const [empresaId, tipo] = chave.split("|");
     const campo = CONTADOR[tipo];
-    const empresas = await prisma.empresa.findMany({ select: { id: true, razaoSocial: true, [campo]: true } });
-    for (const empresa of empresas) {
-      if (empresa[campo] > maior) continue;
-      console.log(`  contador ${tipo} de ${empresa.razaoSocial}: ${empresa[campo]} → ${maior + 1}`);
-      if (confirmar) {
-        await prisma.empresa.update({ where: { id: empresa.id }, data: { [campo]: maior + 1 } });
-      }
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: Number(empresaId) },
+      select: { id: true, razaoSocial: true, [campo]: true },
+    });
+    if (!empresa || empresa[campo] > maior) continue;
+
+    console.log(`  ${tipo} · ${empresa.razaoSocial}: ${empresa[campo]} → ${maior + 1}`);
+    if (confirmar) {
+      await prisma.empresa.update({ where: { id: empresa.id }, data: { [campo]: maior + 1 } });
     }
   }
 

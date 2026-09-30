@@ -1215,6 +1215,11 @@ router.put("/:id", asyncHandler(async (req, res) => {
       dataSaida: dataHoraNoFuso(dataSaida, horaSaida),
       informacoesComplementares: informacoesComplementares ?? undefined,
       finalidadeOperacao: finalidadeOperacao ?? undefined,
+      // A chave referenciada vinha no corpo mas não era gravada aqui: por
+      // isso o campo aparecia vazio ao reabrir a nota.
+      chaveNfeReferenciada: chaveNfeReferenciada === null || chaveNfeReferenciada === ""
+        ? null
+        : (chaveNfeReferenciada ? String(chaveNfeReferenciada).replace(/\D/g, "") : undefined),
       consumidorFinal: typeof consumidorFinal === "boolean" ? consumidorFinal : undefined,
       indicadorPresenca: indicadorPresenca ?? undefined,
       formaPagamento: formaPagamento ?? undefined,

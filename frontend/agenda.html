@@ -258,6 +258,16 @@ async function ativarNotificacoes() {
 
     const registro = await navigator.serviceWorker.ready;
 
+    // Inscrição antiga no aparelho, feita com outra chave, impede criar a
+    // nova — o navegador recusa sem dizer que o motivo é esse. Remover
+    // antes é inofensivo: se não houver nenhuma, não faz nada.
+    const anterior = await registro.pushManager.getSubscription();
+    if (anterior) {
+      try { await api("/push/inscricao", { method: "DELETE", body: JSON.stringify({ endpoint: anterior.endpoint }) }); }
+      catch { /* o servidor pode nem conhecer essa inscrição */ }
+      await anterior.unsubscribe();
+    }
+
     // O Safari do iPhone recusa a chave como Uint8Array — quer o ArrayBuffer
     // por baixo. O Chrome aceita os dois, e algumas versões aceitam a string
     // em base64url direto. Então tenta os três, nessa ordem, em vez de
@@ -280,7 +290,13 @@ async function ativarNotificacoes() {
       }
     }
 
-    if (!inscricao) throw ultimoErro || new Error("Não foi possível inscrever este aparelho");
+    if (!inscricao) {
+      throw new Error(
+        `${ultimoErro?.message || "recusado pelo navegador"}\n\n` +
+        `Chave com ${chave.trim().length} caracteres e ${chaveBytes.length} bytes — esses números estão corretos, ` +
+        `então o problema é do aparelho. No iPhone, confira se o app foi aberto pelo ícone da tela de início.`
+      );
+    }
 
     const dados = inscricao.toJSON();
     await api("/push/inscrever", {

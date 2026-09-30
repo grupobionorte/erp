@@ -495,17 +495,17 @@ const MODULES = {
     apiPath: "/veiculos",
     fields: [
       { key: "placa", label: "Placa", type: "text", required: true },
-      { key: "descricao", label: "Descrição", type: "text" },
+      { key: "descricao", label: "Descrição", type: "text", required: true },
       { key: "anoFabricacao", label: "Ano de fabricação", type: "number" },
       { key: "anoModelo", label: "Ano modelo", type: "number" },
-      { key: "renavam", label: "Renavam", type: "text" },
-      { key: "tipoRodado", label: "Tipo de rodado", type: "select", options: ["Truck", "Toco", "Cavalo Mecânico", "VAN", "Utilitário", "Outros"] },
+      { key: "renavam", label: "Renavam", type: "text", required: true },
+      { key: "tipoRodado", label: "Tipo de rodado", type: "select", options: ["Truck", "Toco", "Cavalo Mecânico", "VAN", "Utilitário", "Outros"], required: true },
       { key: "tipoCarroceria", label: "Tipo de carroceria", type: "select", options: ["Não aplicável", "Aberta", "Fechada/Baú", "Graneleira", "Porta Container", "Sider"] },
       // Obrigatória no MDF-e; nem sempre é a UF da empresa.
-      { key: "ufLicenciamento", label: "UF de licenciamento", type: "select", options: UFS },
+      { key: "ufLicenciamento", label: "UF de licenciamento", type: "select", options: UFS, required: true },
       // Propriedade: com frota própria o MDF-e não leva proprietário nem
       // tipo de transportador. Sendo de terceiro, a SEFAZ exige os dois.
-      { key: "propriedade", label: "Propriedade", type: "select", options: ["Própria", "De terceiro"] },
+      { key: "propriedade", label: "Propriedade", type: "select", options: ["Própria", "De terceiro"], required: true },
       { key: "proprietarioNome", label: "Proprietário (só se for de terceiro)", type: "text" },
       { key: "proprietarioDocumento", label: "CNPJ/CPF do proprietário", type: "text" },
       { key: "proprietarioIe", label: "IE do proprietário", type: "text" },

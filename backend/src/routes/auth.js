@@ -9,7 +9,10 @@ const router = express.Router();
 
 function gerarToken(usuario, empresaId) {
   return jwt.sign(
-    { sub: usuario.id, papel: usuario.papel, nome: usuario.nome, empresaId: empresaId ?? null },
+    // O colaborador vinculado vai no token: a agenda e os documentos usam
+    // isso para saber quem é o responsável, sem consultar o banco a cada
+    // requisição.
+    { sub: usuario.id, papel: usuario.papel, nome: usuario.nome, empresaId: empresaId ?? null, colaboradorId: usuario.colaboradorId ?? null },
     process.env.JWT_SECRET,
     { expiresIn: "8h" }
   );

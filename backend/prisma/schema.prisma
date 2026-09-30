@@ -187,6 +187,7 @@ model Empresa {
   categoriasDespesa CategoriaDespesa[]
   centrosCusto      CentroCusto[]
   contasPagar       ContaPagar[]
+  eventos Evento[]
 }
 
 model Pessoa {
@@ -263,6 +264,8 @@ model Colaborador {
 
   @@unique([cpf, empresaId])
   @@map("colaboradores")
+  eventosCriados     Evento[]            @relation("EventosCriados")
+  eventosResponsavel EventoResponsavel[] @relation("EventosResponsavel")
 }
 
 model Transportadora {
@@ -959,4 +962,62 @@ model ContaPagar {
 
   @@index([empresaId, status, vencimento])
   @@map("contas_pagar")
+}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+// Evento ou tarefa. Guarda data e hora separadas de propósito: boa parte
+// dos compromissos da operação é "no dia", sem hora marcada, e forçar um
+// horário faria a agenda mentir.
+model Evento {
+  id        Int      @id @default(autoincrement())
+  titulo    String
+  descricao String?
+
+  data      DateTime
+  horaInicio String? @map("hora_inicio")
+  horaFim    String? @map("hora_fim")
+  diaTodo    Boolean @default(true) @map("dia_todo")
+
+  // pendente | concluido | cancelado
+  status String @default("pendente")
+  // baixa | normal | alta
+  prioridade String @default("normal")
+
+  local String?
+  // Marcação livre: "manutenção", "fiscal", "cliente".
+  tipo  String?
+
+  concluidoEm  DateTime? @map("concluido_em")
+  concluidoPor Int?      @map("concluido_por")
+
+  criadoPorId Int?         @map("criado_por_id")
+  criadoPor   Colaborador? @relation("EventosCriados", fields: [criadoPorId], references: [id])
+
+  responsaveis EventoResponsavel[]
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, data])
+  @@map("eventos")
+}
+
+// Um evento pode ter mais de um responsável — carregamento que envolve
+// motorista e conferente, por exemplo.
+model EventoResponsavel {
+  id Int @id @default(autoincrement())
+
+  eventoId Int    @map("evento_id")
+  evento   Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  colaboradorId Int         @map("colaborador_id")
+  colaborador   Colaborador @relation("EventosResponsavel", fields: [colaboradorId], references: [id])
+
+  @@unique([eventoId, colaboradorId])
+  @@map("evento_responsaveis")
 }

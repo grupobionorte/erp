@@ -4802,6 +4802,349 @@ function RelatorioNfeModal({ onFechar }) {
   );
 }
 
+// ---------- Agenda ----------
+
+function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dados, setDados] = useState(() => ({
+    titulo: evento?.titulo || "",
+    descricao: evento?.descricao || "",
+    data: evento?.data ? String(evento.data).slice(0, 10) : hoje,
+    diaTodo: evento?.diaTodo ?? true,
+    horaInicio: evento?.horaInicio || "",
+    horaFim: evento?.horaFim || "",
+    prioridade: evento?.prioridade || "normal",
+    tipo: evento?.tipo || "",
+    local: evento?.local || "",
+    responsaveis: evento?.responsaveis?.map(r => r.colaboradorId) || [],
+  }));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+
+  const alternarResponsavel = (id) => {
+    setDados(d => ({
+      ...d,
+      responsaveis: d.responsaveis.includes(id)
+        ? d.responsaveis.filter(x => x !== id)
+        : [...d.responsaveis, id],
+    }));
+  };
+
+  const salvar = async () => {
+    if (!dados.titulo || !dados.data) {
+      setErro("Informe o título e a data.");
+      return;
+    }
+    setSalvando(true); setErro("");
+    try {
+      const corpo = {
+        ...dados,
+        // Sem hora quando é evento de dia inteiro: guardar hora aqui faria
+        // a agenda mostrar um horário que ninguém combinou.
+        horaInicio: dados.diaTodo ? null : (dados.horaInicio || null),
+        horaFim: dados.diaTodo ? null : (dados.horaFim || null),
+      };
+      if (evento?.id) {
+        await apiRequest(`/agenda/${evento.id}`, { method: "PUT", body: JSON.stringify(corpo) });
+      } else {
+        await apiRequest("/agenda", { method: "POST", body: JSON.stringify(corpo) });
+      }
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal modal-cadastro">
+        <div className="modal-header">
+          <h3>{evento?.id ? "Editar compromisso" : "Novo compromisso"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <section className="pf-secao" style={{ paddingTop: 0 }}>
+            <h4 className="pf-secao-titulo">O compromisso</h4>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
+                <label className="field-label">Título<span className="req">*</span></label>
+                <input value={dados.titulo} onChange={e => set("titulo", e.target.value)}
+                  placeholder="Ex.: Revisão do cavalo ABC1D23" />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Prioridade</label>
+                <select value={dados.prioridade} onChange={e => set("prioridade", e.target.value)}>
+                  <option value="baixa">Baixa</option>
+                  <option value="normal">Normal</option>
+                  <option value="alta">Alta</option>
+                </select>
+              </div>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Local</label>
+                <input value={dados.local} onChange={e => set("local", e.target.value)} />
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Tipo</label>
+                <input value={dados.tipo} onChange={e => set("tipo", e.target.value)}
+                  placeholder="Manutenção, fiscal, cliente…" />
+              </div>
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Quando</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Data<span className="req">*</span></label>
+                <input type="date" value={dados.data} onChange={e => set("data", e.target.value)} />
+              </div>
+              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, paddingBottom: 8 }}>
+                  <input type="checkbox" style={{ width: "auto" }} checked={dados.diaTodo}
+                    onChange={e => set("diaTodo", e.target.checked)} />
+                  Dia inteiro
+                </label>
+              </div>
+              {!dados.diaTodo && (
+                <>
+                  <div className="field-group">
+                    <label className="field-label">Início</label>
+                    <input type="time" value={dados.horaInicio} onChange={e => set("horaInicio", e.target.value)} />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Fim</label>
+                    <input type="time" value={dados.horaFim} onChange={e => set("horaFim", e.target.value)} />
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">
+              Responsáveis
+              <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+                {dados.responsaveis.length} escolhido{dados.responsaveis.length !== 1 ? "s" : ""}
+              </span>
+            </h4>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 150, overflowY: "auto" }}>
+              {(colaboradores || []).map(c => {
+                const ativo = dados.responsaveis.includes(c.id);
+                return (
+                  <button key={c.id} type="button" className="btn"
+                    style={{
+                      padding: "4px 11px", fontSize: 12.5,
+                      background: ativo ? "#1F3B57" : undefined,
+                      color: ativo ? "#fff" : undefined,
+                    }}
+                    onClick={() => alternarResponsavel(c.id)}>
+                    {c.nome}
+                  </button>
+                );
+              })}
+              {!colaboradores?.length && <p className="hint">Nenhum colaborador cadastrado ainda.</p>}
+            </div>
+          </section>
+
+          <section className="pf-secao" style={{ paddingBottom: 0 }}>
+            <h4 className="pf-secao-titulo">Detalhes</h4>
+            <textarea rows={3} value={dados.descricao} onChange={e => set("descricao", e.target.value)}
+              style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }} />
+          </section>
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgendaView() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const daquiUmMes = (() => {
+    const d = new Date(`${hoje}T12:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const { items: colaboradores } = useApiCollection("colaboradores");
+  const [filtro, setFiltro] = useState({ de: hoje, ate: daquiUmMes, status: "pendente", responsavelId: "" });
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [editando, setEditando] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setErro("");
+    try {
+      const params = new URLSearchParams(Object.entries(filtro).filter(([, v]) => v !== ""));
+      setDados(await apiRequest(`/agenda?${params}`));
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    }
+  }, [filtro]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const concluir = async (evento) => {
+    try {
+      await apiRequest(`/agenda/${evento.id}/${evento.status === "concluido" ? "reabrir" : "concluir"}`, { method: "POST" });
+      carregar();
+    } catch (e) { alert(`Não foi possível atualizar: ${e.message}`); }
+  };
+
+  const excluir = async (evento) => {
+    if (!window.confirm(`Excluir "${evento.titulo}"?`)) return;
+    try {
+      await apiRequest(`/agenda/${evento.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(`Não foi possível excluir: ${e.message}`); }
+  };
+
+  // Agrupa por dia: a agenda é lida por data, não como uma lista corrida.
+  const porDia = [];
+  for (const evento of dados?.eventos || []) {
+    const dia = String(evento.data).slice(0, 10);
+    const grupo = porDia.find(g => g.dia === dia);
+    if (grupo) grupo.eventos.push(evento);
+    else porDia.push({ dia, eventos: [evento] });
+  }
+
+  const rotuloDia = (dia) => {
+    const d = new Date(`${dia}T12:00:00Z`);
+    const hojeData = new Date(`${hoje}T12:00:00Z`);
+    const dias = Math.round((d - hojeData) / 86400000);
+    const formatado = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+    if (dias === 0) return `Hoje · ${formatado}`;
+    if (dias === 1) return `Amanhã · ${formatado}`;
+    if (dias < 0) return `${formatado} · atrasado`;
+    return formatado;
+  };
+
+  const corPrioridade = { alta: "#c62828", normal: "#6b6b68", baixa: "#8a887f" };
+  const T = dados?.totais;
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#eeedfe", color: "#3c3489" }}>
+            <Clock size={20} />
+          </div>
+          <div>
+            <h2>Agenda</h2>
+            <p className="subtle">
+              {T ? `${T.pendentes} pendente${T.pendentes !== 1 ? "s" : ""}${T.atrasados ? ` · ${T.atrasados} atrasado${T.atrasados !== 1 ? "s" : ""}` : ""}` : "—"}
+            </p>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={() => setEditando({})}>
+          <Plus size={16} /> Novo compromisso
+        </button>
+      </div>
+
+      <div className="nf-section">
+        <div className="nf-grid-4">
+          <div className="field-group">
+            <label className="field-label">De</label>
+            <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Até</label>
+            <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Situação</label>
+            <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}>
+              <option value="pendente">Pendentes</option>
+              <option value="concluido">Concluídos</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Responsável</label>
+            <select value={filtro.responsavelId} onChange={e => setFiltro(f => ({ ...f, responsavelId: e.target.value }))}>
+              <option value="">Todos</option>
+              {colaboradorDoUsuario() && <option value={colaboradorDoUsuario()}>Só os meus</option>}
+              {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+
+      {dados && !porDia.length && (
+        <div className="empty-state"><p>Nenhum compromisso nesse período.</p></div>
+      )}
+
+      {porDia.map(grupo => (
+        <div key={grupo.dia} style={{ marginBottom: 18 }}>
+          <h4 style={{
+            margin: "0 0 8px", fontSize: 13, fontWeight: 600, textTransform: "capitalize",
+            color: grupo.dia < hoje ? "#c62828" : "#55534c",
+          }}>
+            {rotuloDia(grupo.dia)}
+          </h4>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {grupo.eventos.map(evento => (
+              <div key={evento.id} style={{
+                display: "flex", alignItems: "flex-start", gap: 12,
+                background: "var(--surface-2, #fff)", border: "1px solid var(--border, #e5e3da)",
+                borderLeft: `3px solid ${corPrioridade[evento.prioridade] || "#6b6b68"}`,
+                borderRadius: 9, padding: "9px 13px",
+                opacity: evento.status === "concluido" ? 0.6 : 1,
+              }}>
+                <input type="checkbox" style={{ width: "auto", marginTop: 3 }}
+                  checked={evento.status === "concluido"} onChange={() => concluir(evento)} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: 500,
+                    textDecoration: evento.status === "concluido" ? "line-through" : undefined,
+                  }}>
+                    {evento.diaTodo ? "" : `${evento.horaInicio || ""}${evento.horaFim ? `–${evento.horaFim}` : ""} · `}
+                    {evento.titulo}
+                  </div>
+                  {evento.descricao && <div className="subtle" style={{ fontSize: 12.5 }}>{evento.descricao}</div>}
+                  <div className="subtle" style={{ fontSize: 12.5, marginTop: 2 }}>
+                    {evento.responsaveis?.length
+                      ? evento.responsaveis.map(r => r.colaborador.nome.split(" ")[0]).join(", ")
+                      : "sem responsável"}
+                    {evento.local ? ` · ${evento.local}` : ""}
+                    {evento.tipo ? ` · ${evento.tipo}` : ""}
+                  </div>
+                </div>
+                <div style={{ whiteSpace: "nowrap" }}>
+                  <button className="icon-btn" title="Editar" onClick={() => setEditando(evento)}><Pencil size={14} /></button>
+                  <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(evento)}><Trash2 size={14} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {editando && (
+        <EventoForm
+          evento={editando.id ? editando : null}
+          colaboradores={colaboradores}
+          onFechar={() => setEditando(null)}
+          onSalvo={() => { setEditando(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ---------- Contas a pagar ----------
 
 // Lançamento. O parcelamento e a repetição mensal são resolvidos aqui: o
@@ -7513,6 +7856,7 @@ function ErpBiomassa() {
     { key: "cte", label: "CTe", icon: Truck },
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
+    { key: "agenda", label: "Agenda", icon: Clock },
     { key: "contasPagar", label: "Contas a pagar", icon: FileText },
     { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },
@@ -7931,6 +8275,7 @@ function ErpBiomassa() {
         {view === "notasFiscais" && <NotasFiscaisView onIrParaCte={() => setView("cte")} />}
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
+        {view === "agenda" && <AgendaView />}
         {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}

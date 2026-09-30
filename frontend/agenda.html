@@ -387,7 +387,7 @@ function desenhar() {
               <div class="meta">
                 ${evento.responsaveis?.length
                   ? escapar(evento.responsaveis.map((r) => r.colaborador.nome.split(" ")[0]).join(", "))
-                  : "sem responsável"}${evento.local ? ` · ${escapar(evento.local)}` : ""}
+                  : "sem responsável"}
               </div>
             </div>
           </div>

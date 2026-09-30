@@ -4814,8 +4814,6 @@ function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
     horaInicio: evento?.horaInicio || "",
     horaFim: evento?.horaFim || "",
     prioridade: evento?.prioridade || "normal",
-    tipo: evento?.tipo || "",
-    local: evento?.local || "",
     responsaveis: evento?.responsaveis?.map(r => r.colaboradorId) || [],
   }));
   const [salvando, setSalvando] = useState(false);
@@ -4880,17 +4878,6 @@ function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
                   <option value="normal">Normal</option>
                   <option value="alta">Alta</option>
                 </select>
-              </div>
-            </div>
-            <div className="nf-grid-4">
-              <div className="field-group" style={{ gridColumn: "span 2" }}>
-                <label className="field-label">Local</label>
-                <input value={dados.local} onChange={e => set("local", e.target.value)} />
-              </div>
-              <div className="field-group" style={{ gridColumn: "span 2" }}>
-                <label className="field-label">Tipo</label>
-                <input value={dados.tipo} onChange={e => set("tipo", e.target.value)}
-                  placeholder="Manutenção, fiscal, cliente…" />
               </div>
             </div>
           </section>
@@ -5119,8 +5106,6 @@ function AgendaView() {
                     {evento.responsaveis?.length
                       ? evento.responsaveis.map(r => r.colaborador.nome.split(" ")[0]).join(", ")
                       : "sem responsável"}
-                    {evento.local ? ` · ${evento.local}` : ""}
-                    {evento.tipo ? ` · ${evento.tipo}` : ""}
                   </div>
                 </div>
                 <div style={{ whiteSpace: "nowrap" }}>
@@ -7849,6 +7834,7 @@ function ErpBiomassa() {
 
   const navItems = [
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
+    { key: "agenda", label: "Agenda", icon: Clock },
     { divider: true },
     ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores"]),
     { divider: true },
@@ -7856,7 +7842,6 @@ function ErpBiomassa() {
     { key: "cte", label: "CTe", icon: Truck },
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
-    { key: "agenda", label: "Agenda", icon: Clock },
     { key: "contasPagar", label: "Contas a pagar", icon: FileText },
     { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },

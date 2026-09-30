@@ -60,7 +60,16 @@ router.put("/:id", asyncHandler(async (req, res) => {
 
   const transportadora = await prisma.transportadora.update({
     where: { id },
-    data: dados,
+    data: {
+      ...dados,
+      // O endereço vinha separado do resto e era descartado aqui — por isso
+      // o cadastro salvava tudo menos o endereço. Upsert cria quando ainda
+      // não existe e atualiza quando já existe.
+      endereco: endereco
+        ? { upsert: { create: endereco, update: endereco } }
+        : undefined,
+    },
+    include: { endereco: true },
   });
   res.json(transportadora);
 }));

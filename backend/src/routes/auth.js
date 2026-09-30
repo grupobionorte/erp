@@ -78,7 +78,7 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       colaborador: colaboradorId ? { connect: { id: Number(colaboradorId) } } : undefined,
     },
     include: {
-      empresas: { select: { id: true, razaoSocial: true, logoUrl: true } },
+      empresas: { select: { id: true, razaoSocial: true } },
       colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },
     },
   });
@@ -119,7 +119,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   const usuario = await prisma.usuario.findUnique({
     where: { email },
-    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true, logoUrl: true } } },
+    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true } } },
   });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Credenciais inválidas" });
@@ -146,7 +146,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   // Admin enxerga todas as empresas ativas automaticamente, mesmo sem
   // estar explicitamente vinculado a elas.
   const empresasPermitidas = usuario.papel === "admin"
-    ? await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true, razaoSocial: true, logoUrl: true }, orderBy: { razaoSocial: "asc" } })
+    ? await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true, razaoSocial: true }, orderBy: { razaoSocial: "asc" } })
     : usuario.empresas;
 
   if (empresasPermitidas.length === 0) {
@@ -189,7 +189,7 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
     empresa = await prisma.empresa.findUnique({
       where: { id: req.usuario.empresaId },
       // O CFOP padrão vem junto: é ele que preenche o CT-e novo.
-      select: { id: true, razaoSocial: true, logoUrl: true, cfopPadraoCte: true },
+      select: { id: true, razaoSocial: true, cfopPadraoCte: true },
     });
   }
   // O colaborador vinculado vem junto: é ele que os documentos usam como

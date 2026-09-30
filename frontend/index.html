@@ -1384,7 +1384,26 @@ function Field({ field, value, onChange, disabled }) {
       }
       setErroUpload("");
       const leitor = new FileReader();
-      leitor.onload = () => onChange(leitor.result);
+      leitor.onload = () => {
+        // A imagem é guardada dentro do próprio cadastro, e uma foto de
+        // celular de 2 MB vira quase 3 MB de texto — que trafega em toda
+        // consulta que traga a empresa. Reduzir para 320px deixa a logo com
+        // dezenas de KB, tamanho de sobra para a tela e para o documento.
+        const img = new Image();
+        img.onload = () => {
+          const LADO_MAXIMO = 320;
+          const escala = Math.min(1, LADO_MAXIMO / Math.max(img.width, img.height));
+          const tela = document.createElement("canvas");
+          tela.width = Math.round(img.width * escala);
+          tela.height = Math.round(img.height * escala);
+          tela.getContext("2d").drawImage(img, 0, 0, tela.width, tela.height);
+          // PNG preserva fundo transparente, que é o caso de logo.
+          onChange(tela.toDataURL("image/png"));
+        };
+        // Se o navegador não conseguir decodificar, guarda como veio.
+        img.onerror = () => onChange(leitor.result);
+        img.src = leitor.result;
+      };
       leitor.readAsDataURL(arquivo);
     };
 
@@ -3612,7 +3631,7 @@ function MdfeView() {
                     </span>
                   )}
                 </td>
-                <td>{mdfe.documentosVinculados?.length || 0} CT-e</td>
+                <td>{mdfe._count?.documentosVinculados ?? mdfe.documentosVinculados?.length ?? 0} CT-e</td>
                 <td>
                   <StatusDocumento status={mdfe.status} />
                   {processando === mdfe.id && (
@@ -4707,6 +4726,17 @@ function NotasFiscaisView({ onIrParaCte }) {
     }
   };
 
+  // A listagem traz só o resumo de cada documento; para editar é preciso a
+  // versão completa, com itens e vínculos.
+  const abrirParaEditar = async (id) => {
+    try {
+      setEditando(await apiRequest(`/documentos-fiscais/${id}`));
+      setMostrarForm(true);
+    } catch (e) {
+      alert(`Não foi possível abrir: ${e.message}`);
+    }
+  };
+
   const [notaParaGuia, setNotaParaGuia] = useState(null);
 
   // A nota autorizada já traz o que o CT-e precisa; o rascunho nasce daqui
@@ -5016,7 +5046,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                     <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
                       {(nota.status === "rascunho" || nota.status === "rejeitado") && (
                         <>
-                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setEditando(nota); setMostrarForm(true); }}>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); abrirParaEditar(nota.id); }}>
                             <Pencil size={14} /> Editar
                           </button>
                           <button
@@ -6243,6 +6273,17 @@ function CteView({ onIrParaMdfe }) {
     }
   };
 
+  // A listagem traz só o resumo de cada documento; para editar é preciso a
+  // versão completa, com itens e vínculos.
+  const abrirParaEditar = async (id) => {
+    try {
+      setEditando(await apiRequest(`/documentos-fiscais/${id}`));
+      setMostrarForm(true);
+    } catch (e) {
+      alert(`Não foi possível abrir: ${e.message}`);
+    }
+  };
+
   // Rascunho nunca foi à SEFAZ: pode sumir de vez, em vez de ficar na lista
   // como cancelado.
   const excluirRascunho = async (cte) => {
@@ -6499,7 +6540,7 @@ function CteView({ onIrParaMdfe }) {
                     <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
                       {(cte.status === "rascunho" || cte.status === "rejeitado") && (
                         <>
-                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setEditando(cte); setMostrarForm(true); }}>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); abrirParaEditar(cte.id); }}>
                             <Pencil size={14} /> Editar
                           </button>
                           <button

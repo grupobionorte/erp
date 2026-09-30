@@ -83,6 +83,13 @@ router.get("/", asyncHandler(async (req, res) => {
   const { tipo } = req.query;
   const { empresaId } = req.usuario;
 
+  // A listagem carrega só o que a tela desenha. Antes vinham itens,
+  // produtos, documentos transportados e todas as pessoas de cada
+  // documento — dezenas de registros por linha para exibir seis colunas, o
+  // que ia ficando lento conforme o volume crescia. Para abrir ou editar um
+  // documento, a tela busca a versão completa em /documentos-fiscais/:id.
+  const limite = Math.min(Number(req.query.limite) || 300, 1000);
+
   const documentos = await prisma.documentoFiscal.findMany({
     where: {
       ...(tipo ? { tipo } : {}),
@@ -92,12 +99,22 @@ router.get("/", asyncHandler(async (req, res) => {
       ...(empresaId ? { empresaId } : {}),
     },
     include: {
-      destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
-      veiculo: { include: { motorista: true } }, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
-      colaboradorResponsavel: true, itens: { include: { produto: true } },
-      documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
+      destinatario: { select: { id: true, nomeRazaoSocial: true, documento: true } },
+      // Só o que o menu de ações precisa: enviar ao motorista pelo WhatsApp.
+      veiculo: {
+        select: {
+          id: true, placa: true,
+          motorista: { select: { id: true, nome: true, telefone: true } },
+        },
+      },
+      veiculoReboque: { select: { id: true, placa: true } },
+      veiculoReboque2: { select: { id: true, placa: true } },
+      veiculoReboque3: { select: { id: true, placa: true } },
+      // Contagem em vez das listas inteiras.
+      _count: { select: { documentosTransportados: true, documentosVinculados: true } },
     },
     orderBy: { dataEmissao: "desc" },
+    take: limite,
   });
   res.json(documentos);
 }));
@@ -105,7 +122,15 @@ router.get("/", asyncHandler(async (req, res) => {
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
-    include: { destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true, veiculo: { include: { motorista: true } }, veiculoReboque: true, colaboradorResponsavel: true, itens: { include: { produto: true } }, documentosTransportados: { include: { notaFiscal: true } } },
+    // Documento completo: é daqui que a tela de edição se abastece, já que
+    // a listagem passou a trazer só o resumo.
+    include: {
+      destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
+      veiculo: { include: { motorista: true } },
+      veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+      colaboradorResponsavel: true, itens: { include: { produto: true } },
+      documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
+    },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
   res.json(documento);

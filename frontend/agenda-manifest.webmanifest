@@ -1,0 +1,17 @@
+{
+  "name": "Agenda — Biomassa",
+  "short_name": "Agenda",
+  "description": "Compromissos e tarefas da operação, com lembrete no celular",
+  "start_url": "/agenda.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16293C",
+  "theme_color": "#1F3B57",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/agenda-icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/agenda-icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/agenda-icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

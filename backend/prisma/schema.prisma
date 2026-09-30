@@ -64,6 +64,7 @@ model Usuario {
   tratamentosPonto TratamentoPonto[]
 
   @@map("usuarios")
+  inscricoesPush InscricaoPush[]
 }
 
 model Ncm {
@@ -1020,4 +1021,24 @@ model EventoResponsavel {
 
   @@unique([eventoId, colaboradorId])
   @@map("evento_responsaveis")
+}
+
+// Inscrição de notificação push de um aparelho. Cada celular gera a sua —
+// a mesma pessoa pode ter o telefone e o tablet.
+model InscricaoPush {
+  id       Int    @id @default(autoincrement())
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  aparelho String?
+
+  usuarioId Int     @map("usuario_id")
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  criadoEm     DateTime  @default(now()) @map("criado_em")
+  ultimoEnvio  DateTime? @map("ultimo_envio")
+
+  @@index([usuarioId])
+  @@map("inscricoes_push")
 }

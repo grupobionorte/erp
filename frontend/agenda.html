@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Agenda — Biomassa</title>
+<link rel="manifest" href="/agenda-manifest.webmanifest" />
+<meta name="theme-color" content="#1F3B57" />
+<!-- iOS ignora o manifesto para o ícone da tela inicial. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Agenda" />
+<link rel="apple-touch-icon" href="/agenda-icone-192.png" />
+<link rel="icon" href="/favicon.ico" />
+<style>
+  :root {
+    --azul: #1F3B57;
+    --azul-escuro: #16293C;
+    --fundo: #F7F6F2;
+    --superficie: #FFFFFF;
+    --borda: #E5E3DA;
+    --texto: #23231F;
+    --texto-2: #6B6B68;
+    --vermelho: #C62828;
+    --ambar: #B57A12;
+    --verde: #00732F;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--fundo);
+    color: var(--texto);
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    /* Respeita a área da barra de status e do indicador de gestos. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--azul); color: #fff;
+    padding: 14px 16px calc(14px + env(safe-area-inset-top));
+    padding-top: calc(14px + env(safe-area-inset-top));
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header .sub { font-size: 12.5px; opacity: .8; margin-top: 2px; }
+
+  main { padding: 14px 16px 90px; }
+
+  .abas { display: flex; gap: 6px; margin-bottom: 14px; }
+  .aba {
+    flex: 1; padding: 9px 6px; border-radius: 9px; border: 1px solid var(--borda);
+    background: var(--superficie); color: var(--texto-2); font-size: 13px;
+    font-family: inherit; cursor: pointer;
+  }
+  .aba[aria-selected="true"] { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+  .dia { margin: 0 0 8px; font-size: 13px; font-weight: 600; text-transform: capitalize; color: #55534C; }
+  .dia.atrasado { color: var(--vermelho); }
+
+  .evento {
+    background: var(--superficie); border: 1px solid var(--borda); border-left: 3px solid var(--texto-2);
+    border-radius: 11px; padding: 12px 14px; margin-bottom: 8px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .evento.alta { border-left-color: var(--vermelho); }
+  .evento.baixa { border-left-color: #B9B7AE; }
+  .evento.feito { opacity: .55; }
+  .evento.feito .titulo { text-decoration: line-through; }
+
+  .evento input[type="checkbox"] { width: 22px; height: 22px; margin-top: 1px; flex: none; accent-color: var(--azul); }
+  .titulo { font-weight: 500; line-height: 1.3; }
+  .meta { font-size: 12.5px; color: var(--texto-2); margin-top: 3px; }
+
+  .vazio { text-align: center; color: var(--texto-2); padding: 40px 20px; }
+
+  .rodape {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: rgba(247,246,242,.95); backdrop-filter: blur(8px);
+    border-top: 1px solid var(--borda);
+    display: flex; gap: 8px;
+  }
+  button.primario {
+    flex: 1; padding: 13px; border: none; border-radius: 11px;
+    background: var(--azul); color: #fff; font-size: 15px; font-weight: 500;
+    font-family: inherit; cursor: pointer;
+  }
+  button.secundario {
+    padding: 13px 16px; border: 1px solid var(--borda); border-radius: 11px;
+    background: var(--superficie); color: var(--texto); font-size: 15px;
+    font-family: inherit; cursor: pointer;
+  }
+
+  /* Login e formulário */
+  .painel { background: var(--superficie); border: 1px solid var(--borda); border-radius: 13px; padding: 18px; }
+  label { display: block; font-size: 12.5px; color: var(--texto-2); margin: 12px 0 5px; }
+  input, select, textarea {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--borda); border-radius: 9px;
+    font-size: 16px; /* 16px evita o zoom automático do iPhone ao focar */
+    font-family: inherit; background: var(--superficie); color: var(--texto);
+  }
+  .erro { color: var(--vermelho); font-size: 13px; margin-top: 10px; }
+  .aviso { background: #FBF3E2; border: 1px solid #ECDCB4; color: #7A5205;
+           border-radius: 9px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+
+  .sobreposicao {
+    position: fixed; inset: 0; background: rgba(22,41,60,.45); z-index: 20;
+    display: flex; align-items: flex-end;
+  }
+  .folha {
+    background: var(--fundo); width: 100%; max-height: 92vh; overflow-y: auto;
+    border-radius: 16px 16px 0 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+  .folha h2 { margin: 0 0 4px; font-size: 17px; }
+
+  .pessoas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .pessoa {
+    padding: 7px 12px; border-radius: 999px; border: 1px solid var(--borda);
+    background: var(--superficie); font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  .pessoa[aria-pressed="true"] { background: var(--azul); color: #fff; border-color: var(--azul); }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fundo: #14140F; --superficie: #1E1E19; --borda: #34342C;
+      --texto: #EDEDE6; --texto-2: #A3A39B;
+    }
+    .rodape { background: rgba(20,20,15,.95); }
+    .aviso { background: #2A2416; border-color: #4A3F22; color: #E8D9A8; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const API = "https://erp-biomassa-backend.onrender.com";
+
+const estado = {
+  token: localStorage.getItem("agenda.token") || null,
+  usuario: JSON.parse(localStorage.getItem("agenda.usuario") || "null"),
+  aba: "hoje",
+  eventos: [],
+  colaboradores: [],
+  carregando: false,
+  erro: "",
+  editando: null,
+  push: { permitido: false, inscrito: false },
+};
+
+const app = document.getElementById("app");
+
+/* ---------------------------------------------------------------------------
+   Conversa com a API
+--------------------------------------------------------------------------- */
+async function api(caminho, opcoes = {}) {
+  const resposta = await fetch(`${API}${caminho}`, {
+    ...opcoes,
+    headers: {
+      "Content-Type": "application/json",
+      ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {}),
+      ...(opcoes.headers || {}),
+    },
+  });
+
+  if (resposta.status === 401) {
+    sair();
+    throw new Error("Sessão expirada. Entre de novo.");
+  }
+  if (!resposta.ok) {
+    let mensagem = resposta.statusText;
+    try { const corpo = await resposta.json(); mensagem = corpo.erro || mensagem; } catch {}
+    throw new Error(mensagem);
+  }
+  return resposta.status === 204 ? null : resposta.json();
+}
+
+function sair() {
+  estado.token = null;
+  estado.usuario = null;
+  localStorage.removeItem("agenda.token");
+  localStorage.removeItem("agenda.usuario");
+  desenhar();
+}
+
+/* ---------------------------------------------------------------------------
+   Notificações
+--------------------------------------------------------------------------- */
+const base64ParaUint8 = (base64) => {
+  const preenchido = (base64 + "=".repeat((4 - base64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  const bruto = atob(preenchido);
+  return Uint8Array.from([...bruto].map((c) => c.charCodeAt(0)));
+};
+
+const ehIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
+const instalado = () =>
+  window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+
+async function verificarPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  estado.push.permitido = Notification.permission === "granted";
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    estado.push.inscrito = Boolean(await registro.pushManager.getSubscription());
+  } catch { /* ainda não registrado */ }
+}
+
+async function ativarNotificacoes() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      alert("Este navegador não trabalha com notificações.");
+      return;
+    }
+    if (ehIOS() && !instalado()) {
+      alert("No iPhone, as notificações só funcionam com o app na tela de início.\n\nToque em Compartilhar e depois em Adicionar à Tela de Início.");
+      return;
+    }
+
+    const permissao = await Notification.requestPermission();
+    if (permissao !== "granted") {
+      alert("As notificações ficaram bloqueadas. Para liberar, acesse os ajustes do navegador.");
+      return;
+    }
+
+    const { chave, configurado } = await api("/push/chave");
+    if (!configurado || !chave) {
+      alert("O servidor ainda não está configurado para notificações.");
+      return;
+    }
+
+    const registro = await navigator.serviceWorker.ready;
+    const inscricao = await registro.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: base64ParaUint8(chave),
+    });
+
+    const dados = inscricao.toJSON();
+    await api("/push/inscrever", {
+      method: "POST",
+      body: JSON.stringify({
+        endpoint: dados.endpoint,
+        keys: dados.keys,
+        aparelho: navigator.userAgent.slice(0, 120),
+      }),
+    });
+
+    estado.push = { permitido: true, inscrito: true };
+    desenhar();
+    await api("/push/teste", { method: "POST" });
+  } catch (e) {
+    alert(`Não foi possível ativar: ${e.message}`);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Dados
+--------------------------------------------------------------------------- */
+const hojeISO = () => new Date().toISOString().slice(0, 10);
+
+function periodoDaAba() {
+  const hoje = hojeISO();
+  if (estado.aba === "hoje") return { de: hoje, ate: hoje, status: "pendente" };
+  if (estado.aba === "semana") {
+    const d = new Date(`${hoje}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 7);
+    return { de: hoje, ate: d.toISOString().slice(0, 10), status: "pendente" };
+  }
+  if (estado.aba === "atrasados") {
+    const d = new Date(`${hoje}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return { de: "2020-01-01", ate: d.toISOString().slice(0, 10), status: "pendente" };
+  }
+  // Concluídos: últimos 30 dias.
+  const d = new Date(`${hoje}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 30);
+  return { de: d.toISOString().slice(0, 10), ate: hoje, status: "concluido" };
+}
+
+async function carregar() {
+  if (!estado.token) return;
+  estado.carregando = true; estado.erro = "";
+  desenhar();
+  try {
+    const params = new URLSearchParams(periodoDaAba());
+    // "Só os meus" quando o usuário tem colaborador vinculado.
+    if (estado.usuario?.colaboradorId) params.set("responsavelId", estado.usuario.colaboradorId);
+
+    const [agenda, pessoas] = await Promise.all([
+      api(`/agenda?${params}`),
+      estado.colaboradores.length ? Promise.resolve(estado.colaboradores) : api("/colaboradores"),
+    ]);
+    estado.eventos = agenda.eventos;
+    estado.colaboradores = pessoas;
+  } catch (e) {
+    estado.erro = e.message;
+  } finally {
+    estado.carregando = false;
+    desenhar();
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Tela
+--------------------------------------------------------------------------- */
+const escapar = (texto) => String(texto ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function rotuloDia(dia) {
+  const d = new Date(`${dia}T12:00:00Z`);
+  const hoje = new Date(`${hojeISO()}T12:00:00Z`);
+  const dias = Math.round((d - hoje) / 86400000);
+  const formatado = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  if (dias === 0) return `Hoje · ${formatado}`;
+  if (dias === 1) return `Amanhã · ${formatado}`;
+  return formatado;
+}
+
+function desenhar() {
+  if (!estado.token) return desenharLogin();
+
+  const grupos = [];
+  for (const evento of estado.eventos) {
+    const dia = String(evento.data).slice(0, 10);
+    const grupo = grupos.find((g) => g.dia === dia);
+    if (grupo) grupo.eventos.push(evento); else grupos.push({ dia, eventos: [evento] });
+  }
+
+  const precisaAtivar = !estado.push.inscrito;
+  const avisoIOS = ehIOS() && !instalado();
+
+  app.innerHTML = `
+    <header>
+      <div>
+        <h1>Agenda</h1>
+        <div class="sub">${escapar(estado.usuario?.nome || "")}</div>
+      </div>
+      <button class="secundario" style="padding:8px 12px;font-size:13px" onclick="sair()">Sair</button>
+    </header>
+
+    <main>
+      ${avisoIOS ? `
+        <div class="aviso">
+          Para receber lembretes no iPhone, toque em <strong>Compartilhar</strong> e depois em
+          <strong>Adicionar à Tela de Início</strong>. Depois abra o app por esse ícone.
+        </div>` : ""}
+
+      ${precisaAtivar && !avisoIOS ? `
+        <div class="aviso">
+          Lembretes desligados neste aparelho.
+          <button class="secundario" style="margin-top:8px;width:100%" onclick="ativarNotificacoes()">
+            Ativar notificações
+          </button>
+        </div>` : ""}
+
+      <div class="abas">
+        ${[["hoje", "Hoje"], ["semana", "7 dias"], ["atrasados", "Atrasados"], ["feitos", "Feitos"]]
+          .map(([chave, rotulo]) => `
+            <button class="aba" aria-selected="${estado.aba === chave}" onclick="trocarAba('${chave}')">${rotulo}</button>
+          `).join("")}
+      </div>
+
+      ${estado.erro ? `<p class="erro">${escapar(estado.erro)}</p>` : ""}
+      ${estado.carregando ? `<p class="vazio">Carregando…</p>` : ""}
+
+      ${!estado.carregando && !grupos.length ? `
+        <div class="vazio">
+          <p>${estado.aba === "atrasados" ? "Nada atrasado." : estado.aba === "feitos" ? "Nada concluído por aqui." : "Nenhum compromisso."}</p>
+        </div>` : ""}
+
+      ${grupos.map((grupo) => `
+        <h3 class="dia ${grupo.dia < hojeISO() ? "atrasado" : ""}">${escapar(rotuloDia(grupo.dia))}</h3>
+        ${grupo.eventos.map((evento) => `
+          <div class="evento ${evento.prioridade} ${evento.status === "concluido" ? "feito" : ""}">
+            <input type="checkbox" ${evento.status === "concluido" ? "checked" : ""}
+              onchange="alternarConclusao(${evento.id}, '${evento.status}')" />
+            <div style="flex:1;min-width:0">
+              <div class="titulo">
+                ${evento.diaTodo ? "" : escapar(`${evento.horaInicio || ""}${evento.horaFim ? `–${evento.horaFim}` : ""} · `)}${escapar(evento.titulo)}
+              </div>
+              ${evento.descricao ? `<div class="meta">${escapar(evento.descricao)}</div>` : ""}
+              <div class="meta">
+                ${evento.responsaveis?.length
+                  ? escapar(evento.responsaveis.map((r) => r.colaborador.nome.split(" ")[0]).join(", "))
+                  : "sem responsável"}${evento.local ? ` · ${escapar(evento.local)}` : ""}
+              </div>
+            </div>
+          </div>
+        `).join("")}
+      `).join("")}
+    </main>
+
+    <div class="rodape">
+      <button class="primario" onclick="abrirFormulario()">+ Novo compromisso</button>
+      <button class="secundario" onclick="carregar()">↻</button>
+    </div>
+
+    ${estado.editando ? desenharFormulario() : ""}
+  `;
+}
+
+function desenharFormulario() {
+  const e = estado.editando;
+  return `
+    <div class="sobreposicao" onclick="if (event.target === this) fecharFormulario()">
+      <div class="folha">
+        <h2>Novo compromisso</h2>
+        <div class="painel" style="margin-top:12px">
+          <label>Título</label>
+          <input id="f-titulo" value="${escapar(e.titulo || "")}" placeholder="O que precisa ser feito" />
+
+          <label>Data</label>
+          <input id="f-data" type="date" value="${e.data || hojeISO()}" />
+
+          <label style="display:flex;align-items:center;gap:10px;margin-top:14px">
+            <input id="f-diatodo" type="checkbox" style="width:22px;height:22px" ${e.diaTodo === false ? "" : "checked"}
+              onchange="document.getElementById('horas').hidden = this.checked" />
+            <span style="font-size:15px;color:var(--texto)">Dia inteiro</span>
+          </label>
+
+          <div id="horas" ${e.diaTodo === false ? "" : "hidden"}>
+            <label>Horário</label>
+            <input id="f-hora" type="time" value="${e.horaInicio || ""}" />
+          </div>
+
+          <label>Prioridade</label>
+          <select id="f-prioridade">
+            <option value="baixa" ${e.prioridade === "baixa" ? "selected" : ""}>Baixa</option>
+            <option value="normal" ${!e.prioridade || e.prioridade === "normal" ? "selected" : ""}>Normal</option>
+            <option value="alta" ${e.prioridade === "alta" ? "selected" : ""}>Alta</option>
+          </select>
+
+          <label>Responsáveis</label>
+          <div class="pessoas">
+            ${estado.colaboradores.map((c) => `
+              <button class="pessoa" aria-pressed="${(e.responsaveis || []).includes(c.id)}"
+                onclick="alternarResponsavel(${c.id}, this)">${escapar(c.nome)}</button>
+            `).join("")}
+          </div>
+
+          <label>Detalhes</label>
+          <textarea id="f-descricao" rows="2">${escapar(e.descricao || "")}</textarea>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="secundario" style="flex:1" onclick="fecharFormulario()">Cancelar</button>
+          <button class="primario" onclick="salvarEvento()">Salvar</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function desenharLogin() {
+  app.innerHTML = `
+    <header><h1>Agenda — Biomassa</h1></header>
+    <main>
+      <div class="painel">
+        <label>E-mail</label>
+        <input id="login-email" type="email" autocomplete="username" inputmode="email" />
+        <label>Senha</label>
+        <input id="login-senha" type="password" autocomplete="current-password" />
+        <button class="primario" style="width:100%;margin-top:18px" onclick="entrar()">Entrar</button>
+        <p id="login-erro" class="erro"></p>
+      </div>
+    </main>
+  `;
+  document.getElementById("login-senha").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") entrar();
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   Ações
+--------------------------------------------------------------------------- */
+async function entrar() {
+  const email = document.getElementById("login-email").value.trim();
+  const senha = document.getElementById("login-senha").value;
+  const alvoErro = document.getElementById("login-erro");
+  alvoErro.textContent = "";
+
+  try {
+    const resposta = await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, senha }),
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) throw new Error(dados.erro || "Não foi possível entrar");
+
+    // Com mais de uma empresa, o login devolve a lista; aqui usamos a
+    // primeira — a agenda não é por empresa.
+    const token = dados.token || dados.empresas?.[0]?.token;
+    if (!token) {
+      const primeira = dados.empresas?.[0];
+      const segunda = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, senha, empresaId: primeira?.id }),
+      });
+      const dadosSegunda = await segunda.json();
+      if (!segunda.ok) throw new Error(dadosSegunda.erro || "Não foi possível entrar");
+      estado.token = dadosSegunda.token;
+      estado.usuario = dadosSegunda.usuario;
+    } else {
+      estado.token = token;
+      estado.usuario = dados.usuario;
+    }
+
+    localStorage.setItem("agenda.token", estado.token);
+    localStorage.setItem("agenda.usuario", JSON.stringify(estado.usuario));
+    await verificarPush();
+    carregar();
+  } catch (e) {
+    alvoErro.textContent = e.message;
+  }
+}
+
+function trocarAba(aba) { estado.aba = aba; carregar(); }
+
+async function alternarConclusao(id, statusAtual) {
+  try {
+    await api(`/agenda/${id}/${statusAtual === "concluido" ? "reabrir" : "concluir"}`, { method: "POST" });
+    carregar();
+  } catch (e) { alert(e.message); }
+}
+
+function abrirFormulario() {
+  estado.editando = { responsaveis: estado.usuario?.colaboradorId ? [estado.usuario.colaboradorId] : [] };
+  desenhar();
+}
+
+function fecharFormulario() { estado.editando = null; desenhar(); }
+
+function alternarResponsavel(id, botao) {
+  const lista = estado.editando.responsaveis || [];
+  estado.editando.responsaveis = lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id];
+  botao.setAttribute("aria-pressed", String(estado.editando.responsaveis.includes(id)));
+}
+
+async function salvarEvento() {
+  const diaTodo = document.getElementById("f-diatodo").checked;
+  const corpo = {
+    titulo: document.getElementById("f-titulo").value.trim(),
+    data: document.getElementById("f-data").value,
+    diaTodo,
+    horaInicio: diaTodo ? null : (document.getElementById("f-hora").value || null),
+    prioridade: document.getElementById("f-prioridade").value,
+    descricao: document.getElementById("f-descricao").value.trim() || null,
+    responsaveis: estado.editando.responsaveis || [],
+  };
+
+  if (!corpo.titulo || !corpo.data) {
+    alert("Informe o título e a data.");
+    return;
+  }
+
+  try {
+    await api("/agenda", { method: "POST", body: JSON.stringify(corpo) });
+    estado.editando = null;
+    carregar();
+  } catch (e) { alert(e.message); }
+}
+
+/* ---------------------------------------------------------------------------
+   Início
+--------------------------------------------------------------------------- */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/agenda-sw.js")
+    .then(() => verificarPush())
+    .then(() => { if (estado.token) desenhar(); })
+    .catch((e) => console.warn("service worker:", e));
+}
+
+desenhar();
+if (estado.token) carregar();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ const express = require("express");
 
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
+const { enviarPushParaColaborador } = require("../lib/push");
 
 const router = express.Router();
 
@@ -78,12 +79,29 @@ router.post("/", asyncHandler(async (req, res) => {
     include: incluir,
   });
 
+  // Avisa quem recebeu a tarefa, menos quem a criou — ninguém precisa de
+  // notificação da própria tarefa.
+  for (const r of evento.responsaveis) {
+    if (r.colaboradorId === req.usuario.colaboradorId) continue;
+    await enviarPushParaColaborador(r.colaboradorId, {
+      titulo: "Nova tarefa para você",
+      corpo: `${evento.titulo} · ${evento.data.toLocaleDateString("pt-BR", { timeZone: "UTC" })}`,
+      url: "/agenda.html",
+      tag: `evento-${evento.id}`,
+    });
+  }
+
   res.status(201).json(evento);
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
   const { responsaveis, data, empresaId, criadoPorId, ...dados } = req.body;
   const id = Number(req.params.id);
+
+  // Guarda quem já era responsável, para avisar só quem entrou agora.
+  const jaEramResponsaveis = (await prisma.eventoResponsavel.findMany({
+    where: { eventoId: id }, select: { colaboradorId: true },
+  })).map((r) => r.colaboradorId);
 
   // Responsáveis são substituídos por inteiro quando informados: é mais
   // previsível do que tentar casar quem entrou e quem saiu.
@@ -102,6 +120,20 @@ router.put("/:id", asyncHandler(async (req, res) => {
     },
     include: incluir,
   });
+
+  // Quem entrou como responsável agora é avisado; quem já era, não.
+  if (Array.isArray(responsaveis)) {
+    for (const r of evento.responsaveis) {
+      if (r.colaboradorId === req.usuario.colaboradorId) continue;
+      if (jaEramResponsaveis.includes(r.colaboradorId)) continue;
+      await enviarPushParaColaborador(r.colaboradorId, {
+        titulo: "Nova tarefa para você",
+        corpo: `${evento.titulo} · ${evento.data.toLocaleDateString("pt-BR", { timeZone: "UTC" })}`,
+        url: "/agenda.html",
+        tag: `evento-${evento.id}`,
+      });
+    }
+  }
 
   res.json(evento);
 }));

@@ -21,6 +21,8 @@ const motoristasRouter = require("./routes/motoristas");
 const relatoriosRouter = require("./routes/relatorios");
 const contasPagarRouter = require("./routes/contasPagar");
 const agendaRouter = require("./routes/agenda");
+const pushRouter = require("./routes/push");
+const lembretesRouter = require("./routes/lembretes");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -53,6 +55,10 @@ app.use("/auth", authRouter);
 // com o token do próprio REP (cabeçalho x-rep-token).
 app.use("/ponto/tablet", pontoTabletRouter);
 
+// Os lembretes da agenda são disparados por um serviço de agendamento
+// externo, que não tem login de usuário — ele se identifica pelo CRON_TOKEN.
+app.use("/lembretes", lembretesRouter);
+
 app.use(autenticar);
 
 // Clientes e fornecedores compartilham a rota /pessoas (use ?papel=cliente
@@ -72,6 +78,7 @@ app.use("/motoristas", motoristasRouter);
 app.use("/relatorios", relatoriosRouter);
 app.use("/contas-pagar", contasPagarRouter);
 app.use("/agenda", agendaRouter);
+app.use("/push", pushRouter);
 app.use("/empresas", empresasRouter);
 app.use("/ponto", pontoRouter);
 

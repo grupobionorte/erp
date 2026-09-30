@@ -4742,96 +4742,125 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: 720 }}>
+      {/* Mesmo tamanho dos demais cadastros: 940px e 60% da altura. */}
+      <div className="modal modal-cadastro">
         <div className="modal-header">
           <h3>{editando ? "Editar conta" : "Nova conta a pagar"}</h3>
           <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <div className="nf-grid-3">
-            <div className="field-group" style={{ gridColumn: "span 2" }}>
-              <label className="field-label">Descrição<span className="req">*</span></label>
-              <input value={dados.descricao} onChange={e => set("descricao", e.target.value)} />
+          <section className="pf-secao" style={{ paddingTop: 0 }}>
+            <h4 className="pf-secao-titulo">O que é a despesa</h4>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
+                <label className="field-label">Descrição<span className="req">*</span></label>
+                <input value={dados.descricao} onChange={e => set("descricao", e.target.value)}
+                  placeholder="Ex.: Diesel S10 — abastecimento da frota" />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Documento</label>
+                <input value={dados.documento} onChange={e => set("documento", e.target.value)}
+                  placeholder="Boleto, nota, recibo" />
+              </div>
             </div>
-            <div className="field-group">
-              <label className="field-label">Valor<span className="req">*</span></label>
-              <InputMoeda value={dados.valor} onChange={v => set("valor", v)} />
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Fornecedor</label>
+                <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Categoria</label>
+                <select value={dados.categoriaId} onChange={e => set("categoriaId", e.target.value)}>
+                  <option value="">Sem categoria</option>
+                  {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Centro de custo</label>
+                <select value={dados.centroCustoId} onChange={e => set("centroCustoId", e.target.value)}>
+                  <option value="">Sem centro de custo</option>
+                  {centros.map(c => (
+                    <option key={c.id} value={c.id}>{c.nome}{c.veiculo?.placa ? ` (${c.veiculo.placa})` : ""}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="nf-grid-3">
-            <div className="field-group">
-              <label className="field-label">Vencimento<span className="req">*</span></label>
-              <input type="date" value={dados.vencimento} onChange={e => set("vencimento", e.target.value)} />
-            </div>
-            <div className="field-group">
-              <label className="field-label">Fornecedor</label>
-              <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
-                <option value="">Nenhum</option>
-                {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Documento</label>
-              <input value={dados.documento} onChange={e => set("documento", e.target.value)}
-                placeholder="Boleto, nota, recibo" />
-            </div>
-          </div>
-
-          <div className="nf-grid-3">
-            <div className="field-group">
-              <label className="field-label">Categoria</label>
-              <select value={dados.categoriaId} onChange={e => set("categoriaId", e.target.value)}>
-                <option value="">Sem categoria</option>
-                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Centro de custo</label>
-              <select value={dados.centroCustoId} onChange={e => set("centroCustoId", e.target.value)}>
-                <option value="">Sem centro de custo</option>
-                {centros.map(c => <option key={c.id} value={c.id}>{c.nome}{c.veiculo?.placa ? ` (${c.veiculo.placa})` : ""}</option>)}
-              </select>
-            </div>
-            <div className="field-group" style={{ gridColumn: "span 1" }}>
-              <label className="field-label">Observação</label>
-              <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
-            </div>
-          </div>
-
-          {!editando && (
-            <div className="nf-section" style={{ marginTop: 6 }}>
-              <h4 className="nf-section-title">Repetição</h4>
-              <div className="nf-grid-3">
-                <div className="field-group">
-                  <label className="field-label">Tipo</label>
-                  <select value={dados.repeticao} onChange={e => set("repeticao", e.target.value)}>
-                    <option value="unica">Conta única</option>
-                    <option value="parcelado">Parcelado (divide o valor)</option>
-                    <option value="mensal">Mensal (repete o valor)</option>
-                  </select>
-                </div>
-                {dados.repeticao !== "unica" && (
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Valor e vencimento</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Valor<span className="req">*</span></label>
+                <InputMoeda value={dados.valor} onChange={v => set("valor", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Vencimento<span className="req">*</span></label>
+                <input type="date" value={dados.vencimento} onChange={e => set("vencimento", e.target.value)} />
+              </div>
+              {!editando && (
+                <>
                   <div className="field-group">
-                    <label className="field-label">{dados.repeticao === "parcelado" ? "Parcelas" : "Meses"}</label>
+                    <label className="field-label">Repetição</label>
+                    <select value={dados.repeticao} onChange={e => set("repeticao", e.target.value)}>
+                      <option value="unica">Conta única</option>
+                      <option value="parcelado">Parcelado</option>
+                      <option value="mensal">Mensal</option>
+                    </select>
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">
+                      {dados.repeticao === "parcelado" ? "Parcelas" : dados.repeticao === "mensal" ? "Meses" : "\u00a0"}
+                    </label>
                     <input type="number" min="2" max="60" value={dados.quantidade}
+                      disabled={dados.repeticao === "unica"}
                       onChange={e => set("quantidade", e.target.value)} />
                   </div>
-                )}
-              </div>
-              {dados.repeticao === "parcelado" && vezes > 1 && valorNumero > 0 && (
-                <p className="hint">
-                  {vezes} parcelas de aproximadamente R$ {formatarMoeda(valorNumero / vezes)}, uma por mês a partir do
-                  vencimento. A diferença de centavos vai na primeira.
-                </p>
-              )}
-              {dados.repeticao === "mensal" && vezes > 1 && (
-                <p className="hint">
-                  {vezes} contas de R$ {formatarMoeda(valorNumero)}, uma por mês. Cada uma tem seu vencimento e sua baixa.
-                </p>
+                </>
               )}
             </div>
-          )}
+
+            {/* Prévia do que será lançado: com parcelamento, uma conta vira
+                várias, e é melhor ver isso antes de salvar. */}
+            {!editando && dados.repeticao !== "unica" && vezes > 1 && valorNumero > 0 && (
+              <div style={{
+                background: "#f4f7f2", border: "1px solid #dde6d6", borderRadius: 9,
+                padding: "10px 14px", fontSize: 13, marginTop: 4,
+              }}>
+                <strong>{vezes} contas serão criadas.</strong>{" "}
+                {dados.repeticao === "parcelado"
+                  ? `Parcelas de R$ ${formatarMoeda(valorNumero / vezes)}, somando R$ ${formatarMoeda(valorNumero)}. A diferença de centavos vai na primeira.`
+                  : `Uma por mês, de R$ ${formatarMoeda(valorNumero)} cada, totalizando R$ ${formatarMoeda(valorNumero * vezes)}.`}
+                <br />
+                <span className="subtle">
+                  Primeiro vencimento em {dados.vencimento ? new Date(`${dados.vencimento}T12:00:00Z`).toLocaleDateString("pt-BR") : "—"},
+                  último em {dados.vencimento ? (() => {
+                    const d = new Date(`${dados.vencimento}T12:00:00Z`);
+                    const dia = d.getUTCDate();
+                    d.setUTCDate(1);
+                    d.setUTCMonth(d.getUTCMonth() + (vezes - 1));
+                    const ultimoDia = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+                    d.setUTCDate(Math.min(dia, ultimoDia));
+                    return d.toLocaleDateString("pt-BR");
+                  })() : "—"}.
+                </span>
+              </div>
+            )}
+          </section>
+
+          <section className="pf-secao" style={{ paddingBottom: 0 }}>
+            <h4 className="pf-secao-titulo">Observação</h4>
+            <textarea
+              rows={2}
+              value={dados.observacao}
+              onChange={e => set("observacao", e.target.value)}
+              placeholder="Detalhe que ajude a reconhecer a conta depois"
+              style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+            />
+          </section>
 
           {erro && <p className="error-text">{erro}</p>}
         </div>
@@ -5044,7 +5073,7 @@ function ContasPagarView() {
 
   const { items: fornecedores } = useApiCollection("fornecedores");
 
-  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: ultimoDiaMes, status: "aberta", categoriaId: "", centroCustoId: "" });
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: ultimoDiaMes, status: "aberta" });
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -5162,7 +5191,7 @@ function ContasPagarView() {
       )}
 
       <div className="nf-section">
-        <div className="nf-grid-4">
+        <div className="nf-grid-3">
           <div className="field-group">
             <label className="field-label">Vencimento de</label>
             <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
@@ -5177,22 +5206,6 @@ function ContasPagarView() {
               <option value="aberta">Em aberto</option>
               <option value="paga">Pagas</option>
               <option value="todas">Todas</option>
-            </select>
-          </div>
-          <div className="field-group">
-            <label className="field-label">Categoria</label>
-            <select value={filtro.categoriaId} onChange={e => setFiltro(f => ({ ...f, categoriaId: e.target.value }))}>
-              <option value="">Todas</option>
-              {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="nf-grid-4">
-          <div className="field-group">
-            <label className="field-label">Centro de custo</label>
-            <select value={filtro.centroCustoId} onChange={e => setFiltro(f => ({ ...f, centroCustoId: e.target.value }))}>
-              <option value="">Todos</option>
-              {centros.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
         </div>

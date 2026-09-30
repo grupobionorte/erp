@@ -459,9 +459,11 @@ const MODULES = {
     fields: [
       { key: "nome", label: "Razão Social", type: "text", required: true },
       { key: "documento", label: "CNPJ", type: "text", required: true },
-      { key: "ie", label: "Inscrição Estadual", type: "text" },
-      { key: "rntrc", label: "RNTRC (ANTT)", type: "text" },
-      { key: "endereco", label: "Endereço", type: "endereco" },
+      { key: "ie", label: "Inscrição Estadual", type: "text", required: true },
+      // Obrigatórios: sem RNTRC, IE e endereço a transportadora não serve
+      // para emitir CT-e nem MDF-e, e a falta só aparece na rejeição.
+      { key: "rntrc", label: "RNTRC (ANTT)", type: "text", required: true },
+      { key: "endereco", label: "Endereço", type: "endereco", required: true },
       { key: "telefone", label: "Telefone", type: "text" },
       { key: "email", label: "E-mail", type: "text" },
     ],
@@ -2066,7 +2068,14 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   const setField = (key, value) => setData(d => ({ ...d, [key]: value }));
 
   const handleSubmit = async () => {
-    const missing = camposVisiveis.filter(f => f.required && !data[f.key]);
+    // Endereço é um objeto: só ter o objeto não significa preenchido — o
+    // que conta é cidade, UF e logradouro.
+    const preenchido = (f) => {
+      const valor = data[f.key];
+      if (f.type === "endereco") return Boolean(valor?.logradouro && valor?.cidade && valor?.uf);
+      return Boolean(valor);
+    };
+    const missing = camposVisiveis.filter(f => f.required && !preenchido(f));
     if (missing.length) {
       setError(`Preencha: ${missing.map(f => f.label).join(", ")}`);
       return;
@@ -2086,7 +2095,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
+      <div className="modal modal-cadastro">
         <div className="modal-header">
           <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -3813,7 +3822,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 920, maxWidth: "96vw" }}>
+      <div className="modal modal-cadastro">
         <div className="modal-header">
           <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -5464,7 +5473,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" style={{ width: 940, maxWidth: "96vw" }}>
+      <div className="modal modal-cadastro">
         <div className="modal-header" style={{ display: "block", paddingBottom: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
@@ -6729,7 +6738,11 @@ function ErpBiomassa() {
         /* Altura fixa no corpo: cada aba tem uma quantidade diferente de
            campos, e sem isso o modal encolhia e crescia a cada troca, com os
            botões do rodapé pulando de lugar. */
-        .cte-corpo { height: 60vh; flex: 0 0 60vh; }
+        /* Mesma altura em todas as telas de cadastro: a janela para de
+           crescer e encolher conforme o cadastro aberto. */
+        .cte-corpo,
+        .modal-cadastro > .modal-body,
+        .pessoa-modal > .modal-body { height: 60vh; flex: 0 0 60vh; }
 
         /* Formulário de CT-e: resumo, abas, papéis e conferência */
         .cte-resumo { display: flex; gap: 22px; flex-wrap: wrap; margin: 12px 0 14px; }
@@ -6767,7 +6780,10 @@ function ErpBiomassa() {
         .cte-conferencia li { margin-bottom: 3px; }
 
         /* Cadastro de cliente/fornecedor — grade de 12 colunas e seções */
-        .pessoa-modal { width: 780px; max-width: 96vw; }
+        /* Telas de cadastro usam todas a mesma largura, a do CT-e: trocar
+           de cadastro não muda o tamanho da janela na tela. */
+        .modal-cadastro { width: 940px; max-width: 96vw; }
+        .pessoa-modal { width: 940px; max-width: 96vw; }
         .pessoa-modal .modal-header h3 { margin: 0; }
         .pessoa-modal .modal-header .subtle { margin-top: 3px; }
         .pf-secao { padding: 18px 0; border-bottom: 1px solid var(--border, #e5e3da); }

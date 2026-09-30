@@ -169,6 +169,19 @@ function dataEmissaoSefaz(data = new Date(), timeZone = process.env.TZ_FISCAL ||
 // cabeçalho preenchidos no cadastro). Ajuste os nomes de campo conforme a
 // versão da documentação do provedor.
 function montarPayloadNfe({ empresa, destinatario, itens, documento, transportadora, veiculo }) {
+  const modalidadeFrete = CODIGO_MODALIDADE_FRETE[documento.modalidadeFrete] ?? 9;
+
+  const semAcento = (t) =>
+    String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+
+  const mesmaCidade =
+    semAcento(empresa.endereco?.uf) === semAcento(destinatario.endereco?.uf) &&
+    semAcento(empresa.endereco?.cidade) === semAcento(destinatario.endereco?.cidade) &&
+    Boolean(empresa.endereco?.cidade);
+
+  // Sem transporte (9) também não leva veículo.
+  const podeInformarVeiculo = mesmaCidade && modalidadeFrete !== 9;
+
   return {
     // Mesmo limite de 60 caracteres vale para a NF-e.
     natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
@@ -198,10 +211,15 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     telefone_destinatario: destinatario.telefone || undefined,
     email_destinatario: destinatario.email || undefined,
 
-    modalidade_frete: CODIGO_MODALIDADE_FRETE[documento.modalidadeFrete] ?? 9,
+    modalidade_frete: modalidadeFrete,
     nome_transportador: transportadora?.razaoSocial || undefined,
     cnpj_transportador: transportadora?.cnpj || undefined,
-    veiculo_placa: veiculo?.placa || undefined,
+    // O grupo do veículo só é aceito quando emitente e destinatário estão
+    // no MESMO município. Operação interestadual proíbe (rejeição 868), e
+    // boa parte das UFs — MT entre elas — estende a proibição às internas
+    // entre municípios diferentes. Nesses casos o veículo é informado no
+    // MDF-e, que é o documento próprio para isso.
+    veiculo_placa: podeInformarVeiculo ? (veiculo?.placa || undefined) : undefined,
     volumes: documento.quantidadeVolumes
       ? [{
           quantidade: documento.quantidadeVolumes,

@@ -2986,7 +2986,7 @@ function ModuleView({ moduleKey }) {
           )}
         </div>
       ) : (
-        <table className="data-table">
+        <table className="data-table tabela-densa">
           <thead>
             <tr>
               {config.columns.map(col => (
@@ -6745,6 +6745,15 @@ function ErpBiomassa() {
            baixas cabem mais notas na tela sem virar linha ilegível.
            No lugar da borda entre as linhas, faixas alternadas — separam
            igual e não ocupam altura nenhuma. */
+        /* Linhas baixas e faixas alternadas, sem as bordas entre registros.
+           A versão "compacta" acrescenta largura fixa de coluna, que só faz
+           sentido onde as colunas são conhecidas (listas de documento). */
+        .tabela-densa th { padding: 5px 6px; white-space: nowrap; }
+        .tabela-densa td { padding: 3px 6px; line-height: 1.3; border-bottom: none; }
+        .tabela-densa tbody tr:nth-child(even) { background: #faf9f5; }
+        .tabela-densa tbody tr:hover { background: #f1efe7; }
+        .tabela-densa .actions-col { width: 34px; padding-right: 4px; }
+
         .tabela-compacta { table-layout: fixed; }
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem
            28px de largura e estava deixando um vão até a data. */

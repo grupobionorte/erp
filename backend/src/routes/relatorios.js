@@ -170,4 +170,59 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
   await pacote.finalize();
 }));
 
+/**
+ * Total de NF-e por cliente no mês corrente. Serve ao painel inicial: a
+ * pergunta "quanto a Alvorada comprou este mês" não deveria exigir abrir
+ * relatório e escolher período.
+ */
+router.get("/nfe/por-cliente", asyncHandler(async (req, res) => {
+  const ids = String(req.query.clientes || "")
+    .split(",")
+    .map((i) => Number(i))
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (!ids.length) return res.json({ periodo: null, clientes: [] });
+
+  // Mês corrente no fuso da operação.
+  const zona = process.env.TZ_FISCAL || "America/Cuiaba";
+  const agora = new Date();
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: zona, year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(agora).map((x) => [x.type, x.value])
+  );
+  const primeiroDia = `${p.year}-${p.month}-01`;
+  const ultimoDia = new Date(Date.UTC(Number(p.year), Number(p.month), 0)).toISOString().slice(0, 10);
+  const { inicio, fim } = intervaloNoFuso(primeiroDia, ultimoDia);
+
+  const notas = await prisma.documentoFiscal.findMany({
+    where: {
+      tipo: "NFe",
+      empresaId: req.usuario.empresaId || undefined,
+      status: "autorizado",
+      destinatarioId: { in: ids },
+      dataEmissao: { gte: inicio, lte: fim },
+    },
+    select: { destinatarioId: true, valorTotal: true },
+  });
+
+  const pessoas = await prisma.pessoa.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, nomeRazaoSocial: true },
+  });
+
+  res.json({
+    periodo: { de: primeiroDia, ate: ultimoDia },
+    clientes: ids.map((id) => {
+      const doCliente = notas.filter((n) => n.destinatarioId === id);
+      return {
+        id,
+        nome: pessoas.find((x) => x.id === id)?.nomeRazaoSocial || "—",
+        quantidade: doCliente.length,
+        valor: doCliente.reduce((t, n) => t + (Number(n.valorTotal) || 0), 0),
+      };
+    }),
+  });
+}));
+
 module.exports = router;

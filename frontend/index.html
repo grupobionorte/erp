@@ -3267,6 +3267,100 @@ function ZerarBase() {
   );
 }
 
+// Acompanhamento de clientes no painel: até três, com o que já foi faturado
+// no mês. A escolha fica no navegador de quem usa — é preferência de quem
+// olha a tela, não configuração da empresa.
+function ClientesDoMes() {
+  const { items: clientes } = useApiCollection("clientes");
+  const [selecionados, setSelecionados] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("erp.painel.clientes") || "[]").slice(0, 3);
+    } catch { return []; }
+  });
+  const [dados, setDados] = useState(null);
+  const [escolhendo, setEscolhendo] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem("erp.painel.clientes", JSON.stringify(selecionados)); } catch { /* sem espaço */ }
+  }, [selecionados]);
+
+  useEffect(() => {
+    if (!selecionados.length) { setDados(null); return; }
+    apiRequest(`/relatorios/nfe/por-cliente?clientes=${selecionados.join(",")}`)
+      .then(setDados)
+      .catch(() => setDados(null));
+  }, [selecionados]);
+
+  const alternar = (id) => {
+    setSelecionados(atual => {
+      if (atual.includes(id)) return atual.filter(x => x !== id);
+      if (atual.length >= 3) return atual;
+      return [...atual, id];
+    });
+  };
+
+  const mesNome = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+  return (
+    <div className="nf-section" style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <h4 className="nf-section-title" style={{ margin: 0 }}>
+          Faturamento por cliente <span className="subtle" style={{ fontWeight: 400 }}>· {mesNome}</span>
+        </h4>
+        <button className="link-btn" onClick={() => setEscolhendo(v => !v)}>
+          {escolhendo ? "Pronto" : selecionados.length ? "Trocar clientes" : "Escolher clientes"}
+        </button>
+      </div>
+
+      {escolhendo && (
+        <div style={{ margin: "10px 0 4px" }}>
+          <p className="hint" style={{ marginTop: 0 }}>Até três clientes. {selecionados.length}/3 escolhidos.</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+            {(clientes || []).map(c => {
+              const ativo = selecionados.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  className="btn"
+                  style={{
+                    padding: "4px 10px", fontSize: 12.5,
+                    background: ativo ? "#1F3B57" : undefined,
+                    color: ativo ? "#fff" : undefined,
+                  }}
+                  disabled={!ativo && selecionados.length >= 3}
+                  onClick={() => alternar(c.id)}
+                >
+                  {c.nome}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {!selecionados.length && !escolhendo && (
+        <p className="hint">Escolha até três clientes para acompanhar o faturamento do mês.</p>
+      )}
+
+      {dados?.clientes?.length > 0 && (
+        <div className="dash-grid" style={{ marginTop: 12 }}>
+          {dados.clientes.map(c => (
+            <div key={c.id} className="dash-card" style={{ cursor: "default" }}>
+              <div className="dash-card-label" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {c.nome}
+              </div>
+              <div className="dash-card-value">R$ {formatarMoeda(c.valor)}</div>
+              <div className="subtle" style={{ fontSize: 12.5 }}>
+                {c.quantidade} nota{c.quantidade !== 1 ? "s" : ""} no mês
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
   const cards = modulosParaUsuario(usuario).map(([key, cfg]) => ({ key, cfg, count: counts[key] }));
   return (
@@ -3282,6 +3376,8 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
           </div>
         </div>
       </div>
+
+      <ClientesDoMes />
 
       <div className="dash-grid">
         {cards.map(({ key, cfg, count }) => {

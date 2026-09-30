@@ -4712,6 +4712,10 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
     observacao: conta?.observacao || "",
     repeticao: "unica",
     quantidade: 2,
+    dataPagamento: conta?.dataPagamento ? String(conta.dataPagamento).slice(0, 10) : "",
+    valorPago: conta?.valorPago ?? "",
+    jurosMulta: conta?.jurosMulta ?? "",
+    desconto: conta?.desconto ?? "",
   }));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -4752,10 +4756,14 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
           <section className="pf-secao" style={{ paddingTop: 0 }}>
             <h4 className="pf-secao-titulo">O que é a despesa</h4>
             <div className="nf-grid-4">
+              {/* Fornecedor na frente: é por ele que se procura a conta, e
+                  costuma ser o primeiro dado que se tem em mãos. */}
               <div className="field-group" style={{ gridColumn: "span 3" }}>
-                <label className="field-label">Descrição<span className="req">*</span></label>
-                <input value={dados.descricao} onChange={e => set("descricao", e.target.value)}
-                  placeholder="Ex.: Diesel S10 — abastecimento da frota" />
+                <label className="field-label">Fornecedor</label>
+                <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
+                </select>
               </div>
               <div className="field-group">
                 <label className="field-label">Documento</label>
@@ -4765,11 +4773,9 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
             </div>
             <div className="nf-grid-4">
               <div className="field-group" style={{ gridColumn: "span 2" }}>
-                <label className="field-label">Fornecedor</label>
-                <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
-                </select>
+                <label className="field-label">Descrição<span className="req">*</span></label>
+                <input value={dados.descricao} onChange={e => set("descricao", e.target.value)}
+                  placeholder="Ex.: Diesel S10 — abastecimento da frota" />
               </div>
               <div className="field-group">
                 <label className="field-label">Categoria</label>
@@ -4848,6 +4854,40 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
                   })() : "—"}.
                 </span>
               </div>
+            )}
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">
+              Pagamento
+              <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+                preencha só se a conta já foi paga
+              </span>
+            </h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Data do pagamento</label>
+                <input type="date" value={dados.dataPagamento}
+                  onChange={e => set("dataPagamento", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor pago</label>
+                <InputMoeda value={dados.valorPago} onChange={v => set("valorPago", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Juros / multa</label>
+                <InputMoeda value={dados.jurosMulta} onChange={v => set("jurosMulta", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Desconto</label>
+                <InputMoeda value={dados.desconto} onChange={v => set("desconto", v)} />
+              </div>
+            </div>
+            {dados.dataPagamento && (
+              <p className="hint">
+                A conta será gravada como paga
+                {vezes > 1 && dados.repeticao !== "unica" ? " — só a primeira parcela; as demais ficam em aberto." : "."}
+              </p>
             )}
           </section>
 

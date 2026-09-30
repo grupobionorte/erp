@@ -156,6 +156,9 @@ router.post("/", asyncHandler(async (req, res) => {
     documento, observacao,
     // Repetição: "parcelado" divide o valor; "mensal" repete o mesmo valor.
     repeticao, quantidade,
+    // Conta que já nasce paga: acontece quando o lançamento é feito depois
+    // do pagamento, que é o caso comum de despesa do dia a dia.
+    dataPagamento, valorPago, jurosMulta, desconto, formaPagamento,
   } = req.body;
 
   if (!descricao || !valor || !vencimento) {
@@ -184,6 +187,17 @@ router.post("/", asyncHandler(async (req, res) => {
     grupo,
   };
 
+  // O pagamento informado no lançamento vale só para a primeira parcela —
+  // as demais ainda vão vencer.
+  const pagamento = dataPagamento ? {
+    status: "paga",
+    dataPagamento: new Date(`${String(dataPagamento).slice(0, 10)}T12:00:00Z`),
+    valorPago: valorPago !== undefined && valorPago !== "" ? Number(valorPago) : undefined,
+    jurosMulta: jurosMulta ? Number(jurosMulta) : undefined,
+    desconto: desconto ? Number(desconto) : undefined,
+    formaPagamento: formaPagamento || undefined,
+  } : {};
+
   const registros = Array.from({ length: vezes }, (_, i) => ({
     ...base,
     valor: Number((valorParcela + (i === 0 ? sobra : 0)).toFixed(2)),
@@ -192,6 +206,7 @@ router.post("/", asyncHandler(async (req, res) => {
     parcelaNumero: vezes > 1 ? i + 1 : undefined,
     parcelaTotal: vezes > 1 ? vezes : undefined,
     descricao: vezes > 1 && parcelado ? `${descricao} (${i + 1}/${vezes})` : descricao,
+    ...(i === 0 ? pagamento : {}),
   }));
 
   await prisma.contaPagar.createMany({ data: registros });
@@ -210,13 +225,28 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { empresaId, fornecedorId, categoriaId, centroCustoId, vencimento, competencia, ...dados } = req.body;
+  const {
+    empresaId, fornecedorId, categoriaId, centroCustoId, vencimento, competencia,
+    dataPagamento, valorPago, jurosMulta, desconto,
+    ...dados
+  } = req.body;
+
+  // Informar a data de pagamento aqui equivale a dar baixa; limpar a data
+  // devolve a conta para em aberto.
+  const statusPeloPagamento = dataPagamento ? "paga" : (dataPagamento === "" || dataPagamento === null ? "aberta" : undefined);
 
   res.json(await prisma.contaPagar.update({
     where: { id: Number(req.params.id) },
     data: {
       ...dados,
+      status: dados.status || statusPeloPagamento,
       valor: dados.valor !== undefined ? Number(dados.valor) : undefined,
+      dataPagamento: dataPagamento
+        ? new Date(`${String(dataPagamento).slice(0, 10)}T12:00:00Z`)
+        : (dataPagamento === "" || dataPagamento === null ? null : undefined),
+      valorPago: valorPago === "" || valorPago === null ? null : (valorPago !== undefined ? Number(valorPago) : undefined),
+      jurosMulta: jurosMulta === "" || jurosMulta === null ? null : (jurosMulta !== undefined ? Number(jurosMulta) : undefined),
+      desconto: desconto === "" || desconto === null ? null : (desconto !== undefined ? Number(desconto) : undefined),
       fornecedorId: fornecedorId === null || fornecedorId === "" ? null : (fornecedorId ? Number(fornecedorId) : undefined),
       categoriaId: categoriaId === null || categoriaId === "" ? null : (categoriaId ? Number(categoriaId) : undefined),
       centroCustoId: centroCustoId === null || centroCustoId === "" ? null : (centroCustoId ? Number(centroCustoId) : undefined),

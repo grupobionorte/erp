@@ -3720,6 +3720,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
     if (podeTrocar) setInformacoesComplementares(novo?.observacaoPadrao || "");
   };
   const [finalidadeOperacao, setFinalidadeOperacao] = useState(nota?.finalidadeOperacao || "Normal");
+  const [chaveNfeReferenciada, setChaveNfeReferenciada] = useState(nota?.chaveNfeReferenciada || "");
   const [consumidorFinal, setConsumidorFinal] = useState(nota?.consumidorFinal ?? false);
   const [indicadorPresenca, setIndicadorPresenca] = useState(nota?.indicadorPresenca || "Não se aplica");
   const [formaPagamento, setFormaPagamento] = useState(nota?.formaPagamento || "Dinheiro");
@@ -3792,6 +3793,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         horaSaida: horaSaida || undefined,
         informacoesComplementares,
         finalidadeOperacao,
+        chaveNfeReferenciada: chaveNfeReferenciada || null,
         consumidorFinal,
         indicadorPresenca,
         formaPagamento,
@@ -3856,6 +3858,27 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </select>
               </div>
             </div>
+
+            {/* Complementar, ajuste e devolução precisam apontar a nota de
+                origem: a SEFAZ recusa sem essa referência. */}
+            {finalidadeOperacao !== "Normal" && (
+              <div className="field-group">
+                <label className="field-label">
+                  Chave da NF-e de origem<span className="req">*</span>
+                </label>
+                <input
+                  value={chaveNfeReferenciada}
+                  inputMode="numeric"
+                  placeholder="44 dígitos — pode colar com espaços"
+                  onChange={e => setChaveNfeReferenciada(e.target.value.replace(/\D/g, "").slice(0, 44))}
+                />
+                <p className="hint">
+                  {chaveNfeReferenciada.length === 44
+                    ? "Chave completa."
+                    : `${chaveNfeReferenciada.length} de 44 dígitos — é a nota que está sendo ${finalidadeOperacao.toLowerCase() === "devolução" ? "devolvida" : "complementada ou ajustada"}.`}
+                </p>
+              </div>
+            )}
             {/* Três colunas: com a grade de duas, a hora caía sozinha na
                 linha de baixo. */}
             <div className="nf-grid-3">

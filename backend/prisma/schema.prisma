@@ -419,6 +419,9 @@ model DocumentoFiscal {
 
   // Mais campos de cabeçalho da NFe.
   finalidadeOperacao  String?  @map("finalidade_operacao") // Normal, Devolução, Complementar, Ajuste
+  // Chave da NF-e que esta nota complementa, ajusta ou devolve. A SEFAZ
+  // exige a referência nesses casos (rejeição 254).
+  chaveNfeReferenciada String? @map("chave_nfe_referenciada")
   consumidorFinal     Boolean? @default(false) @map("consumidor_final")
   indicadorPresenca   String?  @map("indicador_presenca")  // Presencial, Internet, Teleatendimento, Entrega a domicílio, Não se aplica
   formaPagamento      String?  @map("forma_pagamento")

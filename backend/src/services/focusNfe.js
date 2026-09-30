@@ -212,6 +212,11 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     data_entrada_saida: documento.dataSaida ? dataEmissaoSefaz(documento.dataSaida) : undefined,
     tipo_documento: 1, // 1 = saída
     finalidade_emissao: CODIGO_FINALIDADE[documento.finalidadeOperacao] ?? 1,
+    // Complementar, ajuste e devolução precisam referenciar a nota de
+    // origem — sem isso a SEFAZ recusa com a rejeição 254.
+    notas_referenciadas: somenteDigitos(documento.chaveNfeReferenciada)?.length === 44
+      ? [{ chave_nfe: somenteDigitos(documento.chaveNfeReferenciada) }]
+      : undefined,
     consumidor_final: documento.consumidorFinal ? 1 : 0,
     presenca_comprador: CODIGO_PRESENCA[documento.indicadorPresenca] ?? 0,
     cnpj_emitente: somenteDigitos(empresa.cnpj),

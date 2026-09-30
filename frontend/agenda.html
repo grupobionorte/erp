@@ -192,10 +192,19 @@ function sair() {
 /* ---------------------------------------------------------------------------
    Notificações
 --------------------------------------------------------------------------- */
+// A chave vem em base64url. Qualquer caractere fora do alfabeto — espaço,
+// quebra de linha, aspas coladas no valor — invalida a conversão, e o
+// navegador só diz "P-256 inválida". Então limpa antes e confere depois.
 const base64ParaUint8 = (base64) => {
-  const preenchido = (base64 + "=".repeat((4 - base64.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/");
-  const bruto = atob(preenchido);
-  return Uint8Array.from([...bruto].map((c) => c.charCodeAt(0)));
+  const limpa = String(base64 || "").trim().replace(/[^A-Za-z0-9\-_+/=]/g, "");
+  const semPadding = limpa.replace(/=+$/, "");
+  const padronizada = semPadding.replace(/-/g, "+").replace(/_/g, "/");
+  const preenchida = padronizada + "=".repeat((4 - padronizada.length % 4) % 4);
+
+  const bruto = atob(preenchida);
+  const bytes = new Uint8Array(bruto.length);
+  for (let i = 0; i < bruto.length; i++) bytes[i] = bruto.charCodeAt(i);
+  return bytes;
 };
 
 const ehIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -234,10 +243,23 @@ async function ativarNotificacoes() {
       return;
     }
 
+    // 65 bytes é o tamanho de uma chave P-256 descomprimida, começando por
+    // 0x04. Conferir aqui dá uma mensagem útil em vez do erro do navegador.
+    const chaveBytes = base64ParaUint8(chave);
+    if (chaveBytes.length !== 65 || chaveBytes[0] !== 4) {
+      alert(
+        `A chave de notificação do servidor está incorreta.\n\n` +
+        `Recebida com ${chave.trim().length} caracteres, que viram ${chaveBytes.length} bytes ` +
+        `(o correto é 87 caracteres e 65 bytes).\n\n` +
+        `Gere o par de novo e cadastre VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY juntas.`
+      );
+      return;
+    }
+
     const registro = await navigator.serviceWorker.ready;
     const inscricao = await registro.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: base64ParaUint8(chave),
+      applicationServerKey: chaveBytes,
     });
 
     const dados = inscricao.toJSON();

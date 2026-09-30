@@ -519,9 +519,24 @@ const MODULES = {
       // Motorista habitual, vindo do cadastro de colaboradores: é daqui que
       // o CT-e preenche nome e CPF.
       {
-        key: "motoristaId", label: "Motorista", type: "vinculo",
+        key: "motoristaId", label: "Motorista", type: "vinculo", required: true,
         fonte: "/motoristas", vazio: "Nenhum",
         rotulo: (m) => [m.nome, m.cnh && `CNH ${m.cnh}`].filter(Boolean).join(" — "),
+        // Cadastro rápido com o mínimo; o resto se completa em Motoristas.
+        camposNovo: [
+          { key: "nome", label: "Nome", required: true },
+          { key: "cpf", label: "CPF", required: true },
+          { key: "telefone", label: "Telefone" },
+          { key: "cnh", label: "CNH" },
+          {
+            key: "vinculo", label: "Vínculo",
+            options: [
+              { valor: "funcionario", rotulo: "Funcionário" },
+              { valor: "agregado", rotulo: "Agregado" },
+              { valor: "terceiro", rotulo: "Terceiro" },
+            ],
+          },
+        ],
       },
       // Transportadora ficou reservada para subcontratação futura; a frota
       // hoje é própria, então saiu do topo e não é mais obrigatória.
@@ -1229,6 +1244,67 @@ function CfopField({ value, onChange, onDescricao }) {
   );
 }
 
+// Cadastro rápido de um vínculo, com os campos mínimos. O cadastro
+// completo continua na tela própria — aqui só o necessário para seguir com
+// o que estava sendo preenchido.
+function CadastroRapido({ titulo, campos, destino, onFechar, onCriado }) {
+  const [dados, setDados] = useState({});
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const salvar = async () => {
+    const faltando = campos.filter(c => c.required && !dados[c.key]);
+    if (faltando.length) {
+      setErro(`Preencha: ${faltando.map(c => c.label).join(", ")}`);
+      return;
+    }
+    setSalvando(true); setErro("");
+    try {
+      onCriado(await apiRequest(destino, { method: "POST", body: JSON.stringify(dados) }));
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3>{titulo}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="endereco-grid">
+            {campos.map(c => (
+              <div className="field-group" key={c.key}>
+                <label className="field-label">{c.label}{c.required && <span className="req">*</span>}</label>
+                {c.options ? (
+                  <select value={dados[c.key] || ""} onChange={e => setDados(d => ({ ...d, [c.key]: e.target.value }))}>
+                    <option value="">Selecione…</option>
+                    {c.options.map(o => <option key={o.valor ?? o} value={o.valor ?? o}>{o.rotulo ?? o}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    value={dados[c.key] || ""}
+                    onChange={e => setDados(d => ({ ...d, [c.key]: e.target.value }))}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({ field, value, onChange, disabled }) {
   // Campo que puxa outro cadastro para vincular (usuário <-> colaborador).
   // A lista vem da própria API, então o que aparece aqui é sempre o que
@@ -1236,39 +1312,63 @@ function Field({ field, value, onChange, disabled }) {
   if (field.type === "vinculo") {
     const [opcoes, setOpcoes] = useState(null);
     const [erroFonte, setErroFonte] = useState("");
+    // Cadastro rápido, quando o campo permite: evita sair do formulário
+    // para criar o vínculo que está faltando e perder o que já foi digitado.
+    const [criando, setCriando] = useState(false);
 
-    useEffect(() => {
-      let cancelado = false;
-      (async () => {
-        try {
-          const dados = await apiRequest(field.fonte);
-          if (!cancelado) setOpcoes(dados);
-        } catch (e) {
-          // Listar usuários é coisa de admin: um operador abrindo a tela de
-          // colaboradores não deve ver erro, só o campo indisponível.
-          if (!cancelado) { setErroFonte(e.message); setOpcoes([]); }
-        }
-      })();
-      return () => { cancelado = true; };
+    const carregar = useCallback(async () => {
+      try {
+        setOpcoes(await apiRequest(field.fonte));
+      } catch (e) {
+        // Listar usuários é coisa de admin: um operador abrindo a tela de
+        // colaboradores não deve ver erro, só o campo indisponível.
+        setErroFonte(e.message);
+        setOpcoes([]);
+      }
     }, [field.fonte]);
+
+    useEffect(() => { carregar(); }, [carregar]);
 
     const rotuloDe = (registro) => (field.rotulo ? field.rotulo(registro) : registro.nome);
 
     return (
       <div className="field-group">
-        <label className="field-label">{field.label}</label>
-        <select
-          value={value ?? ""}
-          disabled={disabled || opcoes === null || !!erroFonte}
-          onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">{opcoes === null ? "Carregando…" : field.vazio || "Sem vínculo"}</option>
-          {(opcoes || []).map(o => (
-            <option key={o.id} value={o.id}>{rotuloDe(o)}</option>
-          ))}
-        </select>
+        <label className="field-label">{field.label}{field.required && <span className="req">*</span>}</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select
+            value={value ?? ""}
+            disabled={disabled || opcoes === null || !!erroFonte}
+            onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
+            style={{ flex: 1 }}
+          >
+            <option value="">{opcoes === null ? "Carregando…" : field.vazio || "Sem vínculo"}</option>
+            {(opcoes || []).map(o => (
+              <option key={o.id} value={o.id}>{rotuloDe(o)}</option>
+            ))}
+          </select>
+          {field.camposNovo && !erroFonte && (
+            <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger"
+              title={`Cadastrar ${field.label.toLowerCase()}`} onClick={() => setCriando(true)}>
+              <Plus size={14} />
+            </button>
+          )}
+        </div>
         {erroFonte && <p className="pf-ajuda">Só um admin pode ver essa lista.</p>}
         {!erroFonte && field.ajuda && <p className="pf-ajuda">{field.ajuda}</p>}
+
+        {criando && (
+          <CadastroRapido
+            titulo={`Novo ${field.label.toLowerCase()}`}
+            campos={field.camposNovo}
+            destino={field.fonte}
+            onFechar={() => setCriando(false)}
+            onCriado={async (registro) => {
+              setCriando(false);
+              await carregar();
+              onChange(registro.id);
+            }}
+          />
+        )}
       </div>
     );
   }

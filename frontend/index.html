@@ -195,6 +195,13 @@ function casasDoValor(valor) {
   return Math.round(n * 1000) % 10 === 0 ? 2 : 3;
 }
 
+// Quantidade de mercadoria: até três casas quando existem, sem zeros à toa.
+function formatarQuantidade(valor) {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+}
+
 function formatarMoeda(valor, casas = "auto") {
   const n = Number(valor);
   if (valor === "" || valor === null || valor === undefined || Number.isNaN(n)) return "";
@@ -3348,7 +3355,15 @@ function ClientesDoMes() {
             <div key={c.id} className="cliente-card" title={c.razaoSocial || c.nome}>
               <div className="cliente-card-nome">{c.nome}</div>
               <div className="cliente-card-valor">R$ {formatarMoeda(c.valor)}</div>
-              <div className="cliente-card-qtd">{c.quantidade} nota{c.quantidade !== 1 ? "s" : ""} no mês</div>
+              <div className="cliente-card-qtd">
+                {/* Quantidade de mercadoria, por unidade. A contagem de
+                    notas fica em segundo plano — o que a operação acompanha
+                    é o volume vendido. */}
+                {c.quantidades?.length
+                  ? c.quantidades.map(q => `${formatarQuantidade(q.quantidade)} ${q.unidade}`).join(" · ")
+                  : "sem itens"}
+                <span className="subtle"> · {c.notas} nota{c.notas !== 1 ? "s" : ""}</span>
+              </div>
             </div>
           ))}
         </div>

@@ -203,7 +203,14 @@ router.get("/nfe/por-cliente", asyncHandler(async (req, res) => {
       destinatarioId: { in: ids },
       dataEmissao: { gte: inicio, lte: fim },
     },
-    select: { destinatarioId: true, valorTotal: true },
+    select: {
+      destinatarioId: true,
+      valorTotal: true,
+      // A quantidade que interessa é a de mercadoria, não a de notas. Vem
+      // dos itens, somada por unidade — misturar tonelada com metro cúbico
+      // daria um número sem significado.
+      itens: { select: { quantidade: true, produto: { select: { unidade: true } } } },
+    },
   });
 
   const pessoas = await prisma.pessoa.findMany({
@@ -218,11 +225,24 @@ router.get("/nfe/por-cliente", asyncHandler(async (req, res) => {
     clientes: ids.map((id) => {
       const doCliente = notas.filter((n) => n.destinatarioId === id);
       const pessoa = pessoas.find((x) => x.id === id);
+
+      const porUnidade = new Map();
+      for (const nota of doCliente) {
+        for (const item of nota.itens) {
+          const unidade = (item.produto?.unidade || "UN").toUpperCase();
+          porUnidade.set(unidade, (porUnidade.get(unidade) || 0) + (Number(item.quantidade) || 0));
+        }
+      }
+
       return {
         id,
         nome: pessoa?.nomeFantasia || pessoa?.nomeRazaoSocial || "—",
         razaoSocial: pessoa?.nomeRazaoSocial || "",
-        quantidade: doCliente.length,
+        notas: doCliente.length,
+        // Ordenado pela maior quantidade: é a unidade principal do cliente.
+        quantidades: [...porUnidade.entries()]
+          .map(([unidade, quantidade]) => ({ unidade, quantidade }))
+          .sort((a, b) => b.quantidade - a.quantidade),
         valor: doCliente.reduce((t, n) => t + (Number(n.valorTotal) || 0), 0),
       };
     }),

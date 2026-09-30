@@ -488,7 +488,7 @@ async function entrar() {
     const resposta = await fetch(`${API}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, senha }),
+      body: JSON.stringify({ email, senha, origem: "app" }),
     });
     const dados = await resposta.json();
     if (!resposta.ok) throw new Error(dados.erro || "Não foi possível entrar");
@@ -501,7 +501,7 @@ async function entrar() {
       const segunda = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, senha, empresaId: primeira?.id }),
+        body: JSON.stringify({ email, senha, empresaId: primeira?.id, origem: "app" }),
       });
       const dadosSegunda = await segunda.json();
       if (!segunda.ok) throw new Error(dadosSegunda.erro || "Não foi possível entrar");
@@ -570,6 +570,20 @@ async function salvarEvento() {
 /* ---------------------------------------------------------------------------
    Início
 --------------------------------------------------------------------------- */
+
+// A sessão se renova a cada abertura: quem usa o app não digita senha de
+// novo enquanto não tocar em Sair. Falha aqui é silenciosa — se o token
+// ainda vale, o app segue funcionando com ele.
+async function renovarSessao() {
+  if (!estado.token) return;
+  try {
+    const dados = await api("/auth/renovar", { method: "POST", body: JSON.stringify({ origem: "app" }) });
+    estado.token = dados.token;
+    estado.usuario = dados.usuario;
+    localStorage.setItem("agenda.token", dados.token);
+    localStorage.setItem("agenda.usuario", JSON.stringify(dados.usuario));
+  } catch { /* sem rede ou sessão vencida: o próprio carregar() trata */ }
+}
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/agenda-sw.js")
     .then(() => verificarPush())
@@ -578,7 +592,14 @@ if ("serviceWorker" in navigator) {
 }
 
 desenhar();
-if (estado.token) carregar();
+if (estado.token) renovarSessao().then(carregar);
+
+// Voltar ao app depois de um tempo também renova, sem precisar reabrir.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && estado.token) {
+    renovarSessao().then(carregar);
+  }
+});
 </script>
 </body>
 </html>

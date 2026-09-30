@@ -7,14 +7,19 @@ const { autenticar } = require("../middleware/auth");
 const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
-function gerarToken(usuario, empresaId) {
+// No navegador o token dura o expediente; no app do celular dura 30 dias e
+// é renovado a cada abertura. Exigir senha toda manhã num aplicativo de
+// agenda faria as pessoas simplesmente pararem de abrir.
+const DURACAO_TOKEN = { web: "8h", app: "30d" };
+
+function gerarToken(usuario, empresaId, origem = "web") {
   return jwt.sign(
     // O colaborador vinculado vai no token: a agenda e os documentos usam
     // isso para saber quem é o responsável, sem consultar o banco a cada
     // requisição.
     { sub: usuario.id, papel: usuario.papel, nome: usuario.nome, empresaId: empresaId ?? null, colaboradorId: usuario.colaboradorId ?? null },
     process.env.JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: DURACAO_TOKEN[origem] || DURACAO_TOKEN.web }
   );
 }
 
@@ -106,6 +111,27 @@ router.post("/registrar", asyncHandler(async (req, res) => {
 //     que ser uma das que esse usuário realmente pode acessar).
 // Pública — usada na tela de login pra mostrar a logo da empresa lembrada
 // (localStorage) antes mesmo de logar. Só devolve a logo, nada sensível.
+// Renova o token de quem já está autenticado. O app chama isso ao abrir,
+// então a sessão só termina quando a pessoa sai de verdade — ou quando
+// fica 30 dias sem abrir o app.
+router.post("/renovar", autenticar, asyncHandler(async (req, res) => {
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: req.usuario.id },
+    select: { id: true, nome: true, email: true, papel: true, ativo: true, colaboradorId: true },
+  });
+  if (!usuario || !usuario.ativo) {
+    return res.status(401).json({ erro: "Usuário inativo" });
+  }
+
+  res.json({
+    token: gerarToken(usuario, req.usuario.empresaId, req.body?.origem || "app"),
+    usuario: {
+      id: usuario.id, nome: usuario.nome, email: usuario.email,
+      papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null,
+    },
+  });
+}));
+
 router.get("/empresas/:id/logo", asyncHandler(async (req, res) => {
   const empresa = await prisma.empresa.findFirst({
     where: { id: Number(req.params.id), ativo: true },
@@ -115,7 +141,7 @@ router.get("/empresas/:id/logo", asyncHandler(async (req, res) => {
 }));
 
 router.post("/login", asyncHandler(async (req, res) => {
-  const { email, senha, empresaId } = req.body;
+  const { email, senha, empresaId, origem } = req.body;
   if (!email || !senha) {
     return res.status(400).json({ erro: "email e senha são obrigatórios" });
   }
@@ -140,7 +166,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   // primeira empresa).
   if (totalEmpresas === 0) {
     return res.json({
-      token: gerarToken(usuario, null),
+      token: gerarToken(usuario, null, origem),
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: null,
     });
@@ -160,7 +186,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   if (empresasPermitidas.length === 1 && !empresaId) {
     const unica = empresasPermitidas[0];
     return res.json({
-      token: gerarToken(usuario, unica.id),
+      token: gerarToken(usuario, unica.id, origem),
       usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: unica,
     });
@@ -178,7 +204,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   }
 
   res.json({
-    token: gerarToken(usuario, empresaEscolhida.id),
+    token: gerarToken(usuario, empresaEscolhida.id, origem),
     usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
     empresa: empresaEscolhida,
   });

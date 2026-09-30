@@ -2962,6 +2962,7 @@ function ModuleView({ moduleKey }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [pagina, setPagina] = useState(1);
 
   if (items === null) {
     return <div className="loading">Carregando {config.label.toLowerCase()}… (o servidor pode levar alguns segundos pra acordar)</div>;
@@ -2972,6 +2973,12 @@ function ModuleView({ moduleKey }) {
     const hay = JSON.stringify(it).toLowerCase();
     return hay.includes(query.toLowerCase());
   });
+
+  // 50 por página: lista longa demais cansa de rolar e deixa a tela pesada.
+  const POR_PAGINA = 50;
+  const totalPaginas = Math.max(1, Math.ceil(filtered.length / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const visiveis = filtered.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
 
   const handleSave = async (data) => {
     if (data.id) {
@@ -3034,7 +3041,8 @@ function ModuleView({ moduleKey }) {
 
       <div className="search-bar">
         <Search size={16} className="search-icon" />
-        <input placeholder={`Buscar em ${config.label.toLowerCase()}…`} value={query} onChange={e => setQuery(e.target.value)} />
+        <input placeholder={`Buscar em ${config.label.toLowerCase()}…`} value={query}
+          onChange={e => { setQuery(e.target.value); setPagina(1); }} />
       </div>
 
       {filtered.length === 0 ? (
@@ -3058,7 +3066,7 @@ function ModuleView({ moduleKey }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(item => (
+            {visiveis.map(item => (
               <tr key={item.id} style={item.ativo === false ? { opacity: 0.5 } : undefined}>
                 {config.columns.map(col => (
                   <td key={col}>{COLUNAS_MOEDA.has(col)
@@ -3090,6 +3098,22 @@ function ModuleView({ moduleKey }) {
             ))}
           </tbody>
         </table>
+      )}
+
+      {totalPaginas > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, fontSize: 13 }}>
+          <button className="btn" style={{ padding: "5px 12px" }}
+            disabled={paginaAtual === 1} onClick={() => setPagina(paginaAtual - 1)}>
+            Anterior
+          </button>
+          <span className="subtle">
+            Página {paginaAtual} de {totalPaginas} · {filtered.length} registro{filtered.length !== 1 ? "s" : ""}
+          </span>
+          <button className="btn" style={{ padding: "5px 12px" }}
+            disabled={paginaAtual === totalPaginas} onClick={() => setPagina(paginaAtual + 1)}>
+            Próxima
+          </button>
+        </div>
       )}
 
       {showForm && (

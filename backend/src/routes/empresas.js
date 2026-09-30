@@ -50,15 +50,20 @@ router.post("/", asyncHandler(async (req, res) => {
   res.status(201).json(empresa);
 }));
 
-// Não atualiza o endereço aninhado aqui (mesma limitação já existente em
-// transportadoras.js) — endereço muda pouco pra uma empresa emitente,
-// então fica pra uma próxima etapa se for realmente necessário editar.
 router.put("/:id", asyncHandler(async (req, res) => {
   const { endereco, ...dados } = req.body;
 
   const empresa = await prisma.empresa.update({
     where: { id: Number(req.params.id) },
-    data: dados,
+    data: {
+      ...dados,
+      // O endereço da emitente entra no CT-e, no MDF-e e decide se a placa
+      // pode ir na NF-e — precisa ser editável como qualquer outro dado.
+      // Upsert cria quando ainda não existe e atualiza quando já existe.
+      endereco: endereco
+        ? { upsert: { create: endereco, update: endereco } }
+        : undefined,
+    },
     include: { endereco: true },
   });
 

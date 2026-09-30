@@ -180,7 +180,7 @@ router.get("/nfe/por-cliente", asyncHandler(async (req, res) => {
     .split(",")
     .map((i) => Number(i))
     .filter(Boolean)
-    .slice(0, 3);
+    .slice(0, 6);
 
   if (!ids.length) return res.json({ periodo: null, clientes: [] });
 
@@ -208,16 +208,20 @@ router.get("/nfe/por-cliente", asyncHandler(async (req, res) => {
 
   const pessoas = await prisma.pessoa.findMany({
     where: { id: { in: ids } },
-    select: { id: true, nomeRazaoSocial: true },
+    // O fantasia é como a operação chama o cliente; a razão social fica de
+    // reserva para quem não tem fantasia cadastrado.
+    select: { id: true, nomeRazaoSocial: true, nomeFantasia: true },
   });
 
   res.json({
     periodo: { de: primeiroDia, ate: ultimoDia },
     clientes: ids.map((id) => {
       const doCliente = notas.filter((n) => n.destinatarioId === id);
+      const pessoa = pessoas.find((x) => x.id === id);
       return {
         id,
-        nome: pessoas.find((x) => x.id === id)?.nomeRazaoSocial || "—",
+        nome: pessoa?.nomeFantasia || pessoa?.nomeRazaoSocial || "—",
+        razaoSocial: pessoa?.nomeRazaoSocial || "",
         quantidade: doCliente.length,
         valor: doCliente.reduce((t, n) => t + (Number(n.valorTotal) || 0), 0),
       };

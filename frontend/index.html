@@ -3274,7 +3274,7 @@ function ClientesDoMes() {
   const { items: clientes } = useApiCollection("clientes");
   const [selecionados, setSelecionados] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("erp.painel.clientes") || "[]").slice(0, 3);
+      return JSON.parse(localStorage.getItem("erp.painel.clientes") || "[]").slice(0, 6);
     } catch { return []; }
   });
   const [dados, setDados] = useState(null);
@@ -3294,7 +3294,7 @@ function ClientesDoMes() {
   const alternar = (id) => {
     setSelecionados(atual => {
       if (atual.includes(id)) return atual.filter(x => x !== id);
-      if (atual.length >= 3) return atual;
+      if (atual.length >= 6) return atual;
       return [...atual, id];
     });
   };
@@ -3314,7 +3314,7 @@ function ClientesDoMes() {
 
       {escolhendo && (
         <div style={{ margin: "10px 0 4px" }}>
-          <p className="hint" style={{ marginTop: 0 }}>Até três clientes. {selecionados.length}/3 escolhidos.</p>
+          <p className="hint" style={{ marginTop: 0 }}>Até seis clientes. {selecionados.length}/6 escolhidos.</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, maxHeight: 180, overflowY: "auto" }}>
             {(clientes || []).map(c => {
               const ativo = selecionados.includes(c.id);
@@ -3327,10 +3327,10 @@ function ClientesDoMes() {
                     background: ativo ? "#1F3B57" : undefined,
                     color: ativo ? "#fff" : undefined,
                   }}
-                  disabled={!ativo && selecionados.length >= 3}
+                  disabled={!ativo && selecionados.length >= 6}
                   onClick={() => alternar(c.id)}
                 >
-                  {c.nome}
+                  {c.fantasia || c.nome}
                 </button>
               );
             })}
@@ -3339,20 +3339,16 @@ function ClientesDoMes() {
       )}
 
       {!selecionados.length && !escolhendo && (
-        <p className="hint">Escolha até três clientes para acompanhar o faturamento do mês.</p>
+        <p className="hint">Escolha até seis clientes para acompanhar o faturamento do mês.</p>
       )}
 
       {dados?.clientes?.length > 0 && (
-        <div className="dash-grid" style={{ marginTop: 12 }}>
+        <div className="clientes-mes">
           {dados.clientes.map(c => (
-            <div key={c.id} className="dash-card" style={{ cursor: "default" }}>
-              <div className="dash-card-label" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {c.nome}
-              </div>
-              <div className="dash-card-value">R$ {formatarMoeda(c.valor)}</div>
-              <div className="subtle" style={{ fontSize: 12.5 }}>
-                {c.quantidade} nota{c.quantidade !== 1 ? "s" : ""} no mês
-              </div>
+            <div key={c.id} className="cliente-card" title={c.razaoSocial || c.nome}>
+              <div className="cliente-card-nome">{c.nome}</div>
+              <div className="cliente-card-valor">R$ {formatarMoeda(c.valor)}</div>
+              <div className="cliente-card-qtd">{c.quantidade} nota{c.quantidade !== 1 ? "s" : ""} no mês</div>
             </div>
           ))}
         </div>
@@ -7614,6 +7610,27 @@ function ErpBiomassa() {
         /* Linhas baixas e faixas alternadas, sem as bordas entre registros.
            A versão "compacta" acrescenta largura fixa de coluna, que só faz
            sentido onde as colunas são conhecidas (listas de documento). */
+        /* Cartões do painel: nome pequeno e discreto, valor grande — é o
+           valor que se procura ao bater o olho. */
+        .clientes-mes {
+          display: grid; gap: 10px; margin-top: 12px;
+          grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        }
+        .cliente-card {
+          background: var(--surface-2, #fff); border: 1px solid var(--border, #e5e3da);
+          border-radius: 11px; padding: 12px 14px;
+        }
+        .cliente-card-nome {
+          font-size: 12px; text-transform: uppercase; letter-spacing: .4px;
+          color: var(--text-secondary, #6b6b68); font-weight: 600;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px;
+        }
+        .cliente-card-valor {
+          font-size: 22px; font-weight: 600; letter-spacing: -0.3px;
+          font-variant-numeric: tabular-nums; color: var(--erp-azul, #1F3B57);
+        }
+        .cliente-card-qtd { font-size: 12.5px; color: var(--text-secondary, #6b6b68); margin-top: 2px; }
+
         .tabela-densa th { padding: 5px 6px; white-space: nowrap; }
         .tabela-densa td { padding: 3px 6px; line-height: 1.3; border-bottom: none; }
         .tabela-densa tbody tr:nth-child(even) { background: #faf9f5; }

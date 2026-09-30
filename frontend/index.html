@@ -3681,6 +3681,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
     nota?.colaboradorResponsavelId ? String(nota.colaboradorResponsavelId) : colaboradorDoUsuario()
   );
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
+  const [veiculoReboqueId, setVeiculoReboqueId] = useState(nota?.veiculoReboqueId ? String(nota.veiculoReboqueId) : "");
+  const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(nota?.veiculoReboque2Id ? String(nota.veiculoReboque2Id) : "");
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
   const [quickAdd, setQuickAdd] = useState(null); // { tipo: 'clientes'|'transportadoras'|'veiculos'|'colaboradores', setter }
@@ -3779,7 +3781,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
       await onSave({
         destinatarioId: Number(destinatarioId),
         transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
-        veiculoId: veiculoId ? Number(veiculoId) : undefined,
+        veiculoId: veiculoId ? Number(veiculoId) : null,
+        veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : null,
+        veiculoReboque2Id: veiculoReboque2Id ? Number(veiculoReboque2Id) : null,
         colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
         dataEmissao: dataEmissao || undefined,
         naturezaOperacao,
@@ -3943,7 +3947,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 </div>
               </div>
               <div className="field-group">
-                <label className="field-label">Veículo (placa)</label>
+                <label className="field-label">Cavalo (placa)</label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
                     <option value="">Nenhum</option>
@@ -3951,6 +3955,22 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   </select>
                   <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar veículo novo" onClick={() => setQuickAdd({ tipo: "veiculos", setter: setVeiculoId })}><Plus size={14} /></button>
                 </div>
+              </div>
+              {/* Reboques: entram nas observações do DANFE, como a placa do
+                  cavalo, quando a operação não admite o grupo do veículo. */}
+              <div className="field-group">
+                <label className="field-label">1º reboque</label>
+                <select value={veiculoReboqueId} onChange={e => setVeiculoReboqueId(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">2º reboque</label>
+                <select value={veiculoReboque2Id} onChange={e => setVeiculoReboque2Id(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
               </div>
             </div>
             <div className="nf-grid-4">

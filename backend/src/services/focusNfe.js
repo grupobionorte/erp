@@ -83,6 +83,11 @@ function limitarTexto(texto, maximo) {
   return (ultimoEspaco > maximo * 0.6 ? cortado.slice(0, ultimoEspaco) : cortado).trim();
 }
 
+function formatarCpf(valor) {
+  const d = somenteDigitos(valor);
+  return d?.length === 11 ? d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : valor;
+}
+
 function somenteDigitos(valor) {
   if (!valor) return undefined;
   return String(valor).replace(/\D/g, "") || undefined;
@@ -182,6 +187,21 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
   // Sem transporte (9) também não leva veículo.
   const podeInformarVeiculo = mesmaCidade && modalidadeFrete !== 9;
 
+  // Ficha do transporte para as informações complementares, no formato que
+  // a operação já conhece: uma linha por dado, cavalo e reboque separados,
+  // placa seguida da UF de licenciamento.
+  const placaComUf = (v) =>
+    v?.placa ? `${v.placa.toUpperCase()}${v.ufLicenciamento ? ` ${v.ufLicenciamento}` : ""}` : null;
+
+  const motorista = veiculo?.motorista;
+  const dadosDoTransporte = [
+    motorista?.nome ? `MOTORISTA : ${motorista.nome}` : null,
+    motorista?.cpf ? `CPF: ${formatarCpf(motorista.cpf)}` : null,
+    placaComUf(veiculo) ? `CAVALO: ${placaComUf(veiculo)}` : null,
+    placaComUf(documento.veiculoReboque) ? `REBOQUE: ${placaComUf(documento.veiculoReboque)}` : null,
+    placaComUf(documento.veiculoReboque2) ? `REBOQUE 2: ${placaComUf(documento.veiculoReboque2)}` : null,
+  ].filter(Boolean).join("\n") || null;
+
   return {
     // Mesmo limite de 60 caracteres vale para a NF-e.
     natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
@@ -244,13 +264,22 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     icms_base_calculo_st: documento.baseCalculoIcmsSt || undefined,
     icms_valor_total_st: documento.valorIcmsSt || undefined,
 
-    // Mensagem fixa da empresa + o que foi escrito na nota. A fixa vem
-    // depois porque o texto específico daquela venda é o que o destinatário
-    // procura primeiro. Limite do campo: 5000 caracteres.
-    informacoes_adicionais_contribuinte: [documento.informacoesComplementares, empresa.observacaoPadraoNfe]
+    // Texto da nota + dados do transporte + mensagem fixa da empresa.
+    //
+    // A placa entra aqui quando não pode ir no grupo do veículo (operação
+    // entre municípios ou entre estados). A informação continua no DANFE,
+    // que é o que a operação e a fiscalização de estrada olham — só muda a
+    // tag em que ela viaja.
+    informacoes_adicionais_contribuinte: [
+      documento.informacoesComplementares,
+      podeInformarVeiculo ? null : dadosDoTransporte,
+      empresa.observacaoPadraoNfe,
+    ]
       .map((t) => (t || "").trim())
       .filter(Boolean)
-      .join(" | ")
+      // Quebra de linha entre os blocos: no DANFE cada informação fica na
+      // sua linha, como no modelo que a operação já usa.
+      .join("\n")
       .slice(0, 5000) || undefined,
 
     items: itens.map((item, indice) => ({

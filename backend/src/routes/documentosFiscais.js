@@ -119,7 +119,8 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    destinatarioId, transportadoraId, veiculoId, naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
+    destinatarioId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id,
+    naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
     dataEmissao, colaboradorResponsavelId,
@@ -178,6 +179,8 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       destinatarioId,
       transportadoraId: transportadoraId || undefined,
       veiculoId: veiculoId || undefined,
+      veiculoReboqueId: veiculoReboqueId || undefined,
+      veiculoReboque2Id: veiculoReboque2Id || undefined,
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
@@ -1100,7 +1103,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
   }
 
   const {
-    destinatarioId, transportadoraId, naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
+    destinatarioId, transportadoraId,
+    naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
     finalidadeOperacao, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,

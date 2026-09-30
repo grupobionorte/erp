@@ -10,14 +10,47 @@ const prisma = require("./prisma");
    variáveis de ambiente — trocá-las invalida todas as inscrições.
 --------------------------------------------------------------------------- */
 
-const configurado = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+// Espaço e quebra de linha colados no valor ao copiar do terminal são o
+// erro mais comum aqui, e deixam a chave inválida sem dizer por quê.
+const limpar = (valor) => String(valor || "").trim().replace(/\s/g, "");
 
-if (configurado) {
-  webpush.setVapidDetails(
-    process.env.VAPID_CONTATO || "mailto:contato@bionorte.com.br",
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY
-  );
+const CHAVE_PUBLICA = limpar(process.env.VAPID_PUBLIC_KEY);
+const CHAVE_PRIVADA = limpar(process.env.VAPID_PRIVATE_KEY);
+
+// O contato precisa ser uma URL: e-mail puro tem que vir com mailto:.
+const contatoInformado = String(process.env.VAPID_CONTATO || "").trim();
+const CONTATO = contatoInformado && !/^(mailto:|https?:)/i.test(contatoInformado)
+  ? `mailto:${contatoInformado}`
+  : (contatoInformado || "mailto:contato@bionorte.com.br");
+
+// A chave pública, decodificada, tem exatamente 65 bytes. Conferir aqui
+// evita o erro aparecer só no celular, na hora de ativar.
+function chavePublicaValida(chave) {
+  try {
+    return Buffer.from(chave, "base64url").length === 65;
+  } catch {
+    return false;
+  }
+}
+
+let configurado = false;
+
+if (CHAVE_PUBLICA && CHAVE_PRIVADA) {
+  if (!chavePublicaValida(CHAVE_PUBLICA)) {
+    console.error(
+      `[push] VAPID_PUBLIC_KEY inválida (${CHAVE_PUBLICA.length} caracteres; ` +
+      "a correta tem 87 e decodifica para 65 bytes). Notificações desligadas."
+    );
+  } else {
+    try {
+      webpush.setVapidDetails(CONTATO, CHAVE_PUBLICA, CHAVE_PRIVADA);
+      configurado = true;
+    } catch (erro) {
+      // Configuração errada desliga as notificações e nada mais: derrubar o
+      // servidor por causa disso deixaria o ERP inteiro fora do ar.
+      console.error("[push] configuração inválida, notificações desligadas:", erro.message);
+    }
+  }
 }
 
 /**
@@ -71,4 +104,10 @@ async function enviarPushParaColaborador(colaboradorId, mensagem) {
   return enviarPush(usuario.id, mensagem);
 }
 
-module.exports = { enviarPush, enviarPushParaColaborador, configurado };
+module.exports = {
+  enviarPush,
+  enviarPushParaColaborador,
+  // Funções em vez de valores: o estado é decidido na subida do servidor.
+  get configurado() { return configurado; },
+  get chavePublica() { return configurado ? CHAVE_PUBLICA : null; },
+};

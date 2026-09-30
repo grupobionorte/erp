@@ -2,7 +2,8 @@ const express = require("express");
 
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
-const { enviarPush, enviarPushParaColaborador, configurado } = require("../lib/push");
+const push = require("../lib/push");
+const { enviarPush } = push;
 
 const router = express.Router();
 
@@ -13,7 +14,9 @@ const router = express.Router();
 // A chave pública é pedida pelo navegador antes de se inscrever. Não é
 // segredo — a privada é que fica só no servidor.
 router.get("/chave", (req, res) => {
-  res.json({ chave: process.env.VAPID_PUBLIC_KEY || null, configurado });
+  // A chave vai já limpa: espaço colado no valor do ambiente fazia o
+  // navegador recusar com "P-256 public key inválida".
+  res.json({ chave: push.chavePublica, configurado: push.configurado });
 });
 
 router.post("/inscrever", asyncHandler(async (req, res) => {
@@ -45,7 +48,7 @@ router.delete("/inscricao", asyncHandler(async (req, res) => {
 
 router.get("/situacao", asyncHandler(async (req, res) => {
   res.json({
-    configurado,
+    configurado: push.configurado,
     aparelhos: await prisma.inscricaoPush.count({ where: { usuarioId: req.usuario.id } }),
   });
 }));

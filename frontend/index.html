@@ -6752,7 +6752,13 @@ function ErpBiomassa() {
         .tabela-densa td { padding: 3px 6px; line-height: 1.3; border-bottom: none; }
         .tabela-densa tbody tr:nth-child(even) { background: #faf9f5; }
         .tabela-densa tbody tr:hover { background: #f1efe7; }
-        .tabela-densa .actions-col { width: 34px; padding-right: 4px; }
+        /* Os botões de ação é que puxavam a altura: com dois ícones de 15px
+           e 5px de espaço interno, a linha não desce de 25px por mais que o
+           texto encolha. */
+        .tabela-densa .actions-col { width: 62px; padding-right: 4px; white-space: nowrap; }
+        .tabela-densa .icon-btn { padding: 2px; }
+        .tabela-densa .icon-btn svg { width: 14px; height: 14px; }
+        .tabela-densa td, .tabela-densa th { vertical-align: middle; }
 
         .tabela-compacta { table-layout: fixed; }
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem

@@ -257,10 +257,30 @@ async function ativarNotificacoes() {
     }
 
     const registro = await navigator.serviceWorker.ready;
-    const inscricao = await registro.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: chaveBytes,
-    });
+
+    // O Safari do iPhone recusa a chave como Uint8Array — quer o ArrayBuffer
+    // por baixo. O Chrome aceita os dois, e algumas versões aceitam a string
+    // em base64url direto. Então tenta os três, nessa ordem, em vez de
+    // escolher um e torcer.
+    const formatos = [
+      ["ArrayBuffer", chaveBytes.buffer.slice(chaveBytes.byteOffset, chaveBytes.byteOffset + chaveBytes.byteLength)],
+      ["Uint8Array", chaveBytes],
+      ["texto", chave.trim()],
+    ];
+
+    let inscricao = null;
+    let ultimoErro = null;
+    for (const [nome, applicationServerKey] of formatos) {
+      try {
+        inscricao = await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+        console.log(`[push] inscrito usando ${nome}`);
+        break;
+      } catch (e) {
+        ultimoErro = e;
+      }
+    }
+
+    if (!inscricao) throw ultimoErro || new Error("Não foi possível inscrever este aparelho");
 
     const dados = inscricao.toJSON();
     await api("/push/inscrever", {

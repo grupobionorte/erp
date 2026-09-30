@@ -4842,10 +4842,24 @@ function NotasFiscaisView({ onIrParaCte }) {
   // enquanto a SEFAZ processa — aqui a gente consulta sozinho de tempos em
   // tempos, sem o usuário precisar ficar clicando, até sair desse status
   // (virar autorizado ou rejeitado) ou desistir depois de um tempo.
+  const [busca, setBusca] = useState("");
+
+  // Busca por número, cliente ou chave: são os três jeitos de procurar uma
+  // nota na prática.
+  const notasFiltradas = (notas || []).filter(nota => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return true;
+    return [
+      String(nota.numero || ""),
+      nota.destinatario?.nomeRazaoSocial || "",
+      nota.chaveAcesso || "",
+    ].some(campo => campo.toLowerCase().includes(termo));
+  });
+
   // Padrão: número maior primeiro — a nota recém-emitida é a que se procura.
   // Rascunho ainda não tem número e fica no topo, que é onde ele precisa
   // estar para virar nota.
-  const notasOrdenadas = (notas || []).slice().sort((a, b) => {
+  const notasOrdenadas = notasFiltradas.slice().sort((a, b) => {
     const numero = (n) => (n.numero == null ? Infinity : Number(n.numero));
     return numero(b) - numero(a);
   });
@@ -4945,7 +4959,9 @@ Detalhe: ${e.detalhe}` : ""}`);
           </div>
           <div>
             <h2>Vendas/NFe</h2>
-            <p className="subtle">{notas.length} nota{notas.length !== 1 ? "s" : ""}</p>
+            <p className="subtle">
+              {busca ? `${notasFiltradas.length} de ${notas.length}` : notas.length} nota{notas.length !== 1 ? "s" : ""}
+            </p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -4971,6 +4987,15 @@ Detalhe: ${e.detalhe}` : ""}`);
             <Plus size={16} /> Nova Nota Fiscal
           </button>
         </div>
+      </div>
+
+      <div className="search-bar">
+        <Search size={16} className="search-icon" />
+        <input
+          placeholder="Buscar por número, cliente ou chave…"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+        />
       </div>
 
       {erro && (

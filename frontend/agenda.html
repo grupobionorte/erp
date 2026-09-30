@@ -152,6 +152,9 @@ const estado = {
   erro: "",
   editando: null,
   push: { permitido: false, inscrito: false },
+  // Guardada na abertura: o Safari só aceita a inscrição se ela acontecer
+  // dentro do toque, e buscar a chave no meio quebra essa ligação.
+  chavePush: null,
 };
 
 const app = document.getElementById("app");
@@ -218,6 +221,15 @@ async function verificarPush() {
     const registro = await navigator.serviceWorker.ready;
     estado.push.inscrito = Boolean(await registro.pushManager.getSubscription());
   } catch { /* ainda não registrado */ }
+
+  // Busca a chave desde já, para o clique do botão não precisar esperar
+  // nada antes de inscrever.
+  if (estado.token && !estado.chavePush) {
+    try {
+      const { chave, configurado } = await api("/push/chave");
+      if (configurado) estado.chavePush = chave;
+    } catch { /* sem rede agora; tenta de novo na próxima abertura */ }
+  }
 }
 
 async function ativarNotificacoes() {
@@ -231,15 +243,9 @@ async function ativarNotificacoes() {
       return;
     }
 
-    const permissao = await Notification.requestPermission();
-    if (permissao !== "granted") {
-      alert("As notificações ficaram bloqueadas. Para liberar, acesse os ajustes do navegador.");
-      return;
-    }
-
-    const { chave, configurado } = await api("/push/chave");
-    if (!configurado || !chave) {
-      alert("O servidor ainda não está configurado para notificações.");
+    const chave = estado.chavePush;
+    if (!chave) {
+      alert("Ainda não recebi a chave de notificação do servidor. Toque em ↻ e tente de novo.");
       return;
     }
 
@@ -259,13 +265,17 @@ async function ativarNotificacoes() {
     const registro = await navigator.serviceWorker.ready;
 
     // Inscrição antiga no aparelho, feita com outra chave, impede criar a
-    // nova — o navegador recusa sem dizer que o motivo é esse. Remover
-    // antes é inofensivo: se não houver nenhuma, não faz nada.
+    // nova. A remoção acontece antes de pedir a permissão, para não gastar
+    // o gesto do toque com isso.
     const anterior = await registro.pushManager.getSubscription();
-    if (anterior) {
-      try { await api("/push/inscricao", { method: "DELETE", body: JSON.stringify({ endpoint: anterior.endpoint }) }); }
-      catch { /* o servidor pode nem conhecer essa inscrição */ }
-      await anterior.unsubscribe();
+    if (anterior) await anterior.unsubscribe();
+
+    // A permissão vem por último antes da inscrição: no Safari as duas
+    // precisam acontecer coladas ao toque, sem consulta ao servidor no meio.
+    const permissao = await Notification.requestPermission();
+    if (permissao !== "granted") {
+      alert("As notificações ficaram bloqueadas. Para liberar, acesse os ajustes do iPhone, em Notificações.");
+      return;
     }
 
     // O Safari do iPhone recusa a chave como Uint8Array — quer o ArrayBuffer

@@ -184,6 +184,9 @@ model Empresa {
 
   @@map("empresas")
   motoristas Motorista[]
+  categoriasDespesa CategoriaDespesa[]
+  centrosCusto      CentroCusto[]
+  contasPagar       ContaPagar[]
 }
 
 model Pessoa {
@@ -228,6 +231,7 @@ model Pessoa {
   // uma na sua base, sem conflito.
   @@unique([documento, empresaId])
   @@map("pessoas")
+  contasPagar ContaPagar[]
 }
 
 model Colaborador {
@@ -342,6 +346,7 @@ model Veiculo {
   documentosFiscaisReboque3 DocumentoFiscal[] @relation("CteVeiculoReboque3")
 
   @@map("veiculos")
+  centrosCusto CentroCusto[]
 }
 
 model Produto {
@@ -867,4 +872,91 @@ model Motorista {
 
   @@index([empresaId, nome])
   @@map("motoristas")
+}
+
+// ---------------------------------------------------------------------------
+// Contas a pagar
+// ---------------------------------------------------------------------------
+
+// Categoria da despesa: combustível, manutenção, folha, impostos.
+model CategoriaDespesa {
+  id     Int     @id @default(autoincrement())
+  nome   String
+  ativo  Boolean @default(true)
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  contas ContaPagar[]
+
+  @@index([empresaId, nome])
+  @@map("categorias_despesa")
+}
+
+// Centro de custo: onde a despesa foi consumida. Pode apontar para um
+// veículo — é como a operação pensa custo de frota.
+model CentroCusto {
+  id     Int     @id @default(autoincrement())
+  nome   String
+  ativo  Boolean @default(true)
+
+  veiculoId Int?     @map("veiculo_id")
+  veiculo   Veiculo? @relation(fields: [veiculoId], references: [id])
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  contas ContaPagar[]
+
+  @@index([empresaId, nome])
+  @@map("centros_custo")
+}
+
+// Conta a pagar. Parcelamento e recorrência não são um campo mágico: cada
+// parcela ou mês é um registro próprio, criado na hora do lançamento. Isso
+// deixa o vencimento e a baixa individuais, que é como a cobrança acontece
+// de verdade, e dispensa rotina automática rodando no servidor.
+model ContaPagar {
+  id        Int      @id @default(autoincrement())
+  descricao String
+  valor     Float
+  vencimento DateTime
+  // Mês de competência, quando diferente do vencimento.
+  competencia DateTime?
+
+  // aberta | paga | cancelada
+  status String @default("aberta")
+
+  dataPagamento  DateTime? @map("data_pagamento")
+  valorPago      Float?    @map("valor_pago")
+  jurosMulta     Float?    @map("juros_multa")
+  desconto       Float?
+  formaPagamento String?   @map("forma_pagamento")
+
+  // Número do boleto, da nota de compra ou do recibo.
+  documento  String?
+  observacao String?
+
+  fornecedorId Int?    @map("fornecedor_id")
+  fornecedor   Pessoa? @relation(fields: [fornecedorId], references: [id])
+
+  categoriaId Int?              @map("categoria_id")
+  categoria   CategoriaDespesa? @relation(fields: [categoriaId], references: [id])
+
+  centroCustoId Int?         @map("centro_custo_id")
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id])
+
+  // Liga as parcelas de um mesmo lançamento, ou os meses de uma despesa
+  // recorrente, para dar para ver e cancelar o conjunto.
+  grupo        String?
+  parcelaNumero Int? @map("parcela_numero")
+  parcelaTotal  Int? @map("parcela_total")
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, status, vencimento])
+  @@map("contas_pagar")
 }

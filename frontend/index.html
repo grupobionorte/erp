@@ -4695,6 +4695,588 @@ function RelatorioNfeModal({ onFechar }) {
   );
 }
 
+// ---------- Contas a pagar ----------
+
+// Lançamento. O parcelamento e a repetição mensal são resolvidos aqui: o
+// servidor cria um registro por parcela ou por mês.
+function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, onSalvo }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dados, setDados] = useState(() => ({
+    descricao: conta?.descricao || "",
+    valor: conta?.valor ?? "",
+    vencimento: conta?.vencimento ? String(conta.vencimento).slice(0, 10) : hoje,
+    fornecedorId: conta?.fornecedorId ? String(conta.fornecedorId) : "",
+    categoriaId: conta?.categoriaId ? String(conta.categoriaId) : "",
+    centroCustoId: conta?.centroCustoId ? String(conta.centroCustoId) : "",
+    documento: conta?.documento || "",
+    observacao: conta?.observacao || "",
+    repeticao: "unica",
+    quantidade: 2,
+  }));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+  const editando = Boolean(conta?.id);
+
+  const salvar = async () => {
+    if (!dados.descricao || !dados.valor || !dados.vencimento) {
+      setErro("Preencha descrição, valor e vencimento.");
+      return;
+    }
+    setSalvando(true); setErro("");
+    try {
+      if (editando) {
+        await apiRequest(`/contas-pagar/${conta.id}`, { method: "PUT", body: JSON.stringify(dados) });
+      } else {
+        await apiRequest("/contas-pagar", { method: "POST", body: JSON.stringify(dados) });
+      }
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  const vezes = Number(dados.quantidade) || 1;
+  const valorNumero = Number(dados.valor) || 0;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <h3>{editando ? "Editar conta" : "Nova conta a pagar"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="nf-grid-3">
+            <div className="field-group" style={{ gridColumn: "span 2" }}>
+              <label className="field-label">Descrição<span className="req">*</span></label>
+              <input value={dados.descricao} onChange={e => set("descricao", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Valor<span className="req">*</span></label>
+              <InputMoeda value={dados.valor} onChange={v => set("valor", v)} />
+            </div>
+          </div>
+
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Vencimento<span className="req">*</span></label>
+              <input type="date" value={dados.vencimento} onChange={e => set("vencimento", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Fornecedor</label>
+              <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
+                <option value="">Nenhum</option>
+                {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
+              </select>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Documento</label>
+              <input value={dados.documento} onChange={e => set("documento", e.target.value)}
+                placeholder="Boleto, nota, recibo" />
+            </div>
+          </div>
+
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Categoria</label>
+              <select value={dados.categoriaId} onChange={e => set("categoriaId", e.target.value)}>
+                <option value="">Sem categoria</option>
+                {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Centro de custo</label>
+              <select value={dados.centroCustoId} onChange={e => set("centroCustoId", e.target.value)}>
+                <option value="">Sem centro de custo</option>
+                {centros.map(c => <option key={c.id} value={c.id}>{c.nome}{c.veiculo?.placa ? ` (${c.veiculo.placa})` : ""}</option>)}
+              </select>
+            </div>
+            <div className="field-group" style={{ gridColumn: "span 1" }}>
+              <label className="field-label">Observação</label>
+              <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+            </div>
+          </div>
+
+          {!editando && (
+            <div className="nf-section" style={{ marginTop: 6 }}>
+              <h4 className="nf-section-title">Repetição</h4>
+              <div className="nf-grid-3">
+                <div className="field-group">
+                  <label className="field-label">Tipo</label>
+                  <select value={dados.repeticao} onChange={e => set("repeticao", e.target.value)}>
+                    <option value="unica">Conta única</option>
+                    <option value="parcelado">Parcelado (divide o valor)</option>
+                    <option value="mensal">Mensal (repete o valor)</option>
+                  </select>
+                </div>
+                {dados.repeticao !== "unica" && (
+                  <div className="field-group">
+                    <label className="field-label">{dados.repeticao === "parcelado" ? "Parcelas" : "Meses"}</label>
+                    <input type="number" min="2" max="60" value={dados.quantidade}
+                      onChange={e => set("quantidade", e.target.value)} />
+                  </div>
+                )}
+              </div>
+              {dados.repeticao === "parcelado" && vezes > 1 && valorNumero > 0 && (
+                <p className="hint">
+                  {vezes} parcelas de aproximadamente R$ {formatarMoeda(valorNumero / vezes)}, uma por mês a partir do
+                  vencimento. A diferença de centavos vai na primeira.
+                </p>
+              )}
+              {dados.repeticao === "mensal" && vezes > 1 && (
+                <p className="hint">
+                  {vezes} contas de R$ {formatarMoeda(valorNumero)}, uma por mês. Cada uma tem seu vencimento e sua baixa.
+                </p>
+              )}
+            </div>
+          )}
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Baixa do pagamento. Valor pago separado do valor da conta porque juros e
+// desconto são a regra, não a exceção.
+function BaixaContaModal({ conta, onFechar, onSalvo }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dados, setDados] = useState({
+    dataPagamento: hoje,
+    valorPago: conta.valor,
+    jurosMulta: "",
+    desconto: "",
+    formaPagamento: "",
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+
+  const salvar = async () => {
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/contas-pagar/${conta.id}/pagar`, { method: "POST", body: JSON.stringify(dados) });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3>Dar baixa</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginTop: 0 }}>
+            {conta.descricao} · vencimento {new Date(String(conta.vencimento).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR")}
+            {" "}· R$ {formatarMoeda(conta.valor)}
+          </p>
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Data do pagamento</label>
+              <input type="date" value={dados.dataPagamento} onChange={e => set("dataPagamento", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Valor pago</label>
+              <InputMoeda value={dados.valorPago} onChange={v => set("valorPago", v)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Forma</label>
+              <select value={dados.formaPagamento} onChange={e => set("formaPagamento", e.target.value)}>
+                <option value="">Não informar</option>
+                <option value="PIX">PIX</option>
+                <option value="Boleto">Boleto</option>
+                <option value="Transferência">Transferência</option>
+                <option value="Dinheiro">Dinheiro</option>
+                <option value="Cartão">Cartão</option>
+              </select>
+            </div>
+          </div>
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Juros / multa</label>
+              <InputMoeda value={dados.jurosMulta} onChange={v => set("jurosMulta", v)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Desconto</label>
+              <InputMoeda value={dados.desconto} onChange={v => set("desconto", v)} />
+            </div>
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Confirmar pagamento"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Categorias e centros de custo ficam aqui, e não no menu de cadastros:
+// são listas curtas que só existem para classificar despesa.
+function CategoriasECentrosModal({ categorias, centros, onFechar, onMudou }) {
+  const { items: veiculos } = useApiCollection("veiculos");
+  const [novaCategoria, setNovaCategoria] = useState("");
+  const [novoCentro, setNovoCentro] = useState({ nome: "", veiculoId: "" });
+  const [erro, setErro] = useState("");
+
+  const criarCategoria = async () => {
+    if (!novaCategoria.trim()) return;
+    try {
+      await apiRequest("/contas-pagar/categorias", { method: "POST", body: JSON.stringify({ nome: novaCategoria.trim() }) });
+      setNovaCategoria(""); onMudou();
+    } catch (e) { setErro(e.message); }
+  };
+
+  const criarCentro = async () => {
+    if (!novoCentro.nome.trim()) return;
+    try {
+      await apiRequest("/contas-pagar/centros-custo", { method: "POST", body: JSON.stringify(novoCentro) });
+      setNovoCentro({ nome: "", veiculoId: "" }); onMudou();
+    } catch (e) { setErro(e.message); }
+  };
+
+  const remover = async (caminho, id) => {
+    if (!window.confirm("Desativar esse registro? Ele some das listas, mas as contas já classificadas continuam como estão.")) return;
+    try {
+      await apiRequest(`/contas-pagar/${caminho}/${id}`, { method: "DELETE" });
+      onMudou();
+    } catch (e) { setErro(e.message); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <h3>Categorias e centros de custo</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Categorias de despesa</h4>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <input value={novaCategoria} placeholder="Combustível, manutenção, folha…"
+                onChange={e => setNovaCategoria(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && criarCategoria()} style={{ flex: 1 }} />
+              <button className="btn" onClick={criarCategoria}>Adicionar</button>
+            </div>
+            <table className="data-table tabela-densa">
+              <tbody>
+                {categorias.map(c => (
+                  <tr key={c.id}>
+                    <td>{c.nome}</td>
+                    <td className="actions-col">
+                      <button className="icon-btn icon-btn-danger" onClick={() => remover("categorias", c.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!categorias.length && <tr><td>Nenhuma categoria ainda.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Centros de custo</h4>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              <input value={novoCentro.nome} placeholder="Operação Usimat, Frota, Administrativo…"
+                onChange={e => setNovoCentro(c => ({ ...c, nome: e.target.value }))} style={{ flex: 1 }} />
+              <select value={novoCentro.veiculoId} onChange={e => setNovoCentro(c => ({ ...c, veiculoId: e.target.value }))}>
+                <option value="">Sem veículo</option>
+                {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+              </select>
+              <button className="btn" onClick={criarCentro}>Adicionar</button>
+            </div>
+            <table className="data-table tabela-densa">
+              <tbody>
+                {centros.map(c => (
+                  <tr key={c.id}>
+                    <td>{c.nome}</td>
+                    <td>{c.veiculo?.placa || "—"}</td>
+                    <td className="actions-col">
+                      <button className="icon-btn icon-btn-danger" onClick={() => remover("centros-custo", c.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!centros.length && <tr><td>Nenhum centro de custo ainda.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContasPagarView() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const primeiroDia = `${hoje.slice(0, 8)}01`;
+  const ultimoDiaMes = (() => {
+    const d = new Date(`${hoje.slice(0, 8)}01T12:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    d.setUTCDate(0);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const { items: fornecedores } = useApiCollection("fornecedores");
+
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: ultimoDiaMes, status: "aberta", categoriaId: "", centroCustoId: "" });
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+
+  const [categorias, setCategorias] = useState([]);
+  const [centros, setCentros] = useState([]);
+
+  const [contaEmEdicao, setContaEmEdicao] = useState(null);
+  const [contaParaBaixa, setContaParaBaixa] = useState(null);
+  const [gerenciarCadastros, setGerenciarCadastros] = useState(false);
+
+  const carregarApoio = useCallback(async () => {
+    try {
+      const [cats, ccs] = await Promise.all([
+        apiRequest("/contas-pagar/categorias"),
+        apiRequest("/contas-pagar/centros-custo"),
+      ]);
+      setCategorias(cats);
+      setCentros(ccs);
+    } catch { /* a tela funciona sem classificação */ }
+  }, []);
+
+  const carregar = useCallback(async () => {
+    setCarregando(true); setErro("");
+    try {
+      const params = new URLSearchParams(
+        Object.entries(filtro).filter(([, v]) => v !== "" && v !== null)
+      );
+      setDados(await apiRequest(`/contas-pagar?${params}`));
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+      setDados(null);
+    } finally { setCarregando(false); }
+  }, [filtro]);
+
+  useEffect(() => { carregarApoio(); }, [carregarApoio]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const excluir = async (conta) => {
+    const doGrupo = conta.grupo && conta.parcelaTotal > 1
+      && window.confirm(`Excluir TODAS as ${conta.parcelaTotal} parcelas em aberto desse lançamento?\n\nCancelar exclui só esta.`);
+    if (!doGrupo && !window.confirm("Excluir essa conta?")) return;
+    try {
+      await apiRequest(`/contas-pagar/${conta.id}${doGrupo ? "?grupo=1" : ""}`, { method: "DELETE" });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\n${e.detalhe}` : ""}`);
+    }
+  };
+
+  const estornar = async (conta) => {
+    if (!window.confirm("Desfazer a baixa dessa conta? Ela volta para em aberto.")) return;
+    try {
+      await apiRequest(`/contas-pagar/${conta.id}/estornar`, { method: "POST" });
+      carregar();
+    } catch (e) { alert(`Não foi possível estornar: ${e.message}`); }
+  };
+
+  const dataBr = (iso) => new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR");
+
+  // Situação pelo vencimento: é o que decide a cor da linha.
+  const situacao = (conta) => {
+    if (conta.status === "paga") return { texto: "paga", cor: "#00732F" };
+    if (conta.status === "cancelada") return { texto: "cancelada", cor: "#8a887f" };
+    const hojeZero = new Date(); hojeZero.setHours(0, 0, 0, 0);
+    const venc = new Date(String(conta.vencimento).slice(0, 10) + "T12:00:00Z");
+    const dias = Math.round((venc - hojeZero) / 86400000);
+    if (dias < 0) return { texto: `atrasada ${Math.abs(dias)}d`, cor: "#c62828" };
+    if (dias === 0) return { texto: "vence hoje", cor: "#b57a12" };
+    if (dias <= 7) return { texto: `vence em ${dias}d`, cor: "#b57a12" };
+    return { texto: "em aberto", cor: "#6b6b68" };
+  };
+
+  const T = dados?.totais;
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#fbf3e2", color: "#7a5205" }}>
+            <FileText size={20} />
+          </div>
+          <div>
+            <h2>Contas a pagar</h2>
+            <p className="subtle">{dados?.contas.length || 0} conta{dados?.contas.length !== 1 ? "s" : ""} no filtro</p>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setGerenciarCadastros(true)}>
+            Categorias e centros
+          </button>
+          <button className="btn btn-primary" onClick={() => setContaEmEdicao({})}>
+            <Plus size={16} /> Nova conta
+          </button>
+        </div>
+      </div>
+
+      {T && (
+        <div className="cte-resumo" style={{ marginBottom: 14 }}>
+          <div>
+            <span className="cte-resumo-rotulo">Atrasadas</span>
+            <span className="cte-resumo-valor" style={{ color: T.atrasadas > 0 ? "#c62828" : undefined }}>
+              R$ {formatarMoeda(T.atrasadas)}
+            </span>
+          </div>
+          <div>
+            <span className="cte-resumo-rotulo">Vence em 7 dias</span>
+            <span className="cte-resumo-valor" style={{ color: T.proximosSeteDias > 0 ? "#b57a12" : undefined }}>
+              R$ {formatarMoeda(T.proximosSeteDias)}
+            </span>
+          </div>
+          <div><span className="cte-resumo-rotulo">Total em aberto</span><span className="cte-resumo-valor">R$ {formatarMoeda(T.abertas)}</span></div>
+          <div><span className="cte-resumo-rotulo">Pagas no filtro</span><span className="cte-resumo-valor">R$ {formatarMoeda(T.pagas)}</span></div>
+        </div>
+      )}
+
+      <div className="nf-section">
+        <div className="nf-grid-4">
+          <div className="field-group">
+            <label className="field-label">Vencimento de</label>
+            <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Até</label>
+            <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Situação</label>
+            <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}>
+              <option value="aberta">Em aberto</option>
+              <option value="paga">Pagas</option>
+              <option value="todas">Todas</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Categoria</label>
+            <select value={filtro.categoriaId} onChange={e => setFiltro(f => ({ ...f, categoriaId: e.target.value }))}>
+              <option value="">Todas</option>
+              {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="nf-grid-4">
+          <div className="field-group">
+            <label className="field-label">Centro de custo</label>
+            <select value={filtro.centroCustoId} onChange={e => setFiltro(f => ({ ...f, centroCustoId: e.target.value }))}>
+              <option value="">Todos</option>
+              {centros.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+      {carregando && <p className="hint">Carregando…</p>}
+
+      {dados && (
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th style={{ width: 90 }}>Vencimento</th>
+              <th>Descrição</th>
+              <th>Fornecedor</th>
+              <th>Categoria</th>
+              <th>Centro de custo</th>
+              <th style={{ width: 110, textAlign: "right" }}>Valor</th>
+              <th style={{ width: 110 }}>Situação</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.contas.map(conta => {
+              const s = situacao(conta);
+              return (
+                <tr key={conta.id}>
+                  <td>{dataBr(conta.vencimento)}</td>
+                  <td>{conta.descricao}{conta.documento ? <span className="subtle"> · {conta.documento}</span> : null}</td>
+                  <td>{conta.fornecedor?.nomeRazaoSocial || "—"}</td>
+                  <td>{conta.categoria?.nome || "—"}</td>
+                  <td>{conta.centroCusto?.nome || "—"}</td>
+                  <td style={{ textAlign: "right" }}>R$ {formatarMoeda(conta.valor)}</td>
+                  <td style={{ color: s.cor }}>{s.texto}</td>
+                  <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                    {conta.status === "aberta" ? (
+                      <>
+                        <button className="icon-btn" title="Dar baixa" onClick={() => setContaParaBaixa(conta)}>✓</button>
+                        <button className="icon-btn" title="Editar" onClick={() => setContaEmEdicao(conta)}><Pencil size={14} /></button>
+                        <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(conta)}><Trash2 size={14} /></button>
+                      </>
+                    ) : (
+                      <button className="icon-btn" title="Desfazer baixa" onClick={() => estornar(conta)}>↺</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {!dados.contas.length && <tr><td colSpan={8}>Nenhuma conta nesse filtro.</td></tr>}
+          </tbody>
+        </table>
+      )}
+
+      {contaEmEdicao && (
+        <ContaPagarForm
+          conta={contaEmEdicao.id ? contaEmEdicao : null}
+          fornecedores={fornecedores}
+          categorias={categorias}
+          centros={centros}
+          onFechar={() => setContaEmEdicao(null)}
+          onSalvo={() => { setContaEmEdicao(null); carregar(); }}
+        />
+      )}
+
+      {contaParaBaixa && (
+        <BaixaContaModal
+          conta={contaParaBaixa}
+          onFechar={() => setContaParaBaixa(null)}
+          onSalvo={() => { setContaParaBaixa(null); carregar(); }}
+        />
+      )}
+
+      {gerenciarCadastros && (
+        <CategoriasECentrosModal
+          categorias={categorias}
+          centros={centros}
+          onFechar={() => setGerenciarCadastros(false)}
+          onMudou={carregarApoio}
+        />
+      )}
+    </div>
+  );
+}
+
 function NotasFiscaisView({ onIrParaCte }) {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: produtosDisponiveis } = useApiCollection("produtos");
@@ -6771,6 +7353,8 @@ function ErpBiomassa() {
     { key: "cte", label: "CTe", icon: Truck },
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
+    { key: "contasPagar", label: "Contas a pagar", icon: FileText },
+    { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },
     { divider: true },
     ...cadastroNaOrdem(["empresas", "usuarios"]),
@@ -7166,6 +7750,7 @@ function ErpBiomassa() {
         {view === "notasFiscais" && <NotasFiscaisView onIrParaCte={() => setView("cte")} />}
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
+        {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
       </div>

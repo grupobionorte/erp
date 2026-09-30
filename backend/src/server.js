@@ -19,6 +19,7 @@ const { carregarTabelasDeApoio } = require("./lib/cargaInicial");
 const manutencaoRouter = require("./routes/manutencao");
 const motoristasRouter = require("./routes/motoristas");
 const relatoriosRouter = require("./routes/relatorios");
+const contasPagarRouter = require("./routes/contasPagar");
 const { autenticar } = require("./middleware/auth");
 
 const app = express();
@@ -68,6 +69,7 @@ app.use("/usuarios", usuariosRouter);
 app.use("/manutencao", manutencaoRouter);
 app.use("/motoristas", motoristasRouter);
 app.use("/relatorios", relatoriosRouter);
+app.use("/contas-pagar", contasPagarRouter);
 app.use("/empresas", empresasRouter);
 app.use("/ponto", pontoRouter);
 

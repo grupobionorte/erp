@@ -76,7 +76,7 @@
   }
   .evento.alta { border-left-color: var(--vermelho); }
   .evento.baixa { border-left-color: #B9B7AE; }
-  .evento.feito { opacity: .55; }
+  .evento.feito { opacity: .45; }
   .evento.feito .titulo { text-decoration: line-through; }
 
   .evento input[type="checkbox"] { width: 22px; height: 22px; margin-top: 1px; flex: none; accent-color: var(--azul); }
@@ -152,7 +152,6 @@ const API = "https://erp-biomassa-backend.onrender.com";
 const estado = {
   token: localStorage.getItem("agenda.token") || null,
   usuario: JSON.parse(localStorage.getItem("agenda.usuario") || "null"),
-  aba: "hoje",
   eventos: [],
   colaboradores: [],
   carregando: false,
@@ -345,23 +344,16 @@ async function ativarNotificacoes() {
 --------------------------------------------------------------------------- */
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 
-function periodoDaAba() {
-  const hoje = hojeISO();
-  if (estado.aba === "hoje") return { de: hoje, ate: hoje, status: "pendente" };
-  if (estado.aba === "semana") {
-    const d = new Date(`${hoje}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + 7);
-    return { de: hoje, ate: d.toISOString().slice(0, 10), status: "pendente" };
-  }
-  if (estado.aba === "atrasados") {
-    const d = new Date(`${hoje}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() - 1);
-    return { de: "2020-01-01", ate: d.toISOString().slice(0, 10), status: "pendente" };
-  }
-  // Concluídos: últimos 30 dias.
-  const d = new Date(`${hoje}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 30);
-  return { de: d.toISOString().slice(0, 10), ate: hoje, status: "concluido" };
+// Tudo que está em aberto, do mais atrasado ao mais distante, mais os
+// concluídos recentes. Dividir em abas obrigava a procurar em qual delas a
+// tarefa estava — numa lista desse tamanho, rolar é mais rápido.
+function periodoDaLista() {
+  const daqui = (dias) => {
+    const d = new Date(`${hojeISO()}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().slice(0, 10);
+  };
+  return { de: daqui(-90), ate: daqui(365), status: "todos" };
 }
 
 async function carregar() {
@@ -369,7 +361,7 @@ async function carregar() {
   estado.carregando = true; estado.erro = "";
   desenhar();
   try {
-    const params = new URLSearchParams(periodoDaAba());
+    const params = new URLSearchParams(periodoDaLista());
     // "Só os meus" quando o usuário tem colaborador vinculado.
     if (estado.usuario?.colaboradorId) params.set("responsavelId", estado.usuario.colaboradorId);
 
@@ -440,20 +432,11 @@ function desenhar() {
           </button>
         </div>` : ""}
 
-      <div class="abas">
-        ${[["hoje", "Hoje"], ["semana", "7 dias"], ["atrasados", "Atrasados"], ["feitos", "Feitos"]]
-          .map(([chave, rotulo]) => `
-            <button class="aba" aria-selected="${estado.aba === chave}" onclick="trocarAba('${chave}')">${rotulo}</button>
-          `).join("")}
-      </div>
-
       ${estado.erro ? `<p class="erro">${escapar(estado.erro)}</p>` : ""}
       ${estado.carregando ? `<p class="vazio">Carregando…</p>` : ""}
 
       ${!estado.carregando && !grupos.length ? `
-        <div class="vazio">
-          <p>${estado.aba === "atrasados" ? "Nada atrasado." : estado.aba === "feitos" ? "Nada concluído por aqui." : "Nenhum compromisso."}</p>
-        </div>` : ""}
+        <div class="vazio"><p>Nenhum compromisso.</p></div>` : ""}
 
       ${grupos.map((grupo) => `
         <h3 class="dia ${grupo.dia < hojeISO() ? "atrasado" : ""}">${escapar(rotuloDia(grupo.dia))}</h3>
@@ -602,8 +585,6 @@ async function entrar() {
     alvoErro.textContent = e.message;
   }
 }
-
-function trocarAba(aba) { estado.aba = aba; carregar(); }
 
 async function alternarConclusao(id, statusAtual) {
   try {

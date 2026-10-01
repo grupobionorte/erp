@@ -37,7 +37,9 @@ function meioDiaNoFuso(ano, mes, dia) {
 
 async function main() {
   const documentos = await prisma.documentoFiscal.findMany({
-    where: { dataEmissao: { not: null } },
+    // Sem filtro de nulo aqui: o Prisma não aceita "not: null" desse jeito,
+    // e documento sem data é descartado logo abaixo de qualquer forma.
+    where: {},
     select: { id: true, tipo: true, numero: true, dataEmissao: true, dataSaida: true },
     orderBy: { id: "asc" },
   });
@@ -47,6 +49,7 @@ async function main() {
   let corrigidos = 0;
 
   for (const doc of documentos) {
+    if (!doc.dataEmissao) continue;
     // A assinatura do problema: exatamente meia-noite em UTC.
     if (doc.dataEmissao.toISOString().slice(11, 19) !== "00:00:00") continue;
 

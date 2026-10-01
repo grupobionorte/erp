@@ -66,8 +66,8 @@
   }
   .aba[aria-selected="true"] { background: var(--azul); color: #fff; border-color: var(--azul); }
 
-  .dia { margin: 0 0 8px; font-size: 13px; font-weight: 600; text-transform: capitalize; color: #55534C; }
-  .dia.atrasado { color: var(--vermelho); }
+  .data-atrasada { color: var(--vermelho); font-weight: 600; }
+  .evento > div[onclick] { cursor: pointer; }
 
   .evento {
     background: var(--superficie); border: 1px solid var(--borda); border-left: 3px solid var(--texto-2);
@@ -389,21 +389,30 @@ function rotuloDia(dia) {
   const d = new Date(`${dia}T12:00:00Z`);
   const hoje = new Date(`${hojeISO()}T12:00:00Z`);
   const dias = Math.round((d - hoje) / 86400000);
-  const formatado = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
-  if (dias === 0) return `Hoje · ${formatado}`;
-  if (dias === 1) return `Amanhã · ${formatado}`;
-  return formatado;
+  if (dias === 0) return "Hoje";
+  if (dias === 1) return "Amanhã";
+  if (dias === -1) return "Ontem";
+  const formatado = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+  return dias < 0 ? `${formatado} · atrasado` : formatado;
 }
 
 function desenhar() {
   if (!estado.token) return desenharLogin();
 
-  const grupos = [];
-  for (const evento of estado.eventos) {
-    const dia = String(evento.data).slice(0, 10);
-    const grupo = grupos.find((g) => g.dia === dia);
-    if (grupo) grupo.eventos.push(evento); else grupos.push({ dia, eventos: [evento] });
-  }
+  // Alta primeiro, depois normal, depois baixa; dentro de cada uma, a data
+  // mais recente no topo. Agrupar por dia não cabe mais aqui: a prioridade
+  // manda, e um dia teria eventos espalhados pela lista.
+  const PESO = { alta: 0, normal: 1, baixa: 2 };
+  const ordenados = [...estado.eventos].sort((a, b) => {
+    // Concluído vai para o fim, qualquer que seja a prioridade.
+    const feito = (e) => (e.status === "concluido" ? 1 : 0);
+    if (feito(a) !== feito(b)) return feito(a) - feito(b);
+
+    const prioridade = (PESO[a.prioridade] ?? 1) - (PESO[b.prioridade] ?? 1);
+    if (prioridade) return prioridade;
+
+    return String(b.data).slice(0, 10).localeCompare(String(a.data).slice(0, 10));
+  });
 
   const precisaAtivar = !estado.push.inscrito;
   const avisoIOS = ehIOS() && !instalado();
@@ -435,29 +444,31 @@ function desenhar() {
       ${estado.erro ? `<p class="erro">${escapar(estado.erro)}</p>` : ""}
       ${estado.carregando ? `<p class="vazio">Carregando…</p>` : ""}
 
-      ${!estado.carregando && !grupos.length ? `
+      ${!estado.carregando && !ordenados.length ? `
         <div class="vazio"><p>Nenhum compromisso.</p></div>` : ""}
 
-      ${grupos.map((grupo) => `
-        <h3 class="dia ${grupo.dia < hojeISO() ? "atrasado" : ""}">${escapar(rotuloDia(grupo.dia))}</h3>
-        ${grupo.eventos.map((evento) => `
+      ${ordenados.map((evento) => {
+        const dia = String(evento.data).slice(0, 10);
+        const atrasado = dia < hojeISO() && evento.status !== "concluido";
+        return `
           <div class="evento ${evento.prioridade} ${evento.status === "concluido" ? "feito" : ""}">
             <input type="checkbox" ${evento.status === "concluido" ? "checked" : ""}
-              onchange="alternarConclusao(${evento.id}, '${evento.status}')" />
-            <div style="flex:1;min-width:0">
+              onchange="event.stopPropagation(); alternarConclusao(${evento.id}, '${evento.status}')" />
+            <div style="flex:1;min-width:0" onclick="abrirEvento(${evento.id})">
               <div class="titulo">
                 ${evento.diaTodo ? "" : escapar(`${evento.horaInicio || ""}${evento.horaFim ? `–${evento.horaFim}` : ""} · `)}${escapar(evento.titulo)}
               </div>
               ${evento.descricao ? `<div class="meta">${escapar(evento.descricao)}</div>` : ""}
               <div class="meta">
-                ${evento.responsaveis?.length
+                <span class="${atrasado ? "data-atrasada" : ""}">${escapar(rotuloDia(dia))}</span>
+                · ${evento.responsaveis?.length
                   ? escapar(evento.responsaveis.map((r) => r.colaborador.nome.split(" ")[0]).join(", "))
                   : "sem responsável"}
               </div>
             </div>
           </div>
-        `).join("")}
-      `).join("")}
+        `;
+      }).join("")}
     </main>
 
     <div class="rodape">
@@ -474,7 +485,7 @@ function desenharFormulario() {
   return `
     <div class="sobreposicao" onclick="if (event.target === this) fecharFormulario()">
       <div class="folha">
-        <h2>Novo compromisso</h2>
+        <h2>${e.id ? "Compromisso" : "Novo compromisso"}</h2>
         <div class="painel" style="margin-top:12px">
           <label>Título</label>
           <input id="f-titulo" value="${escapar(e.titulo || "")}" placeholder="O que precisa ser feito" />
@@ -513,6 +524,7 @@ function desenharFormulario() {
         </div>
 
         <div style="display:flex;gap:8px;margin-top:14px">
+          ${e.id ? `<button class="secundario" style="color:var(--vermelho)" onclick="excluirEvento(${e.id})">Excluir</button>` : ""}
           <button class="secundario" style="flex:1" onclick="fecharFormulario()">Cancelar</button>
           <button class="primario" onclick="salvarEvento()">Salvar</button>
         </div>
@@ -593,6 +605,24 @@ async function alternarConclusao(id, statusAtual) {
   } catch (e) { alert(e.message); }
 }
 
+// Abrir um compromisso da lista para conferir ou alterar.
+function abrirEvento(id) {
+  const evento = estado.eventos.find((e) => e.id === id);
+  if (!evento) return;
+  estado.editando = {
+    id: evento.id,
+    titulo: evento.titulo,
+    descricao: evento.descricao || "",
+    data: String(evento.data).slice(0, 10),
+    diaTodo: evento.diaTodo,
+    horaInicio: evento.horaInicio || "",
+    prioridade: evento.prioridade,
+    responsaveis: evento.responsaveis?.map((r) => r.colaboradorId) || [],
+    status: evento.status,
+  };
+  desenhar();
+}
+
 function abrirFormulario() {
   estado.editando = { responsaveis: estado.usuario?.colaboradorId ? [estado.usuario.colaboradorId] : [] };
   desenhar();
@@ -604,6 +634,15 @@ function alternarResponsavel(id, botao) {
   const lista = estado.editando.responsaveis || [];
   estado.editando.responsaveis = lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id];
   botao.setAttribute("aria-pressed", String(estado.editando.responsaveis.includes(id)));
+}
+
+async function excluirEvento(id) {
+  if (!confirm("Excluir este compromisso?")) return;
+  try {
+    await api(`/agenda/${id}`, { method: "DELETE" });
+    estado.editando = null;
+    carregar();
+  } catch (e) { alert(e.message); }
 }
 
 async function salvarEvento() {
@@ -624,7 +663,11 @@ async function salvarEvento() {
   }
 
   try {
-    await api("/agenda", { method: "POST", body: JSON.stringify(corpo) });
+    const id = estado.editando.id;
+    await api(id ? `/agenda/${id}` : "/agenda", {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(corpo),
+    });
     estado.editando = null;
     carregar();
   } catch (e) { alert(e.message); }

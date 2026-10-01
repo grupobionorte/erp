@@ -7,7 +7,7 @@
    seria pior do que dizer que está sem conexão.
    =========================================================================== */
 
-const VERSAO = "agenda-v7";
+const VERSAO = "agenda-v8";
 const CACHE_APP = `${VERSAO}-app`;
 const ARQUIVOS = ["/agenda.html", "/agenda-manifest.webmanifest", "/agenda-icone-192.png"];
 

@@ -3372,6 +3372,106 @@ function ClientesDoMes() {
   );
 }
 
+// Agenda no painel: o que está atrasado e o que vence logo, com a tarefa
+// podendo ser concluída sem sair daqui. Lista curta de propósito — o painel
+// mostra o que exige ação, não a agenda inteira.
+function AgendaDoPainel({ onNavigate }) {
+  const [eventos, setEventos] = useState(null);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const carregar = useCallback(async () => {
+    const ate = new Date(`${hoje}T12:00:00Z`);
+    ate.setUTCDate(ate.getUTCDate() + 7);
+    try {
+      const dados = await apiRequest(
+        `/agenda?de=2020-01-01&ate=${ate.toISOString().slice(0, 10)}&status=pendente`
+      );
+      setEventos(dados.eventos);
+    } catch {
+      setEventos([]);
+    }
+  }, [hoje]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const concluir = async (evento) => {
+    try {
+      await apiRequest(`/agenda/${evento.id}/concluir`, { method: "POST" });
+      carregar();
+    } catch (e) { alert(`Não foi possível concluir: ${e.message}`); }
+  };
+
+  if (!eventos?.length) return null;
+
+  const PESO = { alta: 0, normal: 1, baixa: 2 };
+  const ordenados = [...eventos].sort((a, b) => {
+    const prioridade = (PESO[a.prioridade] ?? 1) - (PESO[b.prioridade] ?? 1);
+    if (prioridade) return prioridade;
+    return String(b.data).slice(0, 10).localeCompare(String(a.data).slice(0, 10));
+  });
+
+  const atrasados = eventos.filter(e => String(e.data).slice(0, 10) < hoje).length;
+  const corPrioridade = { alta: "#c62828", normal: "#6b6b68", baixa: "#b9b7ae" };
+
+  const rotuloDia = (dia) => {
+    const d = new Date(`${dia}T12:00:00Z`);
+    const dias = Math.round((d - new Date(`${hoje}T12:00:00Z`)) / 86400000);
+    if (dias === 0) return "Hoje";
+    if (dias === 1) return "Amanhã";
+    if (dias === -1) return "Ontem";
+    const formatado = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+    return dias < 0 ? `${formatado} · atrasado` : formatado;
+  };
+
+  return (
+    <div className="nf-section" style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <h4 className="nf-section-title" style={{ margin: 0 }}>
+          Agenda
+          <span className="subtle" style={{ fontWeight: 400 }}>
+            {" · "}{eventos.length} pendente{eventos.length !== 1 ? "s" : ""}
+            {atrasados > 0 && <span style={{ color: "#c62828" }}>{` · ${atrasados} atrasado${atrasados !== 1 ? "s" : ""}`}</span>}
+          </span>
+        </h4>
+        <button className="link-btn" onClick={() => onNavigate("agenda")}>Ver tudo</button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
+        {ordenados.slice(0, 6).map(evento => {
+          const dia = String(evento.data).slice(0, 10);
+          return (
+            <div key={evento.id} style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              borderLeft: `3px solid ${corPrioridade[evento.prioridade] || "#6b6b68"}`,
+              background: "var(--surface-2, #fff)", border: "1px solid var(--border, #e5e3da)",
+              borderLeftWidth: 3, borderRadius: 8, padding: "6px 11px",
+            }}>
+              <input type="checkbox" style={{ width: "auto", marginTop: 2 }}
+                checked={false} onChange={() => concluir(evento)} />
+              <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => onNavigate("agenda")}>
+                <div style={{ fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {evento.titulo}
+                </div>
+                <div className="subtle" style={{ fontSize: 12 }}>
+                  <span style={dia < hoje ? { color: "#c62828", fontWeight: 600 } : undefined}>{rotuloDia(dia)}</span>
+                  {" · "}
+                  {evento.responsaveis?.length
+                    ? evento.responsaveis.map(r => r.colaborador.nome.split(" ")[0]).join(", ")
+                    : "sem responsável"}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {ordenados.length > 6 && (
+        <p className="hint">e mais {ordenados.length - 6} compromisso{ordenados.length - 6 !== 1 ? "s" : ""}.</p>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
   const cards = modulosParaUsuario(usuario).map(([key, cfg]) => ({ key, cfg, count: counts[key] }));
   return (
@@ -3388,6 +3488,7 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
         </div>
       </div>
 
+      <AgendaDoPainel onNavigate={onNavigate} />
       <ClientesDoMes />
 
       <div className="dash-grid">

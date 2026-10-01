@@ -282,29 +282,36 @@ async function ativarNotificacoes() {
     // por baixo. O Chrome aceita os dois, e algumas versões aceitam a string
     // em base64url direto. Então tenta os três, nessa ordem, em vez de
     // escolher um e torcer.
+    // Uint8Array primeiro: é o formato dos exemplos da própria Apple.
     const formatos = [
-      ["ArrayBuffer", chaveBytes.buffer.slice(chaveBytes.byteOffset, chaveBytes.byteOffset + chaveBytes.byteLength)],
       ["Uint8Array", chaveBytes],
+      ["ArrayBuffer", chaveBytes.buffer.slice(chaveBytes.byteOffset, chaveBytes.byteOffset + chaveBytes.byteLength)],
       ["texto", chave.trim()],
     ];
 
     let inscricao = null;
-    let ultimoErro = null;
+    const falhas = [];
     for (const [nome, applicationServerKey] of formatos) {
       try {
         inscricao = await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
         console.log(`[push] inscrito usando ${nome}`);
         break;
       } catch (e) {
-        ultimoErro = e;
+        // Guarda o erro de cada formato: quando todos falham, é a diferença
+        // entre eles que diz onde está o problema.
+        falhas.push(`${nome}: ${e.name || "Erro"} — ${e.message}`);
       }
     }
 
     if (!inscricao) {
+      // Diagnóstico completo na tela: sem console acessível no iPhone, é
+      // daqui que sai a informação para descobrir a causa.
       throw new Error(
-        `${ultimoErro?.message || "recusado pelo navegador"}\n\n` +
-        `Chave com ${chave.trim().length} caracteres e ${chaveBytes.length} bytes — esses números estão corretos, ` +
-        `então o problema é do aparelho. No iPhone, confira se o app foi aberto pelo ícone da tela de início.`
+        `Nenhum formato foi aceito.\n\n${falhas.join("\n\n")}\n\n` +
+        `Chave: ${chave.trim().length} caracteres, ${chaveBytes.length} bytes, começa com ${chaveBytes[0]}.\n` +
+        `Instalado na tela inicial: ${instalado() ? "sim" : "NÃO"}.\n` +
+        `Permissão: ${Notification.permission}.\n` +
+        `Navegador: ${navigator.userAgent.slice(0, 90)}`
       );
     }
 

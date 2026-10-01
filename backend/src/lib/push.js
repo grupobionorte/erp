@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const webpush = require("web-push");
 
 const prisma = require("./prisma");
@@ -23,24 +25,36 @@ const CONTATO = contatoInformado && !/^(mailto:|https?:)/i.test(contatoInformado
   ? `mailto:${contatoInformado}`
   : (contatoInformado || "mailto:contato@bionorte.com.br");
 
-// A chave pública, decodificada, tem exatamente 65 bytes. Conferir aqui
-// evita o erro aparecer só no celular, na hora de ativar.
-function chavePublicaValida(chave) {
+// Não basta ter 65 bytes: eles precisam formar um ponto válido na curva
+// P-256. Uma chave com um caractere trocado passa no teste de tamanho e é
+// recusada só pelo celular, com uma mensagem que não diz isso — foi
+// exatamente o que aconteceu aqui.
+function conferirChavePublica(chave) {
+  let bytes;
   try {
-    return Buffer.from(chave, "base64url").length === 65;
+    bytes = Buffer.from(chave, "base64url");
   } catch {
-    return false;
+    return "não é base64url válido";
   }
+
+  if (bytes.length !== 65) return `tem ${bytes.length} bytes, deveria ter 65`;
+  if (bytes[0] !== 4) return `começa com ${bytes[0]}, deveria começar com 4`;
+
+  try {
+    crypto.createECDH("prime256v1").setPublicKey(bytes);
+  } catch {
+    return "os bytes não formam um ponto válido na curva P-256 — provavelmente foi copiada com algum caractere trocado";
+  }
+
+  return null;
 }
 
 let configurado = false;
 
 if (CHAVE_PUBLICA && CHAVE_PRIVADA) {
-  if (!chavePublicaValida(CHAVE_PUBLICA)) {
-    console.error(
-      `[push] VAPID_PUBLIC_KEY inválida (${CHAVE_PUBLICA.length} caracteres; ` +
-      "a correta tem 87 e decodifica para 65 bytes). Notificações desligadas."
-    );
+  const problema = conferirChavePublica(CHAVE_PUBLICA);
+  if (problema) {
+    console.error(`[push] VAPID_PUBLIC_KEY inválida: ${problema}. Notificações desligadas.`);
   } else {
     try {
       webpush.setVapidDetails(CONTATO, CHAVE_PUBLICA, CHAVE_PRIVADA);

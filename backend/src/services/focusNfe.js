@@ -187,6 +187,11 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
   // Sem transporte (9) também não leva veículo.
   const podeInformarVeiculo = mesmaCidade && modalidadeFrete !== 9;
 
+  const emissao = documento.dataEmissao || new Date();
+  const saidaValida = documento.dataSaida
+    ? (documento.dataSaida < emissao ? emissao : documento.dataSaida)
+    : undefined;
+
   // Ficha do transporte para as informações complementares, no formato que
   // a operação já conhece: uma linha por dado, cavalo e reboque separados,
   // placa seguida da UF de licenciamento.
@@ -207,11 +212,15 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
     // Com o fuso explícito, como no CT-e e no MDF-e. Em UTC puro, uma nota
     // emitida de manhã em Mato Grosso podia ser registrada no dia anterior.
-    data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
+    data_emissao: dataEmissaoSefaz(emissao),
     // Data E HORA da saída: o DANFE tem campo próprio para a hora, e sem o
-    // fuso da operação ela sai zerada ou trocada. Mesmo tratamento da data
-    // de emissão.
-    data_entrada_saida: documento.dataSaida ? dataEmissaoSefaz(documento.dataSaida) : undefined,
+    // fuso da operação ela sai zerada ou trocada.
+    //
+    // A saída nunca pode ser anterior à emissão — a SEFAZ recusa com a
+    // rejeição 506. Acontece quando a nota é lançada de manhã e emitida à
+    // tarde. Nesse caso vale o momento da emissão: a mercadoria não saiu
+    // antes de a nota existir.
+    data_entrada_saida: saidaValida ? dataEmissaoSefaz(saidaValida) : undefined,
     tipo_documento: 1, // 1 = saída
     finalidade_emissao: CODIGO_FINALIDADE[documento.finalidadeOperacao] ?? 1,
     // Complementar, ajuste e devolução precisam referenciar a nota de

@@ -5066,7 +5066,19 @@ function AgendaView() {
   })();
 
   const { items: colaboradores } = useApiCollection("colaboradores");
-  const [filtro, setFiltro] = useState({ de: hoje, ate: daquiUmMes, status: "pendente", responsavelId: "" });
+  // Sem filtro de data: a agenda inteira aparece, do que ficou para trás ao
+  // que está marcado lá na frente. O intervalo existe só para a lista não
+  // crescer sem limite com o passar dos anos.
+  const periodo = (() => {
+    const mover = (dias) => {
+      const d = new Date(`${hoje}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + dias);
+      return d.toISOString().slice(0, 10);
+    };
+    return { de: mover(-365), ate: mover(365) };
+  })();
+
+  const [filtro, setFiltro] = useState({ status: "pendente", responsavelId: "" });
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [editando, setEditando] = useState(null);
@@ -5074,12 +5086,14 @@ function AgendaView() {
   const carregar = useCallback(async () => {
     setErro("");
     try {
-      const params = new URLSearchParams(Object.entries(filtro).filter(([, v]) => v !== ""));
+      const params = new URLSearchParams(
+        Object.entries({ ...periodo, ...filtro }).filter(([, v]) => v !== "")
+      );
       setDados(await apiRequest(`/agenda?${params}`));
     } catch (e) {
       setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
     }
-  }, [filtro]);
+  }, [filtro, periodo.de, periodo.ate]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -5146,15 +5160,7 @@ function AgendaView() {
       </div>
 
       <div className="nf-section">
-        <div className="nf-grid-4">
-          <div className="field-group">
-            <label className="field-label">De</label>
-            <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
-          </div>
-          <div className="field-group">
-            <label className="field-label">Até</label>
-            <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
-          </div>
+        <div className="nf-grid-3">
           <div className="field-group">
             <label className="field-label">Situação</label>
             <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}>
@@ -5180,7 +5186,7 @@ function AgendaView() {
         <div className="empty-state"><p>Nenhum compromisso nesse período.</p></div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {ordenados.map(evento => {
           const dia = String(evento.data).slice(0, 10);
           const atrasado = dia < hoje && evento.status !== "concluido";
@@ -5189,22 +5195,27 @@ function AgendaView() {
               display: "flex", alignItems: "flex-start", gap: 12,
               background: "var(--surface-2, #fff)", border: "1px solid var(--border, #e5e3da)",
               borderLeft: `3px solid ${corPrioridade[evento.prioridade] || "#6b6b68"}`,
-              borderRadius: 9, padding: "9px 13px",
+              borderRadius: 8, padding: "5px 11px",
               opacity: evento.status === "concluido" ? 0.55 : 1,
             }}>
-              <input type="checkbox" style={{ width: "auto", marginTop: 3 }}
+              <input type="checkbox" style={{ width: "auto", marginTop: 2 }}
                 checked={evento.status === "concluido"} onChange={() => concluir(evento)} />
               {/* Clicar na linha abre para editar, como no app do celular. */}
               <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => setEditando(evento)}>
                 <div style={{
-                  fontWeight: 500,
+                  fontWeight: 500, fontSize: 13.5, lineHeight: 1.3,
                   textDecoration: evento.status === "concluido" ? "line-through" : undefined,
                 }}>
                   {evento.diaTodo ? "" : `${evento.horaInicio || ""}${evento.horaFim ? `–${evento.horaFim}` : ""} · `}
                   {evento.titulo}
                 </div>
-                {evento.descricao && <div className="subtle" style={{ fontSize: 12.5 }}>{evento.descricao}</div>}
-                <div className="subtle" style={{ fontSize: 12.5, marginTop: 2 }}>
+                {evento.descricao && (
+                  <div className="subtle" style={{
+                    fontSize: 12, lineHeight: 1.25,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{evento.descricao}</div>
+                )}
+                <div className="subtle" style={{ fontSize: 12, lineHeight: 1.25 }}>
                   <span style={atrasado ? { color: "#c62828", fontWeight: 600 } : undefined}>
                     {rotuloDia(dia)}
                   </span>

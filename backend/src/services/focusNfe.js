@@ -205,7 +205,9 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
   return {
     // Mesmo limite de 60 caracteres vale para a NF-e.
     natureza_operacao: limitarTexto(documento.naturezaOperacao || "Venda de mercadoria", 60),
-    data_emissao: (documento.dataEmissao || new Date()).toISOString(),
+    // Com o fuso explícito, como no CT-e e no MDF-e. Em UTC puro, uma nota
+    // emitida de manhã em Mato Grosso podia ser registrada no dia anterior.
+    data_emissao: dataEmissaoSefaz(documento.dataEmissao || new Date()),
     // Data E HORA da saída: o DANFE tem campo próprio para a hora, e sem o
     // fuso da operação ela sai zerada ou trocada. Mesmo tratamento da data
     // de emissão.

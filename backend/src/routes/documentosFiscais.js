@@ -209,7 +209,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
-      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
+      dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
       naturezaOperacao: naturezaOperacao || undefined,
       modalidadeFrete: modalidadeFrete || undefined,
       dataSaida: dataHoraNoFuso(dataSaida, horaSaida),
@@ -323,7 +323,7 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       valorIcmsOutras: valorIcmsOutras || undefined,
       valorCreditoPresumidoIcms: valorCreditoPresumidoIcms || undefined,
       valorFcp: valorFcp || undefined,
-      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
+      dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
@@ -394,6 +394,22 @@ async function ncmDoProduto(descricao, empresaId) {
     select: { ncm: true },
   });
   return produto?.ncm || null;
+}
+
+// Data escolhida na tela + hora atual, no fuso da operação.
+//
+// A tela manda só "2026-10-01". Gravar isso direto vira meia-noite em UTC,
+// que é 20h do dia ANTERIOR em Mato Grosso — e o documento aparece com a
+// data errada na listagem e no XML. Combinando com a hora atual, o dia fica
+// correto e o horário de emissão fica verossímil.
+function dataNoFusoComHoraAtual(data) {
+  if (!data) return undefined;
+  const zona = process.env.TZ_FISCAL || "America/Cuiaba";
+  const agora = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: zona, hour: "2-digit", minute: "2-digit", hour12: false })
+      .formatToParts(new Date()).map((p) => [p.type, p.value])
+  );
+  return dataHoraNoFuso(String(data).slice(0, 10), `${agora.hour}:${agora.minute}`);
 }
 
 // Junta data e hora no fuso da operação. Sem isso, "2026-09-25" vira
@@ -1261,7 +1277,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorIcmsSt: valorIcmsSt ?? undefined,
       outrasDespesas: outrasDespesas ?? undefined,
       valorIpi: valorIpi ?? undefined,
-      dataEmissao: dataEmissao ? new Date(dataEmissao) : undefined,
+      dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
       colaboradorResponsavelId: colaboradorResponsavelId === null ? null : colaboradorResponsavelId || undefined,
       valorTotal,
       ...dadosItens,

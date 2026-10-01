@@ -18,8 +18,20 @@ const incluir = {
   responsaveis: {
     include: { colaborador: { select: { id: true, nome: true, cargo: true } } },
   },
+  itens: { orderBy: { ordem: "asc" } },
   criadoPor: { select: { id: true, nome: true } },
 };
+
+// Normaliza a lista de verificação vinda da tela: aceita texto solto ou
+// objeto com o estado de marcação, e descarta linha em branco.
+const prepararItens = (itens) =>
+  (itens || [])
+    .map((item, i) => ({
+      texto: String(typeof item === "string" ? item : item?.texto || "").trim(),
+      concluido: typeof item === "object" ? Boolean(item.concluido) : false,
+      ordem: i,
+    }))
+    .filter((item) => item.texto);
 
 const dataDoDia = (valor) => new Date(`${String(valor).slice(0, 10)}T12:00:00Z`);
 
@@ -59,7 +71,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { titulo, data, responsaveis, ...dados } = req.body;
+  const { titulo, data, responsaveis, itens, ...dados } = req.body;
 
   if (!titulo || !data) {
     return res.status(400).json({ erro: "Informe o título e a data" });
@@ -75,6 +87,7 @@ router.post("/", asyncHandler(async (req, res) => {
       responsaveis: responsaveis?.length ? {
         create: responsaveis.map((id) => ({ colaboradorId: Number(id) })),
       } : undefined,
+      itens: prepararItens(itens).length ? { create: prepararItens(itens) } : undefined,
     },
     include: incluir,
   });
@@ -95,7 +108,7 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { responsaveis, data, empresaId, criadoPorId, ...dados } = req.body;
+  const { responsaveis, itens, data, empresaId, criadoPorId, ...dados } = req.body;
   const id = Number(req.params.id);
 
   // Guarda quem já era responsável, para avisar só quem entrou agora.
@@ -109,6 +122,12 @@ router.put("/:id", asyncHandler(async (req, res) => {
     await prisma.eventoResponsavel.deleteMany({ where: { eventoId: id } });
   }
 
+  // A lista de verificação segue a mesma regra, e o estado de cada marcação
+  // vem junto da tela.
+  if (Array.isArray(itens)) {
+    await prisma.eventoItem.deleteMany({ where: { eventoId: id } });
+  }
+
   const evento = await prisma.evento.update({
     where: { id },
     data: {
@@ -117,6 +136,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       responsaveis: Array.isArray(responsaveis) && responsaveis.length ? {
         create: responsaveis.map((r) => ({ colaboradorId: Number(r) })),
       } : undefined,
+      itens: Array.isArray(itens) && prepararItens(itens).length
+        ? { create: prepararItens(itens) }
+        : undefined,
     },
     include: incluir,
   });
@@ -140,6 +162,22 @@ router.put("/:id", asyncHandler(async (req, res) => {
 
 // Concluir e reabrir: é a ação mais repetida da agenda, então tem rota
 // própria em vez de passar por uma edição inteira.
+// Marcar um item da lista é a ação do dia a dia — tem rota própria para
+// não exigir salvar o compromisso inteiro a cada conferência.
+router.post("/:id/itens/:itemId", asyncHandler(async (req, res) => {
+  const item = await prisma.eventoItem.findUnique({ where: { id: Number(req.params.itemId) } });
+  if (!item || item.eventoId !== Number(req.params.id)) {
+    return res.status(404).json({ erro: "Item não encontrado" });
+  }
+
+  await prisma.eventoItem.update({
+    where: { id: item.id },
+    data: { concluido: req.body?.concluido ?? !item.concluido },
+  });
+
+  res.json(await prisma.evento.findUnique({ where: { id: Number(req.params.id) }, include: incluir }));
+}));
+
 router.post("/:id/concluir", asyncHandler(async (req, res) => {
   res.json(await prisma.evento.update({
     where: { id: Number(req.params.id) },

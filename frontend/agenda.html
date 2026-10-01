@@ -132,6 +132,10 @@
   }
   .pessoa[aria-pressed="true"] { background: var(--azul); color: #fff; border-color: var(--azul); }
 
+  .item-check { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .item-check input[type="checkbox"] { width: 22px; height: 22px; flex: none; accent-color: var(--azul); }
+  .item-texto { flex: 1; }
+
   @media (prefers-color-scheme: dark) {
     :root {
       --fundo: #14140F; --superficie: #1E1E19; --borda: #34342C;
@@ -463,7 +467,9 @@ function desenhar() {
                 <span class="${atrasado ? "data-atrasada" : ""}">${escapar(rotuloDia(dia))}</span>
                 · ${evento.responsaveis?.length
                   ? escapar(evento.responsaveis.map((r) => r.colaborador.nome.split(" ")[0]).join(", "))
-                  : "sem responsável"}
+                  : "sem responsável"}${evento.itens?.length
+                  ? ` · ${evento.itens.filter((i) => i.concluido).length}/${evento.itens.length} itens`
+                  : ""}
               </div>
             </div>
           </div>
@@ -517,6 +523,29 @@ function desenharFormulario() {
               <button class="pessoa" aria-pressed="${(e.responsaveis || []).includes(c.id)}"
                 onclick="alternarResponsavel(${c.id}, this)">${escapar(c.nome)}</button>
             `).join("")}
+          </div>
+
+          <label>
+            Lista de verificação
+            ${(e.itens || []).length
+              ? `<span style="float:right">${e.itens.filter((i) => i.concluido).length} de ${e.itens.length}</span>`
+              : ""}
+          </label>
+          <div id="lista-itens">
+            ${(e.itens || []).map((item, i) => `
+              <div class="item-check">
+                <input type="checkbox" ${item.concluido ? "checked" : ""} onchange="marcarItem(${i}, this.checked)" />
+                <input class="item-texto" value="${escapar(item.texto)}"
+                  style="${item.concluido ? "text-decoration:line-through;opacity:.6" : ""}"
+                  oninput="editarItem(${i}, this.value)" />
+                <button class="pessoa" style="padding:6px 10px" onclick="removerItem(${i})">×</button>
+              </div>
+            `).join("")}
+          </div>
+          <div class="item-check">
+            <input id="f-novo-item" placeholder="Adicionar item…" style="flex:1"
+              onkeydown="if (event.key === 'Enter') { event.preventDefault(); adicionarItem(); }" />
+            <button class="pessoa" onclick="adicionarItem()">+</button>
           </div>
 
           <label>Detalhes</label>
@@ -618,13 +647,17 @@ function abrirEvento(id) {
     horaInicio: evento.horaInicio || "",
     prioridade: evento.prioridade,
     responsaveis: evento.responsaveis?.map((r) => r.colaboradorId) || [],
+    itens: evento.itens?.map((i) => ({ id: i.id, texto: i.texto, concluido: i.concluido })) || [],
     status: evento.status,
   };
   desenhar();
 }
 
 function abrirFormulario() {
-  estado.editando = { responsaveis: estado.usuario?.colaboradorId ? [estado.usuario.colaboradorId] : [] };
+  estado.editando = {
+    responsaveis: estado.usuario?.colaboradorId ? [estado.usuario.colaboradorId] : [],
+    itens: [],
+  };
   desenhar();
 }
 
@@ -645,6 +678,51 @@ async function excluirEvento(id) {
   } catch (e) { alert(e.message); }
 }
 
+// A lista é editada em memória e salva junto do compromisso. Marcar um
+// item sem salvar seria perder a marcação ao fechar a folha.
+function adicionarItem() {
+  const campo = document.getElementById("f-novo-item");
+  const texto = campo.value.trim();
+  if (!texto) return;
+  estado.editando.itens = [...(estado.editando.itens || []), { texto, concluido: false }];
+  // Preserva o que já estava digitado nos outros campos antes de redesenhar.
+  guardarFormulario();
+  desenhar();
+  // Mantém o foco para digitar o próximo item em sequência.
+  document.getElementById("f-novo-item")?.focus();
+}
+
+function marcarItem(indice, concluido) {
+  estado.editando.itens[indice].concluido = concluido;
+  guardarFormulario();
+  desenhar();
+  document.getElementById("f-novo-item")?.focus();
+}
+
+function editarItem(indice, texto) {
+  estado.editando.itens[indice].texto = texto;
+}
+
+function removerItem(indice) {
+  estado.editando.itens = estado.editando.itens.filter((_, i) => i !== indice);
+  guardarFormulario();
+  desenhar();
+}
+
+// Copia o que está nos campos para o estado: redesenhar a folha recria os
+// campos, e sem isso o que foi digitado se perderia.
+function guardarFormulario() {
+  const pegar = (id) => document.getElementById(id);
+  const e = estado.editando;
+  if (!e) return;
+  if (pegar("f-titulo")) e.titulo = pegar("f-titulo").value;
+  if (pegar("f-data")) e.data = pegar("f-data").value;
+  if (pegar("f-diatodo")) e.diaTodo = pegar("f-diatodo").checked;
+  if (pegar("f-hora")) e.horaInicio = pegar("f-hora").value;
+  if (pegar("f-prioridade")) e.prioridade = pegar("f-prioridade").value;
+  if (pegar("f-descricao")) e.descricao = pegar("f-descricao").value;
+}
+
 async function salvarEvento() {
   const diaTodo = document.getElementById("f-diatodo").checked;
   const corpo = {
@@ -655,6 +733,7 @@ async function salvarEvento() {
     prioridade: document.getElementById("f-prioridade").value,
     descricao: document.getElementById("f-descricao").value.trim() || null,
     responsaveis: estado.editando.responsaveis || [],
+    itens: estado.editando.itens || [],
   };
 
   if (!corpo.titulo || !corpo.data) {

@@ -4916,7 +4916,9 @@ function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
     horaFim: evento?.horaFim || "",
     prioridade: evento?.prioridade || "normal",
     responsaveis: evento?.responsaveis?.map(r => r.colaboradorId) || [],
+    itens: evento?.itens?.map(i => ({ texto: i.texto, concluido: i.concluido })) || [],
   }));
+  const [novoItem, setNovoItem] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -5035,6 +5037,62 @@ function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
                 );
               })}
               {!colaboradores?.length && <p className="hint">Nenhum colaborador cadastrado ainda.</p>}
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">
+              Lista de verificação
+              {dados.itens.length > 0 && (
+                <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+                  {dados.itens.filter(i => i.concluido).length} de {dados.itens.length} concluídos
+                </span>
+              )}
+            </h4>
+
+            {dados.itens.map((item, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+                <input type="checkbox" style={{ width: "auto" }} checked={item.concluido}
+                  onChange={e => setDados(d => ({
+                    ...d,
+                    itens: d.itens.map((x, j) => (j === i ? { ...x, concluido: e.target.checked } : x)),
+                  }))} />
+                <input
+                  value={item.texto}
+                  style={{ flex: 1, textDecoration: item.concluido ? "line-through" : undefined }}
+                  onChange={e => setDados(d => ({
+                    ...d,
+                    itens: d.itens.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)),
+                  }))}
+                />
+                <button type="button" className="icon-btn icon-btn-danger" title="Remover item"
+                  onClick={() => setDados(d => ({ ...d, itens: d.itens.filter((_, j) => j !== i) }))}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+
+            {/* Enter adiciona e mantém o foco: lista se digita em sequência. */}
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <input
+                value={novoItem}
+                placeholder="Adicionar item…"
+                style={{ flex: 1 }}
+                onChange={e => setNovoItem(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key !== "Enter" || !novoItem.trim()) return;
+                  e.preventDefault();
+                  setDados(d => ({ ...d, itens: [...d.itens, { texto: novoItem.trim(), concluido: false }] }));
+                  setNovoItem("");
+                }}
+              />
+              <button type="button" className="btn" disabled={!novoItem.trim()}
+                onClick={() => {
+                  setDados(d => ({ ...d, itens: [...d.itens, { texto: novoItem.trim(), concluido: false }] }));
+                  setNovoItem("");
+                }}>
+                Adicionar
+              </button>
             </div>
           </section>
 
@@ -5223,6 +5281,9 @@ function AgendaView() {
                   {evento.responsaveis?.length
                     ? evento.responsaveis.map(r => r.colaborador.nome.split(" ")[0]).join(", ")
                     : "sem responsável"}
+                  {evento.itens?.length > 0 && (
+                    <> · {evento.itens.filter(i => i.concluido).length}/{evento.itens.length} itens</>
+                  )}
                 </div>
               </div>
               <div style={{ whiteSpace: "nowrap" }}>

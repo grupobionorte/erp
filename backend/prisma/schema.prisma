@@ -1006,6 +1006,7 @@ model Evento {
 
   @@index([empresaId, data])
   @@map("eventos")
+  itens EventoItem[]
 }
 
 // Um evento pode ter mais de um responsável — carregamento que envolve
@@ -1041,4 +1042,19 @@ model InscricaoPush {
 
   @@index([usuarioId])
   @@map("inscricoes_push")
+}
+
+// Item da lista de verificação de um compromisso. Cada um é marcado
+// separadamente — é o que diferencia de uma descrição com tópicos.
+model EventoItem {
+  id        Int     @id @default(autoincrement())
+  texto     String
+  concluido Boolean @default(false)
+  ordem     Int     @default(0)
+
+  eventoId Int    @map("evento_id")
+  evento   Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@index([eventoId, ordem])
+  @@map("evento_itens")
 }

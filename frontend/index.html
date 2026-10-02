@@ -872,7 +872,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.003";
+const VERSAO_SISTEMA = "1.004";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -9043,6 +9043,17 @@ function ErpBiomassa() {
     ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];
 
+  // Divisor existe para separar grupos; sem nada de um dos lados, ele vira
+  // um risco solto na tela. Então some: nada no começo, nada no fim, e
+  // nunca dois seguidos.
+  const menuLimpo = navItems.filter((item, i, lista) => {
+    if (!item.divider) return true;
+    const anterior = lista.slice(0, i).some(x => !x.divider);
+    const posterior = lista.slice(i + 1).some(x => !x.divider);
+    const divisorLogoAntes = lista[i - 1]?.divider;
+    return anterior && posterior && !divisorLogoAntes;
+  });
+
   const sair = () => {
     setToken(null);
     setUsuario(null);
@@ -9434,7 +9445,7 @@ function ErpBiomassa() {
             ? <div className="empresa-badge"><Building2 size={13} /> {usuario.empresa.razaoSocial}</div>
             : <div className="brand-sub" style={{ padding: "0 10px" }}>Conectado ao backend</div>}
         </div>
-        {navItems.map((item, i) => {
+        {menuLimpo.map((item, i) => {
           if (item.divider) return <div key={`div-${i}`} className="nav-divider" />;
           const Icon = item.icon;
           return (

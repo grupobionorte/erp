@@ -1221,6 +1221,10 @@ model Operacao {
   dataInicio DateTime? @map("data_inicio")
   dataFim    DateTime? @map("data_fim")
 
+  // Quanto custa a matéria-prima por unidade nesta operação. É o que
+  // transforma a quantidade descarregada em custo, viagem a viagem.
+  valorUnitarioMateriaPrima Float? @map("valor_unitario_materia_prima")
+
   ativo Boolean @default(true)
 
   empresaId Int?     @map("empresa_id")
@@ -1278,6 +1282,10 @@ model ViagemOperacao {
   ticket             String?
 
   // Resultado da viagem.
+  // Frete calculado sobre o que foi descarregado — o transporte que entra
+  // na conta do lucro. O valorTotalTransporte acima é sobre a quantidade da
+  // nota, que é o que o CT-e documenta.
+  custoTransporte    Float? @map("custo_transporte")
   valorTotalServico  Float? @map("valor_total_servico")
   custoMateriaPrima  Float? @map("custo_materia_prima")
   lucroBruto         Float? @map("lucro_bruto")

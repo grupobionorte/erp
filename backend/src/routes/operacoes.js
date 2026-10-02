@@ -21,7 +21,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -32,13 +32,15 @@ router.post("/", asyncHandler(async (req, res) => {
       descricao: String(descricao).trim(),
       dataInicio: dataDoDia(dataInicio) || undefined,
       dataFim: dataDoDia(dataFim) || undefined,
+      valorUnitarioMateriaPrima: valorUnitarioMateriaPrima !== undefined && valorUnitarioMateriaPrima !== ""
+        ? Number(valorUnitarioMateriaPrima) : undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
   }));
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -49,6 +51,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       dataInicio: dataInicio === "" || dataInicio === null ? null : (dataInicio ? dataDoDia(dataInicio) : undefined),
       dataFim: dataFim === "" || dataFim === null ? null : (dataFim ? dataDoDia(dataFim) : undefined),
       ativo: typeof ativo === "boolean" ? ativo : undefined,
+      valorUnitarioMateriaPrima: valorUnitarioMateriaPrima === "" || valorUnitarioMateriaPrima === null
+        ? null
+        : (valorUnitarioMateriaPrima !== undefined ? Number(valorUnitarioMateriaPrima) : undefined),
     },
   }));
 }));
@@ -71,65 +76,72 @@ router.delete("/:id", asyncHandler(async (req, res) => {
 const numero = (valor) =>
   valor === "" || valor === null || valor === undefined ? null : Number(valor);
 
-function calcularTotais(dados) {
+/**
+ * Todos os valores da viagem saem de quatro números digitados: as duas
+ * quantidades e os dois valores unitários, mais o preço da matéria-prima
+ * que vem da operação.
+ *
+ * O cálculo mora aqui, no servidor. A tela mostra os mesmos valores
+ * enquanto se digita, mas quem grava é este trecho — assim não existe a
+ * possibilidade de a tela e o banco discordarem.
+ */
+function calcularTotais(dados, valorUnitarioMateriaPrima) {
   const quantidadeNf = numero(dados.quantidadeNf);
   const unitarioNf = numero(dados.valorUnitarioNf);
   const quantidadeDescarga = numero(dados.quantidadeDescarga);
   const unitarioTransporte = numero(dados.valorUnitarioTransporte);
+  const unitarioMateriaPrima = numero(valorUnitarioMateriaPrima);
 
   const arredondar = (v) => (v == null ? null : Math.round(v * 100) / 100);
+  const multiplicar = (a, b) => (a != null && b != null ? arredondar(a * b) : null);
 
-  // Total informado vence o calculado: quem digitou sabe de alguma coisa
-  // que a conta não sabe.
-  const totalNf = dados.valorTotalNf !== undefined && dados.valorTotalNf !== ""
-    ? numero(dados.valorTotalNf)
-    : (quantidadeNf != null && unitarioNf != null ? arredondar(quantidadeNf * unitarioNf) : null);
+  // Nota fiscal: o que foi carregado.
+  const totalNf = multiplicar(quantidadeNf, unitarioNf);
 
-  // O frete costuma ser pago pelo que chegou, não pelo que saiu.
-  const baseTransporte = quantidadeDescarga ?? quantidadeNf;
-  const totalTransporte = dados.valorTotalTransporte !== undefined && dados.valorTotalTransporte !== ""
-    ? numero(dados.valorTotalTransporte)
-    : (baseTransporte != null && unitarioTransporte != null
-        ? arredondar(baseTransporte * unitarioTransporte)
-        : null);
+  // CT-e: documenta o que saiu, então usa a quantidade da nota.
+  const totalTransporte = multiplicar(quantidadeNf, unitarioTransporte);
 
-  const totalServico = numero(dados.valorTotalServico);
-  const custo = numero(dados.custoMateriaPrima);
+  // Custo real do frete: sobre o que efetivamente chegou.
+  const custoTransporte = multiplicar(quantidadeDescarga, unitarioTransporte);
 
-  // Lucro bruto: o que o serviço rendeu menos a matéria-prima e o frete.
-  const lucro = dados.lucroBruto !== undefined && dados.lucroBruto !== ""
-    ? numero(dados.lucroBruto)
-    : (totalServico != null
-        ? arredondar(totalServico - (custo || 0) - (totalTransporte || 0))
-        : null);
+  // Receita: o que foi aceito na balança do destino.
+  const totalServico = multiplicar(quantidadeDescarga, unitarioNf);
 
-  return { totalNf, totalTransporte, lucro };
+  // Matéria-prima: o preço da operação aplicado ao que chegou.
+  const custoMateriaPrima = multiplicar(quantidadeDescarga, unitarioMateriaPrima);
+
+  const lucro = totalServico != null
+    ? arredondar(totalServico - (custoMateriaPrima || 0) - (custoTransporte || 0))
+    : null;
+
+  return { totalNf, totalTransporte, custoTransporte, totalServico, custoMateriaPrima, lucro };
 }
 
-function montarViagem(dados) {
-  const { totalNf, totalTransporte, lucro } = calcularTotais(dados);
+function montarViagem(dados, valorUnitarioMateriaPrima) {
+  const calculado = calcularTotais(dados, valorUnitarioMateriaPrima);
 
   return {
     dataLancamento: dataDoDia(dados.dataLancamento) || new Date(),
     numeroNf: dados.numeroNf || null,
     quantidadeNf: numero(dados.quantidadeNf),
     valorUnitarioNf: numero(dados.valorUnitarioNf),
-    valorTotalNf: totalNf,
+    valorTotalNf: calculado.totalNf,
 
     dataCte: dataDoDia(dados.dataCte),
     numeroCte: dados.numeroCte || null,
     tomador: dados.tomador || null,
     placa: dados.placa ? String(dados.placa).toUpperCase() : null,
     valorUnitarioTransporte: numero(dados.valorUnitarioTransporte),
-    valorTotalTransporte: totalTransporte,
+    valorTotalTransporte: calculado.totalTransporte,
 
     dataDescarga: dataDoDia(dados.dataDescarga),
     quantidadeDescarga: numero(dados.quantidadeDescarga),
     ticket: dados.ticket || null,
 
-    valorTotalServico: numero(dados.valorTotalServico),
-    custoMateriaPrima: numero(dados.custoMateriaPrima),
-    lucroBruto: lucro,
+    custoTransporte: calculado.custoTransporte,
+    valorTotalServico: calculado.totalServico,
+    custoMateriaPrima: calculado.custoMateriaPrima,
+    lucroBruto: calculado.lucro,
 
     observacao: dados.observacao || null,
   };
@@ -151,6 +163,7 @@ router.get("/:id/viagens", asyncHandler(async (req, res) => {
       quantidadeDescarga: somar("quantidadeDescarga"),
       valorNf: somar("valorTotalNf"),
       transporte: somar("valorTotalTransporte"),
+      custoTransporte: somar("custoTransporte"),
       servico: somar("valorTotalServico"),
       materiaPrima: somar("custoMateriaPrima"),
       lucro: somar("lucroBruto"),
@@ -158,16 +171,28 @@ router.get("/:id/viagens", asyncHandler(async (req, res) => {
   });
 }));
 
+// O preço da matéria-prima é da operação, não da viagem: mudou o preço,
+// mudam os lançamentos novos — os antigos guardam o custo da época.
+async function precoMateriaPrima(operacaoId) {
+  const operacao = await prisma.operacao.findUnique({
+    where: { id: Number(operacaoId) },
+    select: { valorUnitarioMateriaPrima: true },
+  });
+  return operacao?.valorUnitarioMateriaPrima ?? null;
+}
+
 router.post("/:id/viagens", asyncHandler(async (req, res) => {
+  const preco = await precoMateriaPrima(req.params.id);
   res.status(201).json(await prisma.viagemOperacao.create({
-    data: { ...montarViagem(req.body), operacaoId: Number(req.params.id) },
+    data: { ...montarViagem(req.body, preco), operacaoId: Number(req.params.id) },
   }));
 }));
 
 router.put("/:id/viagens/:viagemId", asyncHandler(async (req, res) => {
+  const preco = await precoMateriaPrima(req.params.id);
   res.json(await prisma.viagemOperacao.update({
     where: { id: Number(req.params.viagemId) },
-    data: montarViagem(req.body),
+    data: montarViagem(req.body, preco),
   }));
 }));
 

@@ -599,6 +599,9 @@ const MODULES = {
       { key: "descricao", label: "Descrição", type: "text", required: true },
       { key: "dataInicio", label: "Data de início", type: "date" },
       { key: "dataFim", label: "Data de término", type: "date" },
+      // Base do custo de cada viagem: multiplicado pela quantidade
+      // descarregada.
+      { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda" },
     ],
     columns: ["codigo", "descricao", "periodo"],
     toApi: (data) => ({
@@ -606,6 +609,7 @@ const MODULES = {
       descricao: data.descricao,
       dataInicio: data.dataInicio || null,
       dataFim: data.dataFim || null,
+      valorUnitarioMateriaPrima: data.valorUnitarioMateriaPrima === "" ? null : data.valorUnitarioMateriaPrima,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -613,6 +617,7 @@ const MODULES = {
       descricao: r.descricao,
       dataInicio: r.dataInicio ? String(r.dataInicio).slice(0, 10) : "",
       dataFim: r.dataFim ? String(r.dataFim).slice(0, 10) : "",
+      valorUnitarioMateriaPrima: r.valorUnitarioMateriaPrima ?? "",
       // Coluna só de leitura, para a listagem mostrar o período numa linha.
       periodo: [
         r.dataInicio ? new Date(r.dataInicio).toLocaleDateString("pt-BR") : "—",
@@ -874,7 +879,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.015";
+const VERSAO_SISTEMA = "1.018";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2292,7 +2297,7 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
 
 // Lançamento de uma viagem. Os totais aparecem calculados enquanto se
 // digita, e podem ser sobrescritos quando a conta não fecha com a realidade.
-function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
+function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }) {
   // Tomador e placa saem dos cadastros, mas continuam gravados como texto:
   // a viagem é um registro histórico, e deve continuar legível mesmo que o
   // cliente ou o veículo sejam alterados depois.
@@ -2328,20 +2333,23 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
   const n = (v) => (v === "" || v == null ? null : Number(v));
 
-  // Prévia dos totais, com a mesma conta do servidor.
-  const totalNf = dados.valorTotalNf !== "" ? n(dados.valorTotalNf)
-    : (n(dados.quantidadeNf) != null && n(dados.valorUnitarioNf) != null
-        ? n(dados.quantidadeNf) * n(dados.valorUnitarioNf) : null);
+  // Prévia dos valores, com as mesmas regras do servidor — ele é quem
+  // grava, aqui é só para ver o resultado enquanto se digita.
+  const mult = (a, b) => (a != null && b != null ? Math.round(a * b * 100) / 100 : null);
 
-  const baseTransporte = n(dados.quantidadeDescarga) ?? n(dados.quantidadeNf);
-  const totalTransporte = dados.valorTotalTransporte !== "" ? n(dados.valorTotalTransporte)
-    : (baseTransporte != null && n(dados.valorUnitarioTransporte) != null
-        ? baseTransporte * n(dados.valorUnitarioTransporte) : null);
+  const qtdeNf = n(dados.quantidadeNf);
+  const qtdeDescarga = n(dados.quantidadeDescarga);
+  const unitNf = n(dados.valorUnitarioNf);
+  const unitTransporte = n(dados.valorUnitarioTransporte);
 
-  const lucro = dados.lucroBruto !== "" ? n(dados.lucroBruto)
-    : (n(dados.valorTotalServico) != null
-        ? n(dados.valorTotalServico) - (n(dados.custoMateriaPrima) || 0) - (totalTransporte || 0)
-        : null);
+  const totalNf = mult(qtdeNf, unitNf);
+  const totalTransporte = mult(qtdeNf, unitTransporte);
+  const custoTransporte = mult(qtdeDescarga, unitTransporte);
+  const totalServico = mult(qtdeDescarga, unitNf);
+  const custoMateriaPrima = mult(qtdeDescarga, precoMateriaPrima);
+  const lucro = totalServico != null
+    ? Math.round((totalServico - (custoMateriaPrima || 0) - (custoTransporte || 0)) * 100) / 100
+    : null;
 
   // Quebra de carga: a diferença entre o que saiu e o que chegou é a
   // primeira coisa que se confere num lançamento de viagem.
@@ -2365,10 +2373,20 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
     } finally { setSalvando(false); }
   };
 
-  const Calculado = ({ valor }) => (
-    <p className="hint" style={{ marginTop: 3 }}>
-      {valor != null ? `Calculado: R$ ${formatarMoeda(valor)}` : "Preencha quantidade e valor unitário"}
-    </p>
+  // Campo calculado: mostra o valor sem deixar editar, com a fórmula
+  // embaixo. Deixar editável permitiria um número que não corresponde à
+  // conta, e aí ninguém saberia qual dos dois está certo.
+  const ValorCalculado = ({ valor, nota, destaque }) => (
+    <>
+      <input
+        disabled
+        value={valor != null ? `R$ ${formatarMoeda(valor)}` : ""}
+        style={destaque
+          ? { fontWeight: 600, color: valor != null && valor < 0 ? "#c62828" : "#00732F" }
+          : undefined}
+      />
+      <p className="hint">{nota}</p>
+    </>
   );
 
   return (
@@ -2405,8 +2423,7 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                 </div>
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Valor total da NF</label>
-                  <InputMoeda value={dados.valorTotalNf} onChange={v => set("valorTotalNf", v)} />
-                  <Calculado valor={totalNf} />
+                  <ValorCalculado valor={totalNf} nota="quantidade × valor unitário" />
                 </div>
               </div>
             </section>
@@ -2426,8 +2443,11 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                   <label className="field-label">Tomador</label>
                   <input list="viagem-tomadores" value={dados.tomador}
                     onChange={e => set("tomador", e.target.value)} />
+                  {/* Nome e documento juntos, como nas listas de cliente dos
+                      documentos fiscais: razão social parecida entre filiais
+                      só se distingue pelo CNPJ. */}
                   <datalist id="viagem-tomadores">
-                    {(clientes || []).map(c => <option key={c.id} value={c.nome} />)}
+                    {(clientes || []).map(c => <option key={c.id} value={rotuloPessoa(c)} />)}
                   </datalist>
                 </div>
                 <div className="field-group">
@@ -2446,8 +2466,7 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                 </div>
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Valor total do transporte</label>
-                  <InputMoeda value={dados.valorTotalTransporte} onChange={v => set("valorTotalTransporte", v)} />
-                  <Calculado valor={totalTransporte} />
+                  <ValorCalculado valor={totalTransporte} nota="unitário × quantidade da NF (é o do CT-e)" />
                 </div>
               </div>
             </section>
@@ -2489,25 +2508,24 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Valor total do serviço</label>
-                <InputMoeda value={dados.valorTotalServico} onChange={v => set("valorTotalServico", v)} />
+                <ValorCalculado valor={totalServico} nota="unitário da NF × quantidade descarregada" />
               </div>
               <div className="field-group">
                 <label className="field-label">Custo da matéria-prima</label>
-                <InputMoeda value={dados.custoMateriaPrima} onChange={v => set("custoMateriaPrima", v)} />
+                <ValorCalculado
+                  valor={custoMateriaPrima}
+                  nota={precoMateriaPrima != null
+                    ? `R$ ${formatarMoeda(precoMateriaPrima)} × quantidade descarregada`
+                    : "informe o valor unitário na aba Dados da operação"}
+                />
               </div>
               <div className="field-group">
                 <label className="field-label">Transporte</label>
-                <input disabled value={totalTransporte != null ? formatarMoeda(totalTransporte) : ""} />
-                <p className="hint">Vem do bloco 2.</p>
+                <ValorCalculado valor={custoTransporte} nota="unitário × quantidade descarregada" />
               </div>
               <div className="field-group">
                 <label className="field-label">Lucro bruto</label>
-                <InputMoeda value={dados.lucroBruto} onChange={v => set("lucroBruto", v)} />
-                <p className="hint" style={{ color: lucro != null && lucro < 0 ? "#c62828" : undefined }}>
-                  {lucro != null
-                    ? `Calculado: R$ ${formatarMoeda(lucro)}`
-                    : "Informe o valor do serviço"}
-                </p>
+                <ValorCalculado valor={lucro} nota="serviço − matéria-prima − transporte" destaque />
               </div>
             </div>
           </section>
@@ -2527,7 +2545,7 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
 
 // Viagens de uma operação: a planilha que a operação já mantém, só que
 // dentro do sistema, com os totais calculados e somados.
-function ViagensAba({ operacaoId }) {
+function ViagensAba({ operacaoId, precoMateriaPrima }) {
   const [dados, setDados] = useState(null);
   const [editando, setEditando] = useState(null);
   const [erro, setErro] = useState("");
@@ -2562,6 +2580,12 @@ function ViagensAba({ operacaoId }) {
 
   return (
     <div style={{ padding: "0 22px 18px" }}>
+      {!precoMateriaPrima && (
+        <p className="hint" style={{ color: "#b57a12" }}>
+          Sem o valor unitário da matéria-prima na aba Dados, o custo e o lucro das viagens ficam em branco.
+        </p>
+      )}
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <div className="subtle" style={{ fontSize: 13 }}>
           {T.viagens} viagem{T.viagens !== 1 ? "ns" : ""} ·
@@ -2608,6 +2632,7 @@ function ViagensAba({ operacaoId }) {
               <th>Descarga</th>
               <th style={{ textAlign: "right" }}>Qtde desc.</th>
               <th>Ticket</th>
+              <th style={{ textAlign: "right" }}>Transporte real</th>
               <th style={{ textAlign: "right" }}>Serviço</th>
               <th style={{ textAlign: "right" }}>Matéria-prima</th>
               <th style={{ textAlign: "right" }}>Lucro</th>
@@ -2630,6 +2655,7 @@ function ViagensAba({ operacaoId }) {
                 <td>{dataBr(v.dataDescarga)}</td>
                 <td style={{ textAlign: "right" }}>{v.quantidadeDescarga != null ? formatarQuantidade(v.quantidadeDescarga) : "—"}</td>
                 <td>{v.ticket || "—"}</td>
+                <td style={{ textAlign: "right" }}>{money(v.custoTransporte)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalServico)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.custoMateriaPrima)}</td>
                 <td style={{ textAlign: "right", color: (v.lucroBruto || 0) < 0 ? "#c62828" : undefined }}>
@@ -2641,7 +2667,7 @@ function ViagensAba({ operacaoId }) {
                 </td>
               </tr>
             ))}
-            {!dados.viagens.length && <tr><td colSpan={17}>Nenhuma viagem lançada ainda.</td></tr>}
+            {!dados.viagens.length && <tr><td colSpan={18}>Nenhuma viagem lançada ainda.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -2649,6 +2675,7 @@ function ViagensAba({ operacaoId }) {
       {editando && (
         <ViagemForm
           operacaoId={operacaoId}
+          precoMateriaPrima={precoMateriaPrima}
           viagem={editando.id ? editando : null}
           onFechar={() => setEditando(null)}
           onSalvo={() => { setEditando(null); carregar(); }}
@@ -2753,7 +2780,12 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
         <div className="modal-body">
           {temJornada && aba === "jornada" && <JornadaAba colaboradorId={record?.id} />}
-          {temViagens && aba === "viagens" && <ViagensAba operacaoId={record?.id} />}
+          {temViagens && aba === "viagens" && (
+            <ViagensAba
+              operacaoId={record?.id}
+              precoMateriaPrima={data.valorUnitarioMateriaPrima === "" ? null : Number(data.valorUnitarioMateriaPrima)}
+            />
+          )}
 
           {temAbaFiscal && aba === "fiscal" && (
             <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} />
@@ -9662,9 +9694,15 @@ function ErpBiomassa() {
         /* Telas de cadastro usam todas a mesma largura, a do CT-e: trocar
            de cadastro não muda o tamanho da janela na tela. */
         .modal-cadastro { width: 940px; max-width: 96vw; }
-        /* Planilha: usa a tela quase inteira, em largura e em altura. */
-        .modal-planilha { width: 98vw; max-width: 98vw; max-height: 94vh; }
-        .modal-planilha > .modal-body { height: 80vh; flex: 0 0 80vh; }
+        /* Planilha: usa a tela quase inteira, em largura e em altura.
+           A altura do corpo não é fixa: ele ocupa o que sobra depois do
+           cabeçalho e do rodapé. Com altura fixa, em tela baixa a soma
+           passava do limite e o rodapé — com os botões — ficava de fora. */
+        .modal-planilha { width: 98vw; max-width: 98vw; height: 94vh; max-height: 94vh; }
+        .modal-planilha > .modal-body {
+          height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        }
+        .modal-planilha > .modal-footer { flex: 0 0 auto; }
 
         /* Os três momentos da viagem lado a lado; em tela estreita, um
            embaixo do outro. */

@@ -158,6 +158,7 @@ router.post("/renovar", autenticar, asyncHandler(async (req, res) => {
     usuario: {
       id: usuario.id, nome: usuario.nome, email: usuario.email,
       papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null,
+      permissoes: menusDoUsuario(usuario, req.usuario.empresaId),
     },
   });
 }));
@@ -200,7 +201,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   if (totalEmpresas === 0) {
     return res.json({
       token: gerarToken(usuario, null, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: menusDoUsuario(usuario, null) },
       empresa: null,
     });
   }
@@ -220,7 +221,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     const unica = empresasPermitidas[0];
     return res.json({
       token: gerarToken(usuario, unica.id, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: menusDoUsuario(usuario, unica.id) },
       empresa: unica,
     });
   }
@@ -238,7 +239,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   res.json({
     token: gerarToken(usuario, empresaEscolhida.id, origem),
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: menusDoUsuario(usuario, empresaEscolhida.id) },
     empresa: empresaEscolhida,
   });
 }));

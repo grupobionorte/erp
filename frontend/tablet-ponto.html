@@ -470,7 +470,23 @@ async function chamarApi(caminho, opcoes = {}) {
     },
   });
   const texto = await resposta.text();
-  const dados = texto ? JSON.parse(texto) : {};
+
+  // Resposta que não é JSON significa que a chamada não chegou à API: URL
+  // errada na configuração, servidor fora do ar, ou um proxy no caminho.
+  // Sem este tratamento o erro aparecia como "Unexpected token", que não
+  // diz nada a quem está com o tablet na mão.
+  let dados = {};
+  try {
+    dados = texto ? JSON.parse(texto) : {};
+  } catch {
+    const inicio = texto.trim().slice(0, 60);
+    throw new Error(
+      resposta.status === 404
+        ? `Endereço da API não encontrado (${estado.cfg.api}${caminho}). Confira o endereço na configuração.`
+        : `O servidor respondeu algo que não é JSON (${resposta.status}): ${inicio}`
+    );
+  }
+
   if (!resposta.ok) throw new Error(dados.erro || `Erro ${resposta.status}`);
   return dados;
 }

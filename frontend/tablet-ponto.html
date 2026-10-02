@@ -111,6 +111,12 @@
   .lista-colab { border: 1px solid #E5E3DA; border-radius: 10px; margin-top: 10px; background: #fff; }
   .linha-colab { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 13px; border-bottom: 1px solid #F0EFE9; font-size: 14px; }
   .linha-colab:last-child { border-bottom: none; }
+  /* Cabeçalho de empresa, quando o tablet atende mais de uma. */
+  .titulo-empresa {
+    padding: 9px 13px 5px; font-size: 12px; font-weight: 700; letter-spacing: .4px;
+    text-transform: uppercase; color: #6B6B68; background: #FAF9F5;
+    border-bottom: 1px solid #F0EFE9;
+  }
   .tag { font-size: 11.5px; padding: 2px 9px; border-radius: 20px; background: #EAF3DE; color: var(--verde-escuro); }
   .tag.sem { background: #F2F1EC; color: #8A887F; }
   .oculto { display: none !important; }
@@ -1386,17 +1392,43 @@ $("btnEntrarCadastro").addEventListener("click", async () => {
 });
 
 function desenharListaCadastro() {
-  $("selColaborador").innerHTML = estado.colaboradores
-    .map(c => `<option value="${c.id}">${c.nome}</option>`).join("");
-  $("listaColaboradores").innerHTML = estado.colaboradores.map(c => {
+  // Com mais de uma empresa no mesmo tablet, o nome sozinho não basta: dois
+  // colaboradores homônimos em empresas diferentes seriam indistinguíveis
+  // na hora de cadastrar o rosto.
+  const varias = new Set(estado.colaboradores.map(c => c.empresa || "")).size > 1;
+  const comEmpresa = (c) => (varias && c.empresa ? `${c.nome} — ${c.empresa}` : c.nome);
+
+  // Agrupa por empresa, mantendo a ordem que veio do servidor.
+  const grupos = [];
+  for (const c of estado.colaboradores) {
+    const chave = c.empresa || "Sem empresa";
+    const grupo = grupos.find(g => g.empresa === chave);
+    if (grupo) grupo.pessoas.push(c);
+    else grupos.push({ empresa: chave, pessoas: [c] });
+  }
+
+  $("selColaborador").innerHTML = varias
+    ? grupos.map(g => `
+        <optgroup label="${g.empresa}">
+          ${g.pessoas.map(c => `<option value="${c.id}">${c.nome}</option>`).join("")}
+        </optgroup>`).join("")
+    : estado.colaboradores.map(c => `<option value="${c.id}">${c.nome}</option>`).join("");
+
+  const linha = (c) => {
     const v = c.vetorFacial;
     const perfis = Array.isArray(v) && v.length ? (Array.isArray(v[0]) ? v.length : 1) : 0;
     return `
-    <div class="linha-colab">
-      <span>${c.nome}</span>
-      <span class="tag ${perfis ? "" : "sem"}">${perfis ? `${perfis} perfil(is) de rosto` : "sem rosto"}</span>
-    </div>`;
-  }).join("");
+      <div class="linha-colab">
+        <span>${c.nome}</span>
+        <span class="tag ${perfis ? "" : "sem"}">${perfis ? `${perfis} perfil(is) de rosto` : "sem rosto"}</span>
+      </div>`;
+  };
+
+  $("listaColaboradores").innerHTML = varias
+    ? grupos.map(g => `
+        <div class="titulo-empresa">${g.empresa}</div>
+        ${g.pessoas.map(linha).join("")}`).join("")
+    : estado.colaboradores.map(linha).join("");
 }
 
 // Um retrato só não representa a pessoa: luz, ângulo e distância mudam o

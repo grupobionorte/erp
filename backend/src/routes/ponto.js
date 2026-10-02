@@ -17,7 +17,10 @@ async function repDoToken(req, res) {
     res.status(401).json({ erro: "Tablet sem credencial (cabeçalho x-rep-token)" });
     return null;
   }
-  const rep = await prisma.rep.findUnique({ where: { token } });
+  const rep = await prisma.rep.findUnique({
+    where: { token },
+    include: { empresasAtendidas: { select: { id: true } } },
+  });
   if (!rep) {
     res.status(401).json({ erro: "Credencial de tablet inválida" });
     return null;
@@ -55,13 +58,24 @@ routerTablet.get("/carga", asyncHandler(async (req, res) => {
   const rep = await repDoToken(req, res);
   if (!rep) return;
 
+  // Empresas atendidas por este tablet: a lista explícita, ou a empresa
+  // principal, ou todas quando nenhuma das duas estiver configurada.
+  const empresasDoRep = rep.empresasAtendidas?.length
+    ? rep.empresasAtendidas.map((e) => e.id)
+    : (rep.empresaId ? [rep.empresaId] : null);
+
   const colaboradores = await prisma.colaborador.findMany({
-    where: { ativo: true, empresaId: rep.empresaId ?? undefined },
+    where: {
+      ativo: true,
+      ...(empresasDoRep ? { empresaId: { in: empresasDoRep } } : {}),
+    },
     select: {
       id: true, nome: true, cpf: true, cargo: true, setor: true, pinPontoHash: true,
+      empresaId: true,
+      empresa: { select: { id: true, nomeFantasia: true, razaoSocial: true } },
       biometriaFacial: { select: { vetor: true, versaoModelo: true } },
     },
-    orderBy: { nome: "asc" },
+    orderBy: [{ empresaId: "asc" }, { nome: "asc" }],
   });
 
   res.json({
@@ -73,6 +87,10 @@ routerTablet.get("/carga", asyncHandler(async (req, res) => {
       cpf: c.cpf,
       cargo: c.cargo,
       setor: c.setor,
+      // A empresa acompanha cada pessoa: é o que permite ao tablet mostrar
+      // de quem é o colaborador na hora do cadastro facial.
+      empresaId: c.empresaId,
+      empresa: c.empresa?.nomeFantasia || c.empresa?.razaoSocial || null,
       temPin: Boolean(c.pinPontoHash),
       pinHash: c.pinPontoHash,           // conferido no próprio tablet quando offline
       vetorFacial: c.biometriaFacial?.vetor || null,
@@ -516,6 +534,7 @@ router.get("/reps", asyncHandler(async (req, res) => {
     select: {
       id: true, identificador: true, descricao: true, localizacao: true,
       ultimoNsr: true, ativo: true, criadoEm: true,
+      empresasAtendidas: { select: { id: true, razaoSocial: true, nomeFantasia: true } },
       _count: { select: { marcacoes: true } },
     },
   });
@@ -548,15 +567,23 @@ router.get("/colaboradores", asyncHandler(async (req, res) => {
 
 // Ativar ou desativar um tablet (o aparelho sumiu, foi para manutenção...).
 router.put("/reps/:id", asyncHandler(async (req, res) => {
-  const { ativo, descricao, localizacao } = req.body;
+  const { ativo, descricao, localizacao, empresasAtendidas } = req.body;
+
   const rep = await prisma.rep.update({
     where: { id: Number(req.params.id) },
     data: {
       ativo: typeof ativo === "boolean" ? ativo : undefined,
       descricao: descricao ?? undefined,
       localizacao: localizacao ?? undefined,
+      // Lista vazia significa "todas": o tablet do pátio costuma atender o
+      // grupo inteiro, e obrigar a marcar uma a uma seria trabalho à toa.
+      empresasAtendidas: Array.isArray(empresasAtendidas)
+        ? { set: empresasAtendidas.map((id) => ({ id: Number(id) })) }
+        : undefined,
     },
+    include: { empresasAtendidas: { select: { id: true, razaoSocial: true, nomeFantasia: true } } },
   });
+
   res.json({ ...rep, token: undefined });
 }));
 
@@ -572,7 +599,7 @@ router.post("/reps/:id/novo-token", asyncHandler(async (req, res) => {
 }));
 
 router.post("/reps", asyncHandler(async (req, res) => {
-  const { identificador, descricao, localizacao } = req.body;
+  const { identificador, descricao, localizacao, empresasAtendidas } = req.body;
   if (!identificador) return res.status(400).json({ erro: "identificador é obrigatório" });
 
   const rep = await prisma.rep.create({
@@ -583,7 +610,11 @@ router.post("/reps", asyncHandler(async (req, res) => {
       descricao: descricao || undefined,
       localizacao: localizacao || undefined,
       empresaId: req.usuario.empresaId || undefined,
+      empresasAtendidas: empresasAtendidas?.length
+        ? { connect: empresasAtendidas.map((id) => ({ id: Number(id) })) }
+        : undefined,
     },
+    include: { empresasAtendidas: { select: { id: true, razaoSocial: true, nomeFantasia: true } } },
   });
   res.status(201).json(rep);
 }));

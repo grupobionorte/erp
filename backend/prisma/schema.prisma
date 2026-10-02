@@ -182,6 +182,7 @@ model Empresa {
   bancoAgencia   String? @map("banco_agencia")
 
   reps Rep[]
+  repsAtendendo Rep[] @relation("RepEmpresas")
 
   @@map("empresas")
   motoristas Motorista[]
@@ -706,6 +707,11 @@ model Rep {
 
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  // Um tablet no pátio costuma atender mais de uma empresa do grupo. Esta
+  // lista diz quais; vazia, vale a empresa principal acima, e sem nenhuma
+  // das duas o tablet atende todas.
+  empresasAtendidas Empresa[] @relation("RepEmpresas")
 
   marcacoes MarcacaoPonto[]
 

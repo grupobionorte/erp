@@ -2589,10 +2589,75 @@ function PontoEmail() {
   );
 }
 
+// Quais empresas o tablet atende. Nenhuma marcada significa todas — a
+// configuração mais comum num grupo que usa um aparelho só no pátio.
+function EmpresasDoTabletModal({ rep, onFechar, onSalvo }) {
+  const { items: empresas } = useApiCollection("empresas");
+  const [escolhidas, setEscolhidas] = useState(rep.empresasAtendidas?.map(e => e.id) || []);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const alternar = (id) => setEscolhidas(a => (a.includes(id) ? a.filter(x => x !== id) : [...a, id]));
+
+  const salvar = async () => {
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/ponto/reps/${rep.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ empresasAtendidas: escolhidas }),
+      });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3>Empresas do {rep.identificador}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginTop: 0 }}>
+            Os colaboradores dessas empresas aparecem no tablet para bater ponto e cadastrar o rosto.
+            Sem nenhuma marcada, o tablet atende todas.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {(empresas || []).map(e => {
+              const ativo = escolhidas.includes(e.id);
+              return (
+                <button key={e.id} className="btn"
+                  style={{
+                    padding: "6px 12px", fontSize: 13,
+                    background: ativo ? "#1F3B57" : undefined,
+                    color: ativo ? "#fff" : undefined,
+                  }}
+                  onClick={() => alternar(e.id)}>
+                  {e.fantasia || e.nome}
+                </button>
+              );
+            })}
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PontoTablets() {
   const [reps, setReps] = useState(null);
   const [erro, setErro] = useState("");
   const [novo, setNovo] = useState({ identificador: "", descricao: "", localizacao: "" });
+  const [empresasDe, setEmpresasDe] = useState(null);
   const [tokenNovo, setTokenNovo] = useState(null);
   const [integridade, setIntegridade] = useState(null);
 
@@ -2674,13 +2739,24 @@ function PontoTablets() {
       ) : (
         <table className="data-table">
           <thead>
-            <tr><th>Identificação</th><th>Local</th><th>Batidas</th><th>Último NSR</th><th>Situação</th><th></th></tr>
+            <tr><th>Identificação</th><th>Local</th><th>Empresas atendidas</th><th>Batidas</th><th>Último NSR</th><th>Situação</th><th></th></tr>
           </thead>
           <tbody>
             {reps.map(rep => (
               <tr key={rep.id} style={rep.ativo ? undefined : { opacity: 0.55 }}>
                 <td><strong>{rep.identificador}</strong>{rep.descricao && <span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{rep.descricao}</span>}</td>
                 <td>{rep.localizacao || "—"}</td>
+                <td>
+                  {/* Sem nenhuma marcada, o tablet atende todas — é o caso
+                      do aparelho do pátio num grupo de empresas. */}
+                  {rep.empresasAtendidas?.length
+                    ? rep.empresasAtendidas.map(e => e.nomeFantasia || e.razaoSocial).join(", ")
+                    : <span className="subtle">todas</span>}
+                  <button className="link-btn" style={{ display: "block", fontSize: 12 }}
+                    onClick={() => setEmpresasDe(rep)}>
+                    alterar
+                  </button>
+                </td>
                 <td>{rep._count?.marcacoes ?? 0}</td>
                 <td>{rep.ultimoNsr}</td>
                 <td>{rep.ativo ? "Ativo" : "Desativado"}</td>
@@ -2723,6 +2799,14 @@ function PontoTablets() {
           )}
         </div>
       )}
+      {empresasDe && (
+        <EmpresasDoTabletModal
+          rep={empresasDe}
+          onFechar={() => setEmpresasDe(null)}
+          onSalvo={() => { setEmpresasDe(null); carregar(); }}
+        />
+      )}
+
     </div>
   );
 }

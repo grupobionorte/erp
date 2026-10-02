@@ -874,7 +874,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.010";
+const VERSAO_SISTEMA = "1.013";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2293,6 +2293,12 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
 // Lançamento de uma viagem. Os totais aparecem calculados enquanto se
 // digita, e podem ser sobrescritos quando a conta não fecha com a realidade.
 function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
+  // Tomador e placa saem dos cadastros, mas continuam gravados como texto:
+  // a viagem é um registro histórico, e deve continuar legível mesmo que o
+  // cliente ou o veículo sejam alterados depois.
+  const { items: clientes } = useApiCollection("clientes");
+  const { items: veiculos } = useApiCollection("veiculos");
+
   const hoje = new Date().toISOString().slice(0, 10);
   const dia = (v) => (v ? String(v).slice(0, 10) : "");
 
@@ -2361,7 +2367,7 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro">
+      <div className="modal modal-cadastro form-compacto">
         <div className="modal-header">
           <h3>{viagem?.id ? "Editar viagem" : "Nova viagem"}</h3>
           <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
@@ -2394,6 +2400,10 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                 <InputMoeda value={dados.valorTotalNf} onChange={v => set("valorTotalNf", v)} />
                 <Calculado valor={totalNf} />
               </div>
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
+                <label className="field-label">Observação</label>
+                <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+              </div>
             </div>
           </section>
 
@@ -2410,11 +2420,23 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
               </div>
               <div className="field-group">
                 <label className="field-label">Tomador</label>
-                <input value={dados.tomador} onChange={e => set("tomador", e.target.value)} />
+                {/* Lista com busca: o navegador filtra enquanto se digita, e
+                    um tomador fora do cadastro ainda pode ser digitado. */}
+                <input list="viagem-tomadores" value={dados.tomador}
+                  onChange={e => set("tomador", e.target.value)} />
+                <datalist id="viagem-tomadores">
+                  {(clientes || []).map(c => <option key={c.id} value={c.nome} />)}
+                </datalist>
               </div>
               <div className="field-group">
                 <label className="field-label">Placa</label>
-                <input value={dados.placa} onChange={e => set("placa", e.target.value.toUpperCase())} />
+                <input list="viagem-placas" value={dados.placa}
+                  onChange={e => set("placa", e.target.value.toUpperCase())} />
+                <datalist id="viagem-placas">
+                  {(veiculos || []).map(v => (
+                    <option key={v.id} value={v.placa}>{v.descricao || v.modelo || ""}</option>
+                  ))}
+                </datalist>
               </div>
             </div>
             <div className="nf-grid-4">
@@ -2469,10 +2491,6 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                     ? `Calculado: R$ ${formatarMoeda(lucro)} (serviço − matéria-prima − transporte)`
                     : "Informe o valor do serviço"}
                 </p>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Observação</label>
-                <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
               </div>
             </div>
           </section>
@@ -2686,7 +2704,10 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro">
+      {/* Na aba de viagens a janela ocupa quase a tela toda: é uma planilha
+          com dezessete colunas, e espremê-la em 940px obrigaria a rolar de
+          lado o tempo inteiro. */}
+      <div className={`modal modal-cadastro${temViagens && aba === "viagens" ? " modal-planilha" : ""}`}>
         <div className="modal-header">
           <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -9624,6 +9645,9 @@ function ErpBiomassa() {
         /* Telas de cadastro usam todas a mesma largura, a do CT-e: trocar
            de cadastro não muda o tamanho da janela na tela. */
         .modal-cadastro { width: 940px; max-width: 96vw; }
+        /* Planilha: usa a tela quase inteira, em largura e em altura. */
+        .modal-planilha { width: 98vw; max-width: 98vw; max-height: 94vh; }
+        .modal-planilha > .modal-body { height: 80vh; flex: 0 0 80vh; }
         .pessoa-modal { width: 940px; max-width: 96vw; }
         .pessoa-modal .modal-header h3 { margin: 0; }
         .pessoa-modal .modal-header .subtle { margin-top: 3px; }
@@ -9679,6 +9703,20 @@ function ErpBiomassa() {
         .pf-dica { font-size: 12px; color: var(--text-secondary, #6b6b68); }
 
         .field-group { margin-bottom: 12px; }
+        /* Formulário compacto: altura menor de campo e menos respiro entre
+           linhas, para caber mais na mesma tela. Usado onde há muitos
+           campos, como no lançamento de viagem. */
+        .form-compacto .field-group { margin-bottom: 8px; }
+        .form-compacto .field-label { font-size: 11.5px; margin-bottom: 2px; }
+        .form-compacto .field-group input,
+        .form-compacto .field-group select,
+        .form-compacto .field-group textarea {
+          padding: 5px 8px; font-size: 12.5px; border-radius: 6px;
+        }
+        .form-compacto .pf-secao { padding-top: 10px; padding-bottom: 6px; }
+        .form-compacto .pf-secao-titulo { font-size: 12.5px; margin-bottom: 6px; }
+        .form-compacto .hint { font-size: 11px; margin-top: 2px; }
+        .form-compacto .nf-grid-3, .form-compacto .nf-grid-4 { gap: 6px; }
         .cadastro-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
         @media (max-width: 640px) { .cadastro-fields-grid { grid-template-columns: 1fr; } }
         .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary, #6b6b68); margin-bottom: 4px; }

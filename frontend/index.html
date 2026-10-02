@@ -874,7 +874,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.014";
+const VERSAO_SISTEMA = "1.015";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2343,6 +2343,12 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
         ? n(dados.valorTotalServico) - (n(dados.custoMateriaPrima) || 0) - (totalTransporte || 0)
         : null);
 
+  // Quebra de carga: a diferença entre o que saiu e o que chegou é a
+  // primeira coisa que se confere num lançamento de viagem.
+  const diferencaQuantidade = n(dados.quantidadeDescarga) != null && n(dados.quantidadeNf) != null
+    ? Math.round((n(dados.quantidadeDescarga) - n(dados.quantidadeNf)) * 1000) / 1000
+    : null;
+
   const salvar = async () => {
     if (!dados.dataLancamento) { setErro("Informe a data do lançamento."); return; }
     setSalvando(true); setErro("");
@@ -2367,113 +2373,119 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro form-compacto">
+      <div className="modal modal-cadastro modal-planilha form-compacto">
         <div className="modal-header">
           <h3>{viagem?.id ? "Editar viagem" : "Nova viagem"}</h3>
           <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <section className="pf-secao" style={{ paddingTop: 0 }}>
-            <h4 className="pf-secao-titulo">Carregamento</h4>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Data do lançamento<span className="req">*</span></label>
-                <input type="date" value={dados.dataLancamento} onChange={e => set("dataLancamento", e.target.value)} />
+          {/* Três colunas lado a lado, na ordem em que a viagem acontece:
+              carrega, transporta, descarrega. O resultado fica embaixo,
+              atravessando a largura, porque ele depende das três. */}
+          <div className="viagem-colunas">
+            <section className="pf-secao" style={{ paddingTop: 0 }}>
+              <h4 className="pf-secao-titulo">1 · Carregamento</h4>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Data do lançamento<span className="req">*</span></label>
+                  <input type="date" value={dados.dataLancamento} onChange={e => set("dataLancamento", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Número da NF</label>
+                  <input value={dados.numeroNf} onChange={e => set("numeroNf", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Quantidade</label>
+                  <input type="number" step="0.001" value={dados.quantidadeNf}
+                    onChange={e => set("quantidadeNf", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Valor unitário</label>
+                  <InputMoeda value={dados.valorUnitarioNf} onChange={v => set("valorUnitarioNf", v)} />
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Valor total da NF</label>
+                  <InputMoeda value={dados.valorTotalNf} onChange={v => set("valorTotalNf", v)} />
+                  <Calculado valor={totalNf} />
+                </div>
               </div>
-              <div className="field-group">
-                <label className="field-label">Número da NF</label>
-                <input value={dados.numeroNf} onChange={e => set("numeroNf", e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Quantidade</label>
-                <input type="number" step="0.001" value={dados.quantidadeNf}
-                  onChange={e => set("quantidadeNf", e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Valor unitário</label>
-                <InputMoeda value={dados.valorUnitarioNf} onChange={v => set("valorUnitarioNf", v)} />
-              </div>
-            </div>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Valor total da NF</label>
-                <InputMoeda value={dados.valorTotalNf} onChange={v => set("valorTotalNf", v)} />
-                <Calculado valor={totalNf} />
-              </div>
-              <div className="field-group" style={{ gridColumn: "span 3" }}>
-                <label className="field-label">Observação</label>
-                <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
-              </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="pf-secao">
-            <h4 className="pf-secao-titulo">Transporte</h4>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Data do CT-e</label>
-                <input type="date" value={dados.dataCte} onChange={e => set("dataCte", e.target.value)} />
+            <section className="pf-secao" style={{ paddingTop: 0 }}>
+              <h4 className="pf-secao-titulo">2 · Transporte</h4>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Data do CT-e</label>
+                  <input type="date" value={dados.dataCte} onChange={e => set("dataCte", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Número do CT-e</label>
+                  <input value={dados.numeroCte} onChange={e => set("numeroCte", e.target.value)} />
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Tomador</label>
+                  <input list="viagem-tomadores" value={dados.tomador}
+                    onChange={e => set("tomador", e.target.value)} />
+                  <datalist id="viagem-tomadores">
+                    {(clientes || []).map(c => <option key={c.id} value={c.nome} />)}
+                  </datalist>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Placa</label>
+                  <input list="viagem-placas" value={dados.placa}
+                    onChange={e => set("placa", e.target.value.toUpperCase())} />
+                  <datalist id="viagem-placas">
+                    {(veiculos || []).map(v => (
+                      <option key={v.id} value={v.placa}>{v.descricao || v.modelo || ""}</option>
+                    ))}
+                  </datalist>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Valor unitário</label>
+                  <InputMoeda value={dados.valorUnitarioTransporte} onChange={v => set("valorUnitarioTransporte", v)} />
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Valor total do transporte</label>
+                  <InputMoeda value={dados.valorTotalTransporte} onChange={v => set("valorTotalTransporte", v)} />
+                  <Calculado valor={totalTransporte} />
+                </div>
               </div>
-              <div className="field-group">
-                <label className="field-label">Número do CT-e</label>
-                <input value={dados.numeroCte} onChange={e => set("numeroCte", e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Tomador</label>
-                {/* Lista com busca: o navegador filtra enquanto se digita, e
-                    um tomador fora do cadastro ainda pode ser digitado. */}
-                <input list="viagem-tomadores" value={dados.tomador}
-                  onChange={e => set("tomador", e.target.value)} />
-                <datalist id="viagem-tomadores">
-                  {(clientes || []).map(c => <option key={c.id} value={c.nome} />)}
-                </datalist>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Placa</label>
-                <input list="viagem-placas" value={dados.placa}
-                  onChange={e => set("placa", e.target.value.toUpperCase())} />
-                <datalist id="viagem-placas">
-                  {(veiculos || []).map(v => (
-                    <option key={v.id} value={v.placa}>{v.descricao || v.modelo || ""}</option>
-                  ))}
-                </datalist>
-              </div>
-            </div>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Valor unitário do transporte</label>
-                <InputMoeda value={dados.valorUnitarioTransporte} onChange={v => set("valorUnitarioTransporte", v)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Valor total do transporte</label>
-                <InputMoeda value={dados.valorTotalTransporte} onChange={v => set("valorTotalTransporte", v)} />
-                <Calculado valor={totalTransporte} />
-              </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="pf-secao">
-            <h4 className="pf-secao-titulo">Descarga</h4>
-            <div className="nf-grid-4">
-              <div className="field-group">
-                <label className="field-label">Data da descarga</label>
-                <input type="date" value={dados.dataDescarga} onChange={e => set("dataDescarga", e.target.value)} />
+            <section className="pf-secao" style={{ paddingTop: 0 }}>
+              <h4 className="pf-secao-titulo">3 · Descarga</h4>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Data da descarga</label>
+                  <input type="date" value={dados.dataDescarga} onChange={e => set("dataDescarga", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Ticket</label>
+                  <input value={dados.ticket} onChange={e => set("ticket", e.target.value)} />
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Quantidade descarregada</label>
+                  <input type="number" step="0.001" value={dados.quantidadeDescarga}
+                    onChange={e => set("quantidadeDescarga", e.target.value)} />
+                  <p className="hint">
+                    Base do frete.
+                    {diferencaQuantidade != null && (
+                      <span style={{ color: diferencaQuantidade < 0 ? "#c62828" : "#00732F" }}>
+                        {" "}Quebra de {formatarQuantidade(Math.abs(diferencaQuantidade))} em relação ao carregado.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Observação</label>
+                  <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+                </div>
               </div>
-              <div className="field-group">
-                <label className="field-label">Quantidade descarregada</label>
-                <input type="number" step="0.001" value={dados.quantidadeDescarga}
-                  onChange={e => set("quantidadeDescarga", e.target.value)} />
-                <p className="hint">É ela que serve de base para o frete.</p>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Ticket</label>
-                <input value={dados.ticket} onChange={e => set("ticket", e.target.value)} />
-              </div>
-            </div>
-          </section>
+            </section>
+          </div>
 
-          <section className="pf-secao" style={{ paddingBottom: 0 }}>
-            <h4 className="pf-secao-titulo">Resultado</h4>
+          <section className="pf-secao viagem-resultado">
+            <h4 className="pf-secao-titulo">Resultado da viagem</h4>
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Valor total do serviço</label>
@@ -2484,11 +2496,16 @@ function ViagemForm({ operacaoId, viagem, onFechar, onSalvo }) {
                 <InputMoeda value={dados.custoMateriaPrima} onChange={v => set("custoMateriaPrima", v)} />
               </div>
               <div className="field-group">
+                <label className="field-label">Transporte</label>
+                <input disabled value={totalTransporte != null ? formatarMoeda(totalTransporte) : ""} />
+                <p className="hint">Vem do bloco 2.</p>
+              </div>
+              <div className="field-group">
                 <label className="field-label">Lucro bruto</label>
                 <InputMoeda value={dados.lucroBruto} onChange={v => set("lucroBruto", v)} />
-                <p className="hint" style={{ marginTop: 3, color: lucro != null && lucro < 0 ? "#c62828" : undefined }}>
+                <p className="hint" style={{ color: lucro != null && lucro < 0 ? "#c62828" : undefined }}>
                   {lucro != null
-                    ? `Calculado: R$ ${formatarMoeda(lucro)} (serviço − matéria-prima − transporte)`
+                    ? `Calculado: R$ ${formatarMoeda(lucro)}`
                     : "Informe o valor do serviço"}
                 </p>
               </div>
@@ -9648,6 +9665,18 @@ function ErpBiomassa() {
         /* Planilha: usa a tela quase inteira, em largura e em altura. */
         .modal-planilha { width: 98vw; max-width: 98vw; max-height: 94vh; }
         .modal-planilha > .modal-body { height: 80vh; flex: 0 0 80vh; }
+
+        /* Os três momentos da viagem lado a lado; em tela estreita, um
+           embaixo do outro. */
+        .viagem-colunas {
+          display: grid; gap: 0 20px;
+          grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+        }
+        .nf-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .viagem-resultado {
+          background: #faf9f5; border: 1px solid var(--border, #e5e3da);
+          border-radius: 10px; padding: 10px 14px; margin-top: 6px;
+        }
         .pessoa-modal { width: 940px; max-width: 96vw; }
         .pessoa-modal .modal-header h3 { margin: 0; }
         .pessoa-modal .modal-header .subtle { margin-top: 3px; }

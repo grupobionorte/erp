@@ -872,7 +872,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.001";
+const VERSAO_SISTEMA = "1.002";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -881,13 +881,16 @@ function modulosParaUsuario(usuario) {
   });
 }
 
-// Admin enxerga tudo; quem não tem lista de menus também, porque é usuário
-// de antes desta trava existir. A tela apenas acompanha o servidor — quem
-// barra de verdade é ele.
+// A regra vale para admin também. A única exceção é o menu de usuários,
+// que o admin mantém sempre: é por ele que uma configuração errada se
+// corrige, e sem essa saída o sistema poderia se trancar inteiro.
+//
+// A tela apenas acompanha o servidor — quem barra de verdade é ele.
 function menuLiberado(chave, usuario) {
-  if (!usuario || usuario.papel === "admin") return true;
+  if (!usuario) return true;
   const permissoes = usuario.permissoes || [];
   if (!permissoes.length) return true;
+  if (usuario.papel === "admin" && chave === "usuarios") return true;
   return permissoes.includes(chave);
 }
 
@@ -1602,8 +1605,8 @@ function Field({ field, value, onChange, disabled, dados }) {
         })}
 
         <p className="hint">
-          Empresa sem nenhum menu marcado libera tudo nela. Admin acessa o sistema inteiro,
-          independentemente desta configuração.
+          Empresa sem nenhum menu marcado libera tudo nela. A regra vale também para admin,
+          que mantém sempre o acesso a Usuários para poder corrigir a configuração.
         </p>
       </div>
     );
@@ -1648,7 +1651,7 @@ function Field({ field, value, onChange, disabled, dados }) {
           ))}
         </div>
         <p className="hint">
-          Sem nenhum marcado, o usuário vê tudo. Admin acessa o sistema inteiro, independentemente desta lista.
+          Sem nenhum marcado, o usuário vê tudo.
         </p>
       </div>
     );

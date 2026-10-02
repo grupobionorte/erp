@@ -59,15 +59,20 @@ function menuDaRota(caminho) {
   return achado ? [achado.chave] : null;
 }
 
+// Menu que o admin nunca perde. Sem esta garantia, uma configuração errada
+// trancaria todo mundo do lado de fora, sem ninguém para destravar.
+const MENU_DE_RESGATE = "usuarios";
+
 /**
  * Bloqueia o que o usuário não tem liberado.
  *
- * Admin passa por tudo — é quem configura as permissões, e trancá-lo fora
- * de alguma tela criaria o problema de ninguém conseguir destravar.
+ * A regra vale para admin também: o papel diz o que a pessoa PODE
+ * administrar, não que ela deva ver tudo. A única exceção é o menu de
+ * usuários, que o admin mantém para poder corrigir as permissões.
  */
 function exigirPermissaoDeMenu(req, res, next) {
   const usuario = req.usuario;
-  if (!usuario || usuario.papel === "admin") return next();
+  if (!usuario) return next();
 
   const permissoes = usuario.permissoes || [];
   // Lista vazia é "tudo liberado": usuário antigo, antes de a trava existir.
@@ -79,6 +84,9 @@ function exigirPermissaoDeMenu(req, res, next) {
   const menus = menuDaRota(caminho);
   if (!menus) return next();
 
+  // O resgate do admin.
+  if (usuario.papel === "admin" && menus.includes(MENU_DE_RESGATE)) return next();
+
   if (menus.some((menu) => permissoes.includes(menu))) return next();
 
   return res.status(403).json({
@@ -87,4 +95,4 @@ function exigirPermissaoDeMenu(req, res, next) {
   });
 }
 
-module.exports = { MENUS, exigirPermissaoDeMenu };
+module.exports = { MENUS, MENU_DE_RESGATE, exigirPermissaoDeMenu };

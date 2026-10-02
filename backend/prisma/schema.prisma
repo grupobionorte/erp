@@ -189,6 +189,8 @@ model Empresa {
   centrosCusto      CentroCusto[]
   contasPagar       ContaPagar[]
   eventos Evento[]
+  equipamentos     Equipamento[]
+  ordensManutencao OrdemManutencao[]
 }
 
 model Pessoa {
@@ -267,6 +269,7 @@ model Colaborador {
   @@map("colaboradores")
   eventosCriados     Evento[]            @relation("EventosCriados")
   eventosResponsavel EventoResponsavel[] @relation("EventosResponsavel")
+  manutencoesResponsavel OrdemManutencao[] @relation("ManutencoesResponsavel")
 }
 
 model Transportadora {
@@ -351,6 +354,7 @@ model Veiculo {
 
   @@map("veiculos")
   centrosCusto CentroCusto[]
+  equipamentos Equipamento[]
 }
 
 model Produto {
@@ -1057,4 +1061,114 @@ model EventoItem {
 
   @@index([eventoId, ordem])
   @@map("evento_itens")
+}
+
+// ---------------------------------------------------------------------------
+// Manutenção de equipamentos
+// ---------------------------------------------------------------------------
+
+// Equipamento: picador, escavadeira, pá carregadeira, caminhão, carro.
+//
+// Fica separado de Veiculo de propósito. Veículo existe para o documento
+// fiscal — placa, RNTRC, tara. Equipamento existe para a manutenção, e boa
+// parte do maquinário não tem placa nenhuma. Quando os dois descrevem a
+// mesma máquina, o vínculo liga os cadastros sem duplicar o controle.
+model Equipamento {
+  id    Int     @id @default(autoincrement())
+  nome  String
+  // picador | escavadeira | pa-carregadeira | caminhao | carro | outro
+  tipo  String  @default("outro")
+  marca String?
+  modelo String?
+  ano    Int?
+  // Chassi, número de série ou patrimônio.
+  identificacao String?
+
+  // Como o intervalo é medido: horimetro | hodometro | prazo
+  controle String @default("horimetro")
+  // Leitura atual em horas ou km. Em equipamento por prazo, fica vazia.
+  leituraAtual      Float?    @map("leitura_atual")
+  leituraAtualizada DateTime? @map("leitura_atualizada")
+
+  veiculoId Int?     @map("veiculo_id")
+  veiculo   Veiculo? @relation(fields: [veiculoId], references: [id])
+
+  ativo      Boolean @default(true)
+  observacao String?
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  planos PlanoManutencao[]
+  ordens OrdemManutencao[]
+
+  @@index([empresaId, nome])
+  @@map("equipamentos")
+}
+
+// O que precisa ser feito de tempos em tempos: troca de óleo a cada 250
+// horas, revisão a cada 10.000 km, licenciamento todo ano.
+model PlanoManutencao {
+  id        Int    @id @default(autoincrement())
+  descricao String
+
+  // Intervalo na mesma unidade do controle do equipamento (horas, km ou
+  // meses). A base é a leitura ou a data da última execução.
+  intervalo Float
+
+  ultimaLeitura Float?    @map("ultima_leitura")
+  ultimaData    DateTime? @map("ultima_data")
+
+  // Quanto antes avisar: 20 horas, 500 km, 15 dias.
+  antecedencia Float?
+
+  ativo Boolean @default(true)
+
+  equipamentoId Int         @map("equipamento_id")
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id], onDelete: Cascade)
+
+  ordens OrdemManutencao[]
+
+  @@index([equipamentoId])
+  @@map("planos_manutencao")
+}
+
+// O serviço que aconteceu. É daqui que sai o histórico e o custo, e é ele
+// que reposiciona o plano para a próxima vez.
+model OrdemManutencao {
+  id        Int      @id @default(autoincrement())
+  data      DateTime
+  // preventiva | corretiva
+  tipo      String   @default("preventiva")
+  descricao String
+
+  // Leitura do horímetro ou hodômetro no momento do serviço.
+  leitura Float?
+
+  oficina      String?
+  custoPecas   Float?  @map("custo_pecas")
+  custoServico Float?  @map("custo_servico")
+  // Peças e óleo usados, em texto livre — detalhar por item viraria um
+  // controle de estoque, que é outro módulo.
+  pecas      String?
+  observacao String?
+
+  equipamentoId Int         @map("equipamento_id")
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id])
+
+  planoId Int?             @map("plano_id")
+  plano   PlanoManutencao? @relation(fields: [planoId], references: [id])
+
+  responsavelId Int?         @map("responsavel_id")
+  responsavel   Colaborador? @relation("ManutencoesResponsavel", fields: [responsavelId], references: [id])
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, data])
+  @@map("ordens_manutencao")
 }

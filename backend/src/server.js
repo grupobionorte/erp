@@ -17,6 +17,7 @@ const empresasRouter = require("./routes/empresas");
 const { router: pontoRouter, routerTablet: pontoTabletRouter } = require("./routes/ponto");
 const { carregarTabelasDeApoio } = require("./lib/cargaInicial");
 const manutencaoRouter = require("./routes/manutencao");
+const manutencaoEquipamentosRouter = require("./routes/manutencaoEquipamentos");
 const motoristasRouter = require("./routes/motoristas");
 const relatoriosRouter = require("./routes/relatorios");
 const contasPagarRouter = require("./routes/contasPagar");
@@ -74,6 +75,9 @@ app.use("/cfops", cfopsRouter);
 app.use("/municipios", municipiosRouter);
 app.use("/usuarios", usuariosRouter);
 app.use("/manutencao", manutencaoRouter);
+// Mesmo caminho, outro conjunto de rotas: /manutencao/base é administração,
+// /manutencao/equipamentos é a manutenção da frota e do maquinário.
+app.use("/manutencao", manutencaoEquipamentosRouter);
 app.use("/motoristas", motoristasRouter);
 app.use("/relatorios", relatoriosRouter);
 app.use("/contas-pagar", contasPagarRouter);

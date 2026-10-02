@@ -5307,6 +5307,685 @@ function AgendaView() {
   );
 }
 
+// ---------- Manutenção ----------
+
+const TIPOS_EQUIPAMENTO = [
+  { valor: "picador", rotulo: "Picador florestal" },
+  { valor: "escavadeira", rotulo: "Escavadeira" },
+  { valor: "pa-carregadeira", rotulo: "Pá carregadeira" },
+  { valor: "caminhao", rotulo: "Caminhão" },
+  { valor: "carro", rotulo: "Carro" },
+  { valor: "outro", rotulo: "Outro" },
+];
+
+const CONTROLES = [
+  { valor: "horimetro", rotulo: "Horímetro (horas)" },
+  { valor: "hodometro", rotulo: "Hodômetro (km)" },
+  { valor: "prazo", rotulo: "Prazo (meses)" },
+];
+
+const rotuloTipo = (t) => TIPOS_EQUIPAMENTO.find(x => x.valor === t)?.rotulo || "Outro";
+const unidadeDoControle = (c) => (c === "hodometro" ? "km" : c === "prazo" ? "meses" : "h");
+
+function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
+  const [dados, setDados] = useState(() => ({
+    nome: equipamento?.nome || "",
+    tipo: equipamento?.tipo || "picador",
+    marca: equipamento?.marca || "",
+    modelo: equipamento?.modelo || "",
+    ano: equipamento?.ano || "",
+    identificacao: equipamento?.identificacao || "",
+    controle: equipamento?.controle || "horimetro",
+    leituraAtual: equipamento?.leituraAtual ?? "",
+    veiculoId: equipamento?.veiculoId ? String(equipamento.veiculoId) : "",
+    observacao: equipamento?.observacao || "",
+    planos: equipamento?.planos?.map(p => ({
+      descricao: p.descricao,
+      intervalo: p.intervalo,
+      antecedencia: p.antecedencia ?? "",
+      ultimaLeitura: p.ultimaLeitura ?? "",
+      ultimaData: p.ultimaData ? String(p.ultimaData).slice(0, 10) : "",
+    })) || [],
+  }));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+  const porPrazo = dados.controle === "prazo";
+  const unidade = unidadeDoControle(dados.controle);
+
+  const salvar = async () => {
+    if (!dados.nome) { setErro("Informe o nome do equipamento."); return; }
+    setSalvando(true); setErro("");
+    try {
+      const caminho = equipamento?.id
+        ? `/manutencao/equipamentos/${equipamento.id}`
+        : "/manutencao/equipamentos";
+      await apiRequest(caminho, {
+        method: equipamento?.id ? "PUT" : "POST",
+        body: JSON.stringify(dados),
+      });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal modal-cadastro">
+        <div className="modal-header">
+          <h3>{equipamento?.id ? "Editar equipamento" : "Novo equipamento"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <section className="pf-secao" style={{ paddingTop: 0 }}>
+            <h4 className="pf-secao-titulo">Identificação</h4>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Nome<span className="req">*</span></label>
+                <input value={dados.nome} onChange={e => set("nome", e.target.value)}
+                  placeholder="Ex.: Picador Lippel PTO 300" />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Tipo</label>
+                <select value={dados.tipo} onChange={e => set("tipo", e.target.value)}>
+                  {TIPOS_EQUIPAMENTO.map(t => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Ano</label>
+                <input type="number" value={dados.ano} onChange={e => set("ano", e.target.value)} />
+              </div>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Marca</label>
+                <input value={dados.marca} onChange={e => set("marca", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Modelo</label>
+                <input value={dados.modelo} onChange={e => set("modelo", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Chassi / série</label>
+                <input value={dados.identificacao} onChange={e => set("identificacao", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Veículo vinculado</label>
+                <select value={dados.veiculoId} onChange={e => set("veiculoId", e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
+                <p className="hint">Para caminhão e carro já cadastrados.</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Controle</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Medido por</label>
+                <select value={dados.controle} onChange={e => set("controle", e.target.value)}>
+                  {CONTROLES.map(c => <option key={c.valor} value={c.valor}>{c.rotulo}</option>)}
+                </select>
+              </div>
+              {!porPrazo && (
+                <div className="field-group">
+                  <label className="field-label">Leitura atual ({unidade})</label>
+                  <input type="number" step="0.1" value={dados.leituraAtual}
+                    onChange={e => set("leituraAtual", e.target.value)} />
+                </div>
+              )}
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Observação</label>
+                <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+              </div>
+            </div>
+          </section>
+
+          <section className="pf-secao" style={{ paddingBottom: 0 }}>
+            <h4 className="pf-secao-titulo">
+              Plano de manutenção
+              <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+                o que se repete a cada tantas {porPrazo ? "mensalidades" : unidade === "km" ? "quilometragens" : "horas"}
+              </span>
+            </h4>
+
+            {dados.planos.map((plano, i) => (
+              <div key={i} className="nf-grid-4" style={{ alignItems: "end" }}>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Serviço</label>
+                  <input value={plano.descricao} placeholder="Troca de óleo do motor"
+                    onChange={e => setDados(d => ({
+                      ...d, planos: d.planos.map((p, j) => (j === i ? { ...p, descricao: e.target.value } : p)),
+                    }))} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">A cada ({unidade})</label>
+                  <input type="number" value={plano.intervalo}
+                    onChange={e => setDados(d => ({
+                      ...d, planos: d.planos.map((p, j) => (j === i ? { ...p, intervalo: e.target.value } : p)),
+                    }))} />
+                </div>
+                <div className="field-group" style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="field-label">{porPrazo ? "Última vez" : `Última (${unidade})`}</label>
+                    {porPrazo ? (
+                      <input type="date" value={plano.ultimaData}
+                        onChange={e => setDados(d => ({
+                          ...d, planos: d.planos.map((p, j) => (j === i ? { ...p, ultimaData: e.target.value } : p)),
+                        }))} />
+                    ) : (
+                      <input type="number" step="0.1" value={plano.ultimaLeitura}
+                        onChange={e => setDados(d => ({
+                          ...d, planos: d.planos.map((p, j) => (j === i ? { ...p, ultimaLeitura: e.target.value } : p)),
+                        }))} />
+                    )}
+                  </div>
+                  <button type="button" className="icon-btn icon-btn-danger" title="Remover"
+                    onClick={() => setDados(d => ({ ...d, planos: d.planos.filter((_, j) => j !== i) }))}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <button type="button" className="btn" style={{ marginTop: 6 }}
+              onClick={() => setDados(d => ({
+                ...d, planos: [...d.planos, { descricao: "", intervalo: "", antecedencia: "", ultimaLeitura: "", ultimaData: "" }],
+              }))}>
+              <Plus size={14} /> Adicionar serviço
+            </button>
+          </section>
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Registro do serviço feito. Ao vincular um plano, a data e a leitura
+// reposicionam o próximo vencimento — é o que mantém o aviso honesto.
+function OrdemManutencaoForm({ ordem, equipamentos, colaboradores, onFechar, onSalvo }) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [dados, setDados] = useState(() => ({
+    equipamentoId: ordem?.equipamentoId ? String(ordem.equipamentoId) : "",
+    data: ordem?.data ? String(ordem.data).slice(0, 10) : hoje,
+    tipo: ordem?.tipo || "preventiva",
+    descricao: ordem?.descricao || "",
+    planoId: ordem?.planoId ? String(ordem.planoId) : "",
+    leitura: ordem?.leitura ?? "",
+    oficina: ordem?.oficina || "",
+    custoPecas: ordem?.custoPecas ?? "",
+    custoServico: ordem?.custoServico ?? "",
+    pecas: ordem?.pecas || "",
+    responsavelId: ordem?.responsavelId ? String(ordem.responsavelId) : "",
+    observacao: ordem?.observacao || "",
+  }));
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+  const equipamento = equipamentos.find(e => String(e.id) === String(dados.equipamentoId));
+  const porPrazo = equipamento?.controle === "prazo";
+  const unidade = unidadeDoControle(equipamento?.controle);
+
+  const salvar = async () => {
+    if (!dados.equipamentoId || !dados.descricao) {
+      setErro("Informe o equipamento e a descrição do serviço.");
+      return;
+    }
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(ordem?.id ? `/manutencao/ordens/${ordem.id}` : "/manutencao/ordens", {
+        method: ordem?.id ? "PUT" : "POST",
+        body: JSON.stringify(dados),
+      });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  const total = (Number(dados.custoPecas) || 0) + (Number(dados.custoServico) || 0);
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal modal-cadastro">
+        <div className="modal-header">
+          <h3>{ordem?.id ? "Editar manutenção" : "Registrar manutenção"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <section className="pf-secao" style={{ paddingTop: 0 }}>
+            <h4 className="pf-secao-titulo">O serviço</h4>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Equipamento<span className="req">*</span></label>
+                <select value={dados.equipamentoId} onChange={e => { set("equipamentoId", e.target.value); set("planoId", ""); }}>
+                  <option value="">Selecione…</option>
+                  {equipamentos.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Data</label>
+                <input type="date" value={dados.data} onChange={e => set("data", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Tipo</label>
+                <select value={dados.tipo} onChange={e => set("tipo", e.target.value)}>
+                  <option value="preventiva">Preventiva</option>
+                  <option value="corretiva">Corretiva (quebrou)</option>
+                </select>
+              </div>
+            </div>
+            <div className="nf-grid-4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">O que foi feito<span className="req">*</span></label>
+                <input value={dados.descricao} onChange={e => set("descricao", e.target.value)}
+                  placeholder="Troca de óleo e filtros" />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Serviço do plano</label>
+                <select value={dados.planoId} onChange={e => set("planoId", e.target.value)}
+                  disabled={!equipamento?.planos?.length}>
+                  <option value="">Fora do plano</option>
+                  {(equipamento?.planos || []).map(p => <option key={p.id} value={p.id}>{p.descricao}</option>)}
+                </select>
+                <p className="hint">Vinculando, a próxima é recalculada.</p>
+              </div>
+              {!porPrazo && (
+                <div className="field-group">
+                  <label className="field-label">Leitura ({unidade})</label>
+                  <input type="number" step="0.1" value={dados.leitura}
+                    onChange={e => set("leitura", e.target.value)}
+                    placeholder={equipamento?.leituraAtual != null ? String(equipamento.leituraAtual) : ""} />
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">
+              Custo
+              {total > 0 && (
+                <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+                  total R$ {formatarMoeda(total)}
+                </span>
+              )}
+            </h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Peças</label>
+                <InputMoeda value={dados.custoPecas} onChange={v => set("custoPecas", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Mão de obra</label>
+                <InputMoeda value={dados.custoServico} onChange={v => set("custoServico", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Oficina</label>
+                <input value={dados.oficina} onChange={e => set("oficina", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Responsável</label>
+                <select value={dados.responsavelId} onChange={e => set("responsavelId", e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section className="pf-secao" style={{ paddingBottom: 0 }}>
+            <h4 className="pf-secao-titulo">Peças e observação</h4>
+            <div className="field-group">
+              <label className="field-label">Peças e óleo usados</label>
+              <textarea rows={2} value={dados.pecas} onChange={e => set("pecas", e.target.value)}
+                placeholder="4 filtros de óleo, 20L óleo 15W40, 2 correias"
+                style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Observação</label>
+              <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+            </div>
+          </section>
+
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManutencaoView() {
+  const { items: veiculos } = useApiCollection("veiculos");
+  const { items: colaboradores } = useApiCollection("colaboradores");
+
+  const [aba, setAba] = useState("equipamentos");
+  const [dados, setDados] = useState(null);
+  const [historico, setHistorico] = useState(null);
+  const [erro, setErro] = useState("");
+
+  const [equipamentoEmEdicao, setEquipamentoEmEdicao] = useState(null);
+  const [ordemEmEdicao, setOrdemEmEdicao] = useState(null);
+  const [leituraDe, setLeituraDe] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setErro("");
+    try {
+      const [equipamentos, ordens] = await Promise.all([
+        apiRequest("/manutencao/equipamentos"),
+        apiRequest("/manutencao/ordens"),
+      ]);
+      setDados(equipamentos);
+      setHistorico(ordens);
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    }
+  }, []);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const excluirEquipamento = async (equipamento) => {
+    if (!window.confirm(`Desativar "${equipamento.nome}"? O histórico continua guardado.`)) return;
+    try {
+      await apiRequest(`/manutencao/equipamentos/${equipamento.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(e.message); }
+  };
+
+  const excluirOrdem = async (ordem) => {
+    if (!window.confirm("Excluir esse registro de manutenção?")) return;
+    try {
+      await apiRequest(`/manutencao/ordens/${ordem.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(e.message); }
+  };
+
+  const T = dados?.totais;
+  const dataBr = (iso) => new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR");
+
+  // Frase curta do que falta, para caber na linha da tabela.
+  const textoSituacao = (plano) => {
+    const s = plano.situacao;
+    if (s.semLeitura) return "sem leitura";
+    if (s.vencida) {
+      return s.tipo === "prazo"
+        ? `vencida há ${Math.abs(s.falta)}d`
+        : `vencida há ${formatarQuantidade(Math.abs(s.falta))} ${s.unidade}`;
+    }
+    return s.tipo === "prazo"
+      ? `em ${s.falta}d`
+      : `faltam ${formatarQuantidade(s.falta)} ${s.unidade}`;
+  };
+
+  const corSituacao = (plano) =>
+    plano.situacao.semLeitura ? "#8a887f"
+      : plano.situacao.vencida ? "#c62828"
+      : plano.situacao.proximo ? "#b57a12" : "#6b6b68";
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#eef3fb", color: "#1F3B57" }}>
+            <Car size={20} />
+          </div>
+          <div>
+            <h2>Manutenção</h2>
+            <p className="subtle">
+              {T ? `${T.equipamentos} equipamento${T.equipamentos !== 1 ? "s" : ""}` : "—"}
+              {T?.vencidas > 0 && <span style={{ color: "#c62828" }}>{` · ${T.vencidas} com manutenção vencida`}</span>}
+            </p>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }}
+            onClick={() => setEquipamentoEmEdicao({})}>
+            <Plus size={14} /> Equipamento
+          </button>
+          <button className="btn btn-primary" onClick={() => setOrdemEmEdicao({})}>
+            <Plus size={16} /> Registrar manutenção
+          </button>
+        </div>
+      </div>
+
+      {T && (T.vencidas > 0 || T.proximas > 0) && (
+        <div className="cte-resumo" style={{ marginBottom: 14 }}>
+          <div>
+            <span className="cte-resumo-rotulo">Vencidas</span>
+            <span className="cte-resumo-valor" style={{ color: T.vencidas ? "#c62828" : undefined }}>{T.vencidas}</span>
+          </div>
+          <div>
+            <span className="cte-resumo-rotulo">Chegando</span>
+            <span className="cte-resumo-valor" style={{ color: T.proximas ? "#b57a12" : undefined }}>{T.proximas}</span>
+          </div>
+          {historico?.totais && (
+            <div>
+              <span className="cte-resumo-rotulo">Custo registrado</span>
+              <span className="cte-resumo-valor">R$ {formatarMoeda(historico.totais.custoTotal)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="cte-abas" style={{ marginBottom: 12 }}>
+        <button className="cte-aba" aria-selected={aba === "equipamentos"} onClick={() => setAba("equipamentos")}>
+          Equipamentos
+        </button>
+        <button className="cte-aba" aria-selected={aba === "historico"} onClick={() => setAba("historico")}>
+          Histórico
+        </button>
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+
+      {aba === "equipamentos" && dados && (
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th>Equipamento</th>
+              <th style={{ width: 130 }}>Tipo</th>
+              <th style={{ width: 120 }}>Leitura</th>
+              <th>Próximas manutenções</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.equipamentos.map(eq => (
+              <tr key={eq.id}>
+                <td>
+                  {eq.nome}
+                  {eq.veiculo?.placa && <span className="subtle"> · {eq.veiculo.placa}</span>}
+                </td>
+                <td className="subtle">{rotuloTipo(eq.tipo)}</td>
+                <td>
+                  {eq.controle === "prazo" ? (
+                    <span className="subtle">por prazo</span>
+                  ) : (
+                    <button className="link-btn" onClick={() => setLeituraDe(eq)}>
+                      {eq.leituraAtual != null
+                        ? `${formatarQuantidade(eq.leituraAtual)} ${unidadeDoControle(eq.controle)}`
+                        : "informar"}
+                    </button>
+                  )}
+                </td>
+                <td>
+                  {eq.planos.length === 0 && <span className="subtle">sem plano</span>}
+                  {eq.planos.map(p => (
+                    <div key={p.id} style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>
+                      {p.descricao}
+                      {" · "}
+                      <span style={{ color: corSituacao(p), fontWeight: p.situacao.vencida ? 600 : 400 }}>
+                        {textoSituacao(p)}
+                      </span>
+                    </div>
+                  ))}
+                </td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  <button className="icon-btn" title="Registrar manutenção"
+                    onClick={() => setOrdemEmEdicao({ equipamentoId: eq.id })}>
+                    <Plus size={14} />
+                  </button>
+                  <button className="icon-btn" title="Editar" onClick={() => setEquipamentoEmEdicao(eq)}>
+                    <Pencil size={14} />
+                  </button>
+                  <button className="icon-btn icon-btn-danger" title="Desativar" onClick={() => excluirEquipamento(eq)}>
+                    <Trash2 size={14} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!dados.equipamentos.length && (
+              <tr><td colSpan={5}>Nenhum equipamento cadastrado ainda.</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+
+      {aba === "historico" && historico && (
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th style={{ width: 90 }}>Data</th>
+              <th>Equipamento</th>
+              <th>Serviço</th>
+              <th style={{ width: 95 }}>Tipo</th>
+              <th style={{ width: 100 }}>Leitura</th>
+              <th style={{ width: 110, textAlign: "right" }}>Custo</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {historico.ordens.map(o => (
+              <tr key={o.id}>
+                <td>{dataBr(o.data)}</td>
+                <td>{o.equipamento?.nome}</td>
+                <td>
+                  {o.descricao}
+                  {o.oficina && <span className="subtle"> · {o.oficina}</span>}
+                </td>
+                <td style={{ color: o.tipo === "corretiva" ? "#c62828" : undefined }}>
+                  {o.tipo === "corretiva" ? "corretiva" : "preventiva"}
+                </td>
+                <td className="subtle">
+                  {o.leitura != null ? `${formatarQuantidade(o.leitura)} ${unidadeDoControle(o.equipamento?.controle)}` : "—"}
+                </td>
+                <td style={{ textAlign: "right" }}>
+                  R$ {formatarMoeda((Number(o.custoPecas) || 0) + (Number(o.custoServico) || 0))}
+                </td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  <button className="icon-btn" title="Editar" onClick={() => setOrdemEmEdicao(o)}><Pencil size={14} /></button>
+                  <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluirOrdem(o)}><Trash2 size={14} /></button>
+                </td>
+              </tr>
+            ))}
+            {!historico.ordens.length && (
+              <tr><td colSpan={7}>Nenhuma manutenção registrada ainda.</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+
+      {equipamentoEmEdicao && (
+        <EquipamentoForm
+          equipamento={equipamentoEmEdicao.id ? equipamentoEmEdicao : null}
+          veiculos={veiculos}
+          onFechar={() => setEquipamentoEmEdicao(null)}
+          onSalvo={() => { setEquipamentoEmEdicao(null); carregar(); }}
+        />
+      )}
+
+      {ordemEmEdicao && (
+        <OrdemManutencaoForm
+          ordem={ordemEmEdicao.id ? ordemEmEdicao : (ordemEmEdicao.equipamentoId ? ordemEmEdicao : null)}
+          equipamentos={dados?.equipamentos || []}
+          colaboradores={colaboradores}
+          onFechar={() => setOrdemEmEdicao(null)}
+          onSalvo={() => { setOrdemEmEdicao(null); carregar(); }}
+        />
+      )}
+
+      {leituraDe && (
+        <LeituraModal
+          equipamento={leituraDe}
+          onFechar={() => setLeituraDe(null)}
+          onSalvo={() => { setLeituraDe(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Atualizar a leitura é rápido e acontece todo dia — merece uma janela
+// pequena em vez de abrir o cadastro inteiro.
+function LeituraModal({ equipamento, onFechar, onSalvo }) {
+  const [leitura, setLeitura] = useState(equipamento.leituraAtual ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const unidade = unidadeDoControle(equipamento.controle);
+
+  const salvar = async () => {
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/manutencao/equipamentos/${equipamento.id}/leitura`, {
+        method: "POST",
+        body: JSON.stringify({ leitura }),
+      });
+      onSalvo();
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <h3>{equipamento.nome}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field-group">
+            <label className="field-label">Leitura atual ({unidade})</label>
+            <input type="number" step="0.1" value={leitura} autoFocus
+              onChange={e => setLeitura(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && salvar()} />
+            {equipamento.leituraAtualizada && (
+              <p className="hint">
+                Última atualização em {new Date(equipamento.leituraAtualizada).toLocaleDateString("pt-BR")}.
+              </p>
+            )}
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Contas a pagar ----------
 
 // Lançamento. O parcelamento e a repetição mensal são resolvidos aqui: o
@@ -8019,6 +8698,7 @@ function ErpBiomassa() {
     { key: "cte", label: "CTe", icon: Truck },
     { key: "emissao", label: "MDFe", icon: Truck },
     { divider: true },
+    { key: "manutencao", label: "Manutenção", icon: Car },
     { key: "contasPagar", label: "Contas a pagar", icon: FileText },
     { divider: true },
     { key: "ponto", label: "Ponto", icon: Clock },
@@ -8438,6 +9118,7 @@ function ErpBiomassa() {
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
         {view === "agenda" && <AgendaView />}
+        {view === "manutencao" && <ManutencaoView />}
         {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}
         {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}

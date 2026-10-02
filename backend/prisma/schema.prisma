@@ -192,6 +192,7 @@ model Empresa {
   eventos Evento[]
   equipamentos     Equipamento[]
   ordensManutencao OrdemManutencao[]
+  operacoes Operacao[]
 }
 
 model Pessoa {
@@ -1202,4 +1203,24 @@ model FotoPonto {
 
   @@index([criadoEm])
   @@map("fotos_ponto")
+}
+
+// Operação: a frente de trabalho — um contrato de colheita, uma obra, uma
+// safra. Serve para dizer onde a despesa, a máquina e as pessoas estiveram.
+model Operacao {
+  id        Int       @id @default(autoincrement())
+  codigo    String
+  descricao String
+  dataInicio DateTime? @map("data_inicio")
+  dataFim    DateTime? @map("data_fim")
+
+  ativo Boolean @default(true)
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, codigo])
+  @@map("operacoes")
 }

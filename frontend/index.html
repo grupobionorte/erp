@@ -588,6 +588,38 @@ const MODULES = {
       motoristaCpf: r.motorista?.cpf || "",
     }),
   },
+  operacoes: {
+    label: "Operações",
+    icon: Building2,
+    color: "blue",
+    apiPath: "/operacoes",
+    // Frente de trabalho: contrato de colheita, obra, safra.
+    fields: [
+      { key: "codigo", label: "Código", type: "text", required: true },
+      { key: "descricao", label: "Descrição", type: "text", required: true },
+      { key: "dataInicio", label: "Data de início", type: "date" },
+      { key: "dataFim", label: "Data de término", type: "date" },
+    ],
+    columns: ["codigo", "descricao", "periodo"],
+    toApi: (data) => ({
+      codigo: data.codigo,
+      descricao: data.descricao,
+      dataInicio: data.dataInicio || null,
+      dataFim: data.dataFim || null,
+    }),
+    fromApi: (r) => ({
+      id: r.id,
+      codigo: r.codigo,
+      descricao: r.descricao,
+      dataInicio: r.dataInicio ? String(r.dataInicio).slice(0, 10) : "",
+      dataFim: r.dataFim ? String(r.dataFim).slice(0, 10) : "",
+      // Coluna só de leitura, para a listagem mostrar o período numa linha.
+      periodo: [
+        r.dataInicio ? new Date(r.dataInicio).toLocaleDateString("pt-BR") : "—",
+        r.dataFim ? new Date(r.dataFim).toLocaleDateString("pt-BR") : "em aberto",
+      ].join(" a "),
+    }),
+  },
   motoristas: {
     label: "Motoristas",
     icon: Users,
@@ -8842,7 +8874,7 @@ function ErpBiomassa() {
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
     { key: "agenda", label: "Agenda", icon: Clock },
     { divider: true },
-    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores"]),
+    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores", "operacoes"]),
     { divider: true },
     { key: "notasFiscais", label: "Vendas/NFe", icon: FileText },
     { key: "cte", label: "CTe", icon: Truck },

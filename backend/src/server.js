@@ -19,6 +19,7 @@ const { carregarTabelasDeApoio } = require("./lib/cargaInicial");
 const manutencaoRouter = require("./routes/manutencao");
 const manutencaoEquipamentosRouter = require("./routes/manutencaoEquipamentos");
 const motoristasRouter = require("./routes/motoristas");
+const operacoesRouter = require("./routes/operacoes");
 const relatoriosRouter = require("./routes/relatorios");
 const contasPagarRouter = require("./routes/contasPagar");
 const agendaRouter = require("./routes/agenda");
@@ -79,6 +80,7 @@ app.use("/manutencao", manutencaoRouter);
 // /manutencao/equipamentos é a manutenção da frota e do maquinário.
 app.use("/manutencao", manutencaoEquipamentosRouter);
 app.use("/motoristas", motoristasRouter);
+app.use("/operacoes", operacoesRouter);
 app.use("/relatorios", relatoriosRouter);
 app.use("/contas-pagar", contasPagarRouter);
 app.use("/agenda", agendaRouter);

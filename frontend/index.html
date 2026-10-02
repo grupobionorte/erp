@@ -874,7 +874,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.006";
+const VERSAO_SISTEMA = "1.007";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -9424,7 +9424,17 @@ function ErpBiomassa() {
         .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
         .emissao-form { max-width: 420px; }
         .checklist { display: flex; flex-direction: column; gap: 6px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; padding: 8px; max-height: 160px; overflow-y: auto; }
-        .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .checklist-item { display: flex; align-items: center; gap: 9px; font-size: 13px; line-height: 1.35; }
+        /* A regra geral dos campos dá largura total e espaçamento interno a
+           todo input — o que estica a caixa de seleção e desalinha a lista.
+           Aqui ela volta ao tamanho natural, fixa, e o texto alinha junto. */
+        .checklist-item input[type="checkbox"],
+        .permissoes-menus input[type="checkbox"] {
+          width: 15px; height: 15px; min-width: 15px;
+          margin: 0; padding: 0; flex: none;
+          accent-color: var(--erp-azul, #1F3B57);
+        }
+        .checklist-item span, .permissoes-menus label { min-width: 0; }
         /* Permissões: um cartão por empresa, lado a lado. */
         .permissoes-grade {
           display: grid; gap: 10px;
@@ -9440,9 +9450,12 @@ function ErpBiomassa() {
           font-size: 13px;
         }
         .permissoes-menus {
-          padding: 8px 12px; display: flex; flex-direction: column; gap: 5px;
+          padding: 9px 12px; display: flex; flex-direction: column; gap: 7px;
           max-height: 230px; overflow-y: auto;
         }
+        /* Todos os rótulos começam na mesma coluna, independentemente do
+           tamanho do texto. */
+        .permissoes-menus .checklist-item { align-items: center; }
         .hint { font-size: 12px; color: var(--text-secondary, #6b6b68); margin: 4px 0 0; }
         .doc-preview { margin-top: 1.5rem; padding: 1rem 1.25rem; border-radius: 12px; border: 0.5px solid var(--border, #e5e3da); background: var(--surface-2, #fff); max-width: 480px; font-size: 13px; line-height: 1.8; }
         .doc-preview-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }

@@ -17,7 +17,12 @@ function gerarToken(usuario, empresaId, origem = "web") {
     // O colaborador vinculado vai no token: a agenda e os documentos usam
     // isso para saber quem é o responsável, sem consultar o banco a cada
     // requisição.
-    { sub: usuario.id, papel: usuario.papel, nome: usuario.nome, empresaId: empresaId ?? null, colaboradorId: usuario.colaboradorId ?? null },
+    {
+      sub: usuario.id, papel: usuario.papel, nome: usuario.nome,
+      empresaId: empresaId ?? null,
+      colaboradorId: usuario.colaboradorId ?? null,
+      permissoes: usuario.permissoes || [],
+    },
     process.env.JWT_SECRET,
     { expiresIn: DURACAO_TOKEN[origem] || DURACAO_TOKEN.web }
   );
@@ -32,7 +37,7 @@ function gerarToken(usuario, empresaId, origem = "web") {
 // efeito prático pra quem é "operador" — um "admin" acessa todas as
 // empresas ativas automaticamente, então a lista é ignorada nesse caso.
 router.post("/registrar", asyncHandler(async (req, res) => {
-  const { nome, email, senha, papel, empresaIds, colaboradorId } = req.body;
+  const { nome, email, senha, papel, empresaIds, colaboradorId, permissoes } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: "nome, email e senha são obrigatórios" });
   }
@@ -81,6 +86,7 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       email,
       senhaHash,
       papel: totalUsuarios === 0 ? "admin" : papel === "admin" ? "admin" : "operador",
+      permissoes: Array.isArray(permissoes) ? permissoes : [],
       empresas: empresaIds?.length ? { connect: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
       // Liga o login à ficha de colaborador, quando informada.
       colaborador: colaboradorId ? { connect: { id: Number(colaboradorId) } } : undefined,
@@ -117,7 +123,7 @@ router.post("/registrar", asyncHandler(async (req, res) => {
 router.post("/renovar", autenticar, asyncHandler(async (req, res) => {
   const usuario = await prisma.usuario.findUnique({
     where: { id: req.usuario.id },
-    select: { id: true, nome: true, email: true, papel: true, ativo: true, colaboradorId: true },
+    select: { id: true, nome: true, email: true, papel: true, ativo: true, colaboradorId: true, permissoes: true },
   });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Usuário inativo" });
@@ -167,7 +173,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   if (totalEmpresas === 0) {
     return res.json({
       token: gerarToken(usuario, null, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
       empresa: null,
     });
   }
@@ -187,7 +193,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     const unica = empresasPermitidas[0];
     return res.json({
       token: gerarToken(usuario, unica.id, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
       empresa: unica,
     });
   }
@@ -205,7 +211,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   res.json({
     token: gerarToken(usuario, empresaEscolhida.id, origem),
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
+    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
     empresa: empresaEscolhida,
   });
 }));
@@ -225,7 +231,13 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
   // responsável, preenchido a partir de quem está logado.
   const dados = await prisma.usuario.findUnique({
     where: { id: req.usuario.id },
-    select: { colaboradorId: true, colaborador: { select: { id: true, nome: true } } },
+    select: {
+      colaboradorId: true,
+      // Vem do banco, não do token: alteração de permissão passa a valer na
+      // próxima abertura da tela, sem exigir novo login.
+      permissoes: true,
+      colaborador: { select: { id: true, nome: true } },
+    },
   });
 
   res.json({ ...req.usuario, ...dados, empresa });

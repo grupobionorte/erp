@@ -26,6 +26,7 @@ const agendaRouter = require("./routes/agenda");
 const pushRouter = require("./routes/push");
 const lembretesRouter = require("./routes/lembretes");
 const { autenticar } = require("./middleware/auth");
+const { exigirPermissaoDeMenu } = require("./lib/permissoes");
 
 const app = express();
 
@@ -62,6 +63,9 @@ app.use("/ponto/tablet", pontoTabletRouter);
 app.use("/lembretes", lembretesRouter);
 
 app.use(autenticar);
+
+// Depois de identificar quem é, confere se o menu está liberado para ele.
+app.use(exigirPermissaoDeMenu);
 
 // Clientes e fornecedores compartilham a rota /pessoas (use ?papel=cliente
 // ou ?papel=fornecedor para filtrar) porque são a mesma entidade no banco.

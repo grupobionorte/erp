@@ -751,6 +751,7 @@ const MODULES = {
       { key: "senha", label: "Senha", type: "password", required: true, hideOnEdit: true },
       { key: "papel", label: "Papel", type: "select", options: ["operador", "admin"], default: "operador" },
       { key: "empresaIds", label: "Empresas com acesso", type: "empresas-multiselect" },
+      { key: "permissoes", label: "Menus liberados", type: "menus-multiselect" },
       {
         key: "colaboradorId", label: "Colaborador", type: "vinculo",
         fonte: "/colaboradores", vazio: "Sem colaborador vinculado",
@@ -765,6 +766,7 @@ const MODULES = {
       senha: data.senha,
       papel: data.papel || "operador",
       empresaIds: data.empresaIds || [],
+      permissoes: data.permissoes || [],
       colaboradorId: data.colaboradorId ?? null,
     }),
     fromApi: (r) => ({
@@ -773,6 +775,7 @@ const MODULES = {
       email: r.email,
       papel: r.papel,
       empresaIds: (r.empresas || []).map(e => e.id),
+      permissoes: r.permissoes || [],
       colaboradorId: r.colaboradorId ?? null,
     }),
   },
@@ -865,7 +868,20 @@ const MODULES = {
 // Alguns módulos (como o cadastro de usuários) só fazem sentido pra quem
 // é admin — os demais nem aparecem no menu de um operador.
 function modulosParaUsuario(usuario) {
-  return Object.entries(MODULES).filter(([, cfg]) => !cfg.adminOnly || usuario?.papel === "admin");
+  return Object.entries(MODULES).filter(([chave, cfg]) => {
+    if (cfg.adminOnly && usuario?.papel !== "admin") return false;
+    return menuLiberado(chave, usuario);
+  });
+}
+
+// Admin enxerga tudo; quem não tem lista de menus também, porque é usuário
+// de antes desta trava existir. A tela apenas acompanha o servidor — quem
+// barra de verdade é ele.
+function menuLiberado(chave, usuario) {
+  if (!usuario || usuario.papel === "admin") return true;
+  const permissoes = usuario.permissoes || [];
+  if (!permissoes.length) return true;
+  return permissoes.includes(chave);
 }
 
 // ---------- Cliente da API ----------
@@ -1504,6 +1520,51 @@ function Field({ field, value, onChange, disabled }) {
           ))}
         </div>
         <p className="hint">Só vale pra usuários com papel Operador — Admin acessa todas as empresas automaticamente.</p>
+      </div>
+    );
+  }
+
+  if (field.type === "menus-multiselect") {
+    const [opcoes, setOpcoes] = useState(null);
+    useEffect(() => {
+      let cancelado = false;
+      apiRequest("/usuarios/menus")
+        .then((dados) => { if (!cancelado) setOpcoes(dados); })
+        .catch(() => { if (!cancelado) setOpcoes([]); });
+      return () => { cancelado = true; };
+    }, []);
+
+    const escolhidos = value || [];
+    const alternar = (chave) => {
+      onChange(escolhidos.includes(chave) ? escolhidos.filter(x => x !== chave) : [...escolhidos, chave]);
+    };
+
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <button type="button" className="btn" style={{ padding: "4px 10px", fontSize: 12.5 }}
+            onClick={() => onChange((opcoes || []).map(m => m.chave))}>
+            Marcar todos
+          </button>
+          <button type="button" className="btn" style={{ padding: "4px 10px", fontSize: 12.5 }}
+            onClick={() => onChange([])}>
+            Limpar
+          </button>
+        </div>
+        <div className="checklist">
+          {opcoes === null && <p className="hint">Carregando…</p>}
+          {(opcoes || []).map(menu => (
+            <label key={menu.chave} className="checklist-item">
+              <input type="checkbox" checked={escolhidos.includes(menu.chave)}
+                onChange={() => alternar(menu.chave)} />
+              {menu.rotulo}
+            </label>
+          ))}
+        </div>
+        <p className="hint">
+          Sem nenhum marcado, o usuário vê tudo. Admin acessa o sistema inteiro, independentemente desta lista.
+        </p>
       </div>
     );
   }
@@ -8870,20 +8931,23 @@ function ErpBiomassa() {
     .filter(k => modulosPorChave[k])
     .map(k => ({ key: k, label: modulosPorChave[k].label, icon: modulosPorChave[k].icon }));
 
+  // Os itens fixos passam pelo mesmo filtro dos cadastros.
+  const liberado = (chave) => menuLiberado(chave, usuario);
+
   const navItems = [
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
-    { key: "agenda", label: "Agenda", icon: Clock },
+    ...(liberado("agenda") ? [{ key: "agenda", label: "Agenda", icon: Clock }] : []),
     { divider: true },
     ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores", "operacoes"]),
     { divider: true },
-    { key: "notasFiscais", label: "Vendas/NFe", icon: FileText },
-    { key: "cte", label: "CTe", icon: Truck },
-    { key: "emissao", label: "MDFe", icon: Truck },
+    ...(liberado("notasFiscais") ? [{ key: "notasFiscais", label: "Vendas/NFe", icon: FileText }] : []),
+    ...(liberado("cte") ? [{ key: "cte", label: "CTe", icon: Truck }] : []),
+    ...(liberado("emissao") ? [{ key: "emissao", label: "MDFe", icon: Truck }] : []),
     { divider: true },
-    { key: "manutencao", label: "Manutenção", icon: Car },
-    { key: "contasPagar", label: "Contas a pagar", icon: FileText },
+    ...(liberado("manutencao") ? [{ key: "manutencao", label: "Manutenção", icon: Car }] : []),
+    ...(liberado("contasPagar") ? [{ key: "contasPagar", label: "Contas a pagar", icon: FileText }] : []),
     { divider: true },
-    { key: "ponto", label: "Ponto", icon: Clock },
+    ...(liberado("ponto") ? [{ key: "ponto", label: "Ponto", icon: Clock }] : []),
     { divider: true },
     ...cadastroNaOrdem(["empresas", "usuarios"]),
   ];

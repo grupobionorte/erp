@@ -16,6 +16,7 @@ function autenticar(req, res, next) {
       id: payload.sub, papel: payload.papel, nome: payload.nome,
       empresaId: payload.empresaId ?? null,
       colaboradorId: payload.colaboradorId ?? null,
+      permissoes: payload.permissoes || [],
     };
     next();
   } catch {

@@ -752,6 +752,7 @@ model MarcacaoPonto {
   @@unique([repId, nsr])
   @@index([colaboradorId, dataHora])
   @@map("marcacoes_ponto")
+  foto FotoPonto?
 }
 
 // Correções e inclusões do fechamento (o "tratamento" da portaria). Nunca
@@ -1177,4 +1178,28 @@ model OrdemManutencao {
 
   @@index([empresaId, data])
   @@map("ordens_manutencao")
+}
+
+// Foto do momento da batida por PIN.
+//
+// Fica em tabela própria, e não numa coluna de MarcacaoPonto, por dois
+// motivos: imagem pesa e tornaria lenta toda consulta de espelho, e a foto
+// é descartada depois de um tempo enquanto a marcação é permanente.
+model FotoPonto {
+  id     Int    @id @default(autoincrement())
+  // Imagem reduzida (data URL), por volta de 320px.
+  imagem String
+
+  // Resultado da conferência facial no momento da batida:
+  // conferida | sem-cadastro | sem-rosto
+  conferencia String  @default("sem-cadastro")
+  distancia   Float?
+
+  marcacaoId Int           @unique @map("marcacao_id")
+  marcacao   MarcacaoPonto @relation(fields: [marcacaoId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([criadoEm])
+  @@map("fotos_ponto")
 }

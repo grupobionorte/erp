@@ -497,7 +497,10 @@ async function sincronizarCarga() {
 
 async function enviarFila() {
   if (!estado.fila.length || !estado.cfg.api || !navigator.onLine) return;
-  const lote = estado.fila.slice(0, 50);
+  // Lote menor quando há foto: 50 imagens de uma vez dariam vários
+  // megabytes num envio só, e numa conexão de pátio isso falha.
+  const temFoto = estado.fila.some(m => m.foto?.imagem);
+  const lote = estado.fila.slice(0, temFoto ? 10 : 50);
   try {
     const resposta = await chamarApi("/ponto/tablet/marcacoes", {
       method: "POST",
@@ -587,7 +590,7 @@ function mostrarJaRegistrou(colaborador, quando, metodo) {
 /* ---------- registro da batida ---------- */
 // Grava primeiro, envia depois. É esta ordem que faz o ponto funcionar sem
 // internet — e que impede uma queda de rede de engolir uma batida.
-function registrarBatida(colaborador, metodo, { ignorarJanela = false } = {}) {
+function registrarBatida(colaborador, metodo, { ignorarJanela = false, foto = null } = {}) {
   // Bateu há pouco: em vez de registrar de novo por conta própria,
   // pergunta. Quem confirma é a pessoa.
   if (!ignorarJanela) {
@@ -601,6 +604,8 @@ function registrarBatida(colaborador, metodo, { ignorarJanela = false } = {}) {
     dataHora: horaLocalIso(),
     metodoIdentificacao: metodo,
     origemOffline: !navigator.onLine,
+    // Vai junto na fila: offline, a foto espera a conexão com a batida.
+    foto: foto || undefined,
   };
   estado.fila.push(marcacao);
   salvarFila();
@@ -1216,9 +1221,67 @@ function montarTeclado() {
   });
 }
 
+// Foto do momento da batida por PIN, reduzida para caber no envio sem
+// pesar o banco. 320px é suficiente para reconhecer uma pessoa.
+function fotoDoMomento() {
+  try {
+    const video = $("video");
+    if (!video?.videoWidth) return null;
+
+    const LADO = 320;
+    const escala = LADO / Math.max(video.videoWidth, video.videoHeight);
+    const tela = document.createElement("canvas");
+    tela.width = Math.round(video.videoWidth * escala);
+    tela.height = Math.round(video.videoHeight * escala);
+    tela.getContext("2d").drawImage(video, 0, 0, tela.width, tela.height);
+    // JPEG com qualidade média: o rosto continua reconhecível e o arquivo
+    // fica na casa das dezenas de KB.
+    return tela.toDataURL("image/jpeg", 0.65);
+  } catch {
+    return null;
+  }
+}
+
+// Confere se quem está na frente da câmera é mesmo o dono do PIN.
+//
+// Quem já tem rosto cadastrado precisa passar na conferência — é o que faz
+// o PIN deixar de ser atalho para bater o ponto do colega. Quem ainda não
+// cadastrou segue com a foto apenas registrada: barrar essa pessoa seria
+// impedir de trabalhar por uma falta de cadastro que não é culpa dela.
+async function conferirRostoDoPin(colaborador) {
+  const vetores = Array.isArray(colaborador.vetorFacial?.[0])
+    ? colaborador.vetorFacial
+    : (colaborador.vetorFacial ? [colaborador.vetorFacial] : []);
+
+  if (!vetores.length) return { conferencia: "sem-cadastro" };
+  if (!estado.modelosProntos || estado.cfg.somentePin) return { conferencia: "sem-cadastro" };
+
+  try {
+    const deteccao = await faceapi
+      .detectSingleFace($("video"), new faceapi.TinyFaceDetectorOptions({ inputSize: 320 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!deteccao) return { conferencia: "sem-rosto" };
+
+    const menor = Math.min(...vetores.map(v => distancia(deteccao.descriptor, v)));
+    // Limiar um pouco mais folgado que o do reconhecimento automático: aqui
+    // a pessoa já provou saber o PIN, e recusar quem é de verdade atrapalha
+    // mais do que aceitar um caso limítrofe.
+    const limite = (Number(estado.cfg.limiar) || 0.45) + 0.08;
+
+    return {
+      conferencia: menor <= limite ? "conferida" : "nao-confere",
+      distancia: Number(menor.toFixed(4)),
+    };
+  } catch {
+    return { conferencia: "sem-rosto" };
+  }
+}
+
 // A conferência do PIN acontece no próprio tablet, com o hash que veio na
 // carga — por isso funciona offline.
-function conferirPin() {
+async function conferirPin() {
   if (estado.pin.length < 4) return;
   const digitado = estado.pin;
   estado.pin = "";
@@ -1229,13 +1292,26 @@ function conferirPin() {
     try { return dcodeIO.bcrypt.compareSync(digitado, c.pinHash); } catch { return false; }
   });
 
-  if (encontrado) {
-    estado.ocupado = true;
-    registrarBatida(encontrado, "pin");
-    alternarModo("facial");
-  } else {
+  if (!encontrado) {
     mostrarFalha("PIN não confere. Tente de novo ou procure o encarregado.");
+    return;
   }
+
+  estado.ocupado = true;
+  const foto = fotoDoMomento();
+  const resultado = await conferirRostoDoPin(encontrado);
+
+  if (resultado.conferencia === "nao-confere") {
+    estado.ocupado = false;
+    mostrarFalha("O rosto não confere com o PIN digitado. Procure o encarregado.");
+    falar("O rosto não confere com o PIN digitado");
+    return;
+  }
+
+  registrarBatida(encontrado, "pin", {
+    foto: foto ? { imagem: foto, ...resultado } : null,
+  });
+  alternarModo("facial");
 }
 
 function alternarModo(novo) {

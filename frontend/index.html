@@ -2890,10 +2890,60 @@ function PontoPessoas() {
   );
 }
 
+// Foto registrada numa batida por PIN. Serve para conferir quem bateu
+// quando o rosto não pôde ser verificado na hora.
+function FotoDaBatidaModal({ batida, onFechar }) {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    apiRequest(`/ponto/marcacoes/${batida.id}/foto`)
+      .then(setDados)
+      .catch(e => setErro(e.message));
+  }, [batida.id]);
+
+  const TEXTO = {
+    conferida: { texto: "Rosto conferido com o cadastro", cor: "#00732F" },
+    "sem-cadastro": { texto: "Colaborador sem rosto cadastrado — foto apenas registrada", cor: "#b57a12" },
+    "sem-rosto": { texto: "Nenhum rosto detectado na foto", cor: "#c62828" },
+  };
+  const situacao = TEXTO[dados?.conferencia] || { texto: "—", cor: "#6b6b68" };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <div className="modal-header">
+          <h3>Foto da batida</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body" style={{ textAlign: "center" }}>
+          {erro && <p className="error-text">{erro}</p>}
+          {!dados && !erro && <p className="hint">Carregando…</p>}
+          {dados && (
+            <>
+              <img src={dados.imagem} alt="Foto do momento da batida"
+                style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid #e5e3da" }} />
+              <p style={{ marginBottom: 2, fontWeight: 500 }}>{dados.colaborador}</p>
+              <p className="subtle" style={{ marginTop: 0 }}>
+                {new Date(dados.dataHora).toLocaleString("pt-BR")}
+              </p>
+              <p style={{ color: situacao.cor, fontSize: 13 }}>{situacao.texto}</p>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PontoEspelho() {
   const hoje = new Date().toISOString().slice(0, 10);
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
+  const [fotoDe, setFotoDe] = useState(null);
   const [pessoas, setPessoas] = useState([]);
   const [filtro, setFiltro] = useState({ colaboradorId: "", de: primeiroDia, ate: hoje });
   const [espelho, setEspelho] = useState(null);
@@ -3014,9 +3064,23 @@ function PontoEspelho() {
                 <td style={{ fontVariantNumeric: "tabular-nums" }}>
                   {d.batidas.length
                     ? d.batidas.map(b => (
-                        <span key={b.id} title={`NSR ${b.nsr} · ${b.metodo}${b.offline ? " · offline" : ""}`}
+                        <span key={b.id}
+                          title={`NSR ${b.nsr} · ${b.metodo}${b.offline ? " · offline" : ""}${
+                            b.temFoto ? ` · foto (${b.conferenciaFacial})` : ""}`}
                           style={{ marginRight: 9 }}>
                           {b.hora}{b.temTratamento && <span style={{ color: "#b57a12" }}>*</span>}
+                          {/* Batida por PIN com foto: clicar abre a imagem.
+                              A cor diz se o rosto foi conferido. */}
+                          {b.temFoto && (
+                            <button className="link-btn" title="Ver foto da batida"
+                              style={{
+                                marginLeft: 3, fontSize: 11,
+                                color: b.conferenciaFacial === "conferida" ? "#00732F" : "#b57a12",
+                              }}
+                              onClick={() => setFotoDe(b)}>
+                              ◉
+                            </button>
+                          )}
                         </span>
                       ))
                     : "—"}
@@ -3040,6 +3104,8 @@ function PontoEspelho() {
         como tratamento, ao lado do registro original, com autor e motivo. O asterisco marca a batida que tem
         tratamento. A tolerância vem da jornada: diferenças menores que ela não viram crédito nem débito.
       </p>
+      {fotoDe && <FotoDaBatidaModal batida={fotoDe} onFechar={() => setFotoDe(null)} />}
+
     </div>
   );
 }

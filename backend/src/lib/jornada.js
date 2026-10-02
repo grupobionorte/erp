@@ -190,6 +190,9 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
       id: m.id, nsr: m.nsr, hora: m.hora,
       metodo: m.metodoIdentificacao, offline: m.origemOffline,
       temTratamento: Boolean(m.tratamentos?.length),
+      // Batida por PIN com foto: a imagem em si é buscada sob demanda.
+      temFoto: Boolean(m.foto),
+      conferenciaFacial: m.foto?.conferencia || null,
     })),
     trabalhadoMinutos: trabalhado,
     trabalhadoTexto: paraHora(trabalhado),

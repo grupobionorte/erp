@@ -169,6 +169,17 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
             idLocal: m.idLocal,
             hashAnterior: anterior?.hash || null,
             hash,
+            // A foto do PIN entra junto, na mesma transação: foto sem
+            // marcação ou marcação sem a foto que deveria ter seriam dois
+            // problemas piores que não ter foto nenhuma.
+            foto: m.foto?.imagem ? {
+              create: {
+                imagem: String(m.foto.imagem).slice(0, 400000),
+                conferencia: ["conferida", "sem-cadastro", "sem-rosto"].includes(m.foto.conferencia)
+                  ? m.foto.conferencia : "sem-cadastro",
+                distancia: Number.isFinite(Number(m.foto.distancia)) ? Number(m.foto.distancia) : undefined,
+              },
+            } : undefined,
           },
         });
       });
@@ -226,6 +237,10 @@ router.get("/marcacoes", asyncHandler(async (req, res) => {
       colaborador: { select: { id: true, nome: true, cpf: true, cargo: true } },
       rep: { select: { identificador: true } },
       tratamentos: true,
+      // Sem a imagem: aqui só interessa se existe foto e o que a
+      // conferência disse. A imagem vai por rota própria, quando alguém
+      // abrir — trazê-la na listagem deixaria o espelho pesadíssimo.
+      foto: { select: { conferencia: true, distancia: true } },
     },
     orderBy: [{ dataHora: "asc" }],
   });
@@ -475,7 +490,11 @@ router.get("/espelho", asyncHandler(async (req, res) => {
       colaboradorId: colaborador.id,
       dataHora: { gte: new Date(`${de}T00:00:00`), lte: new Date(`${ate}T23:59:59`) },
     },
-    include: { tratamentos: true },
+    include: {
+      tratamentos: true,
+      // Só a existência e o resultado: a imagem vem por rota própria.
+      foto: { select: { conferencia: true } },
+    },
     orderBy: { dataHora: "asc" },
   });
 
@@ -563,6 +582,42 @@ router.get("/colaboradores", asyncHandler(async (req, res) => {
     biometriaEm: c.biometriaFacial?.atualizadoEm || null,
     consentimentoEm: c.biometriaFacial?.consentimentoEm || null,
   })));
+}));
+
+// Foto de uma batida por PIN. Fica em rota separada porque a imagem é
+// pesada: o espelho só diz que existe, e a foto é buscada quando alguém
+// realmente quer olhar.
+router.get("/marcacoes/:id/foto", asyncHandler(async (req, res) => {
+  const foto = await prisma.fotoPonto.findUnique({
+    where: { marcacaoId: Number(req.params.id) },
+    include: {
+      marcacao: {
+        select: { dataHora: true, colaborador: { select: { nome: true } } },
+      },
+    },
+  });
+
+  if (!foto) return res.status(404).json({ erro: "Essa batida não tem foto" });
+
+  res.json({
+    imagem: foto.imagem,
+    conferencia: foto.conferencia,
+    distancia: foto.distancia,
+    dataHora: foto.marcacao.dataHora,
+    colaborador: foto.marcacao.colaborador?.nome,
+  });
+}));
+
+// Descarte das fotos antigas. A marcação é permanente; a foto serve para
+// conferência e discussão de folha, e guardar imagem de pessoa além do
+// necessário é risco sem contrapartida.
+router.post("/fotos/limpar", asyncHandler(async (req, res) => {
+  const dias = Math.max(30, Math.min(Number(req.body?.dias) || 90, 365));
+  const limite = new Date();
+  limite.setDate(limite.getDate() - dias);
+
+  const { count } = await prisma.fotoPonto.deleteMany({ where: { criadoEm: { lt: limite } } });
+  res.json({ removidas: count, dias });
 }));
 
 // Ativar ou desativar um tablet (o aparelho sumiu, foi para manutenção...).

@@ -1230,6 +1230,7 @@ model Operacao {
 
   @@index([empresaId, codigo])
   @@map("operacoes")
+  viagens ViagemOperacao[]
 }
 
 // Menus liberados para um usuário DENTRO de uma empresa.
@@ -1249,4 +1250,45 @@ model UsuarioEmpresaPermissao {
 
   @@unique([usuarioId, empresaId])
   @@map("usuario_empresa_permissoes")
+}
+
+// Viagem de uma operação: um caminhão que carregou, do carregamento à
+// descarga, com o que entrou e o que saiu de dinheiro.
+model ViagemOperacao {
+  id            Int      @id @default(autoincrement())
+  dataLancamento DateTime @map("data_lancamento")
+
+  // Nota fiscal da mercadoria.
+  numeroNf       String?  @map("numero_nf")
+  quantidadeNf   Float?   @map("quantidade_nf")
+  valorUnitarioNf Float?  @map("valor_unitario_nf")
+  valorTotalNf    Float?  @map("valor_total_nf")
+
+  // Conhecimento de transporte.
+  dataCte   DateTime? @map("data_cte")
+  numeroCte String?   @map("numero_cte")
+  tomador   String?
+  placa     String?
+  valorUnitarioTransporte Float? @map("valor_unitario_transporte")
+  valorTotalTransporte    Float? @map("valor_total_transporte")
+
+  // Descarga no destino.
+  dataDescarga       DateTime? @map("data_descarga")
+  quantidadeDescarga Float?    @map("quantidade_descarga")
+  ticket             String?
+
+  // Resultado da viagem.
+  valorTotalServico  Float? @map("valor_total_servico")
+  custoMateriaPrima  Float? @map("custo_materia_prima")
+  lucroBruto         Float? @map("lucro_bruto")
+
+  observacao String?
+
+  operacaoId Int      @map("operacao_id")
+  operacao   Operacao @relation(fields: [operacaoId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([operacaoId, dataLancamento])
+  @@map("viagens_operacao")
 }

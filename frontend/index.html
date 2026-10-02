@@ -874,7 +874,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.013";
+const VERSAO_SISTEMA = "1.014";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2704,10 +2704,10 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
 
   return (
     <div className="modal-backdrop">
-      {/* Na aba de viagens a janela ocupa quase a tela toda: é uma planilha
-          com dezessete colunas, e espremê-la em 940px obrigaria a rolar de
-          lado o tempo inteiro. */}
-      <div className={`modal modal-cadastro${temViagens && aba === "viagens" ? " modal-planilha" : ""}`}>
+      {/* Operação abre grande nas duas abas: a planilha de viagens precisa
+          da largura, e trocar de aba não deveria fazer a janela mudar de
+          tamanho embaixo do cursor. */}
+      <div className={`modal modal-cadastro${temViagens ? " modal-planilha" : ""}`}>
         <div className="modal-header">
           <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>

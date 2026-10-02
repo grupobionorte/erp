@@ -21,6 +21,7 @@ router.get("/", exigirAdmin, asyncHandler(async (req, res) => {
     select: {
       id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true,
       permissoes: true,
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
       empresas: { select: { id: true, razaoSocial: true } },
       colaboradorId: true,
       colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },
@@ -31,7 +32,7 @@ router.get("/", exigirAdmin, asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
-  const { nome, papel, ativo, empresaIds, colaboradorId, permissoes } = req.body;
+  const { nome, papel, ativo, empresaIds, colaboradorId, permissoesPorEmpresa } = req.body;
 
   // Um colaborador só pode estar ligado a um login. Sem essa checagem o
   // erro apareceria como violação de índice único, sem dizer com quem.
@@ -48,6 +49,21 @@ router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
     }
   }
 
+  // A matriz é substituída por inteiro quando informada: mais previsível
+  // do que casar o que mudou em cada empresa.
+  if (Array.isArray(permissoesPorEmpresa)) {
+    const id = Number(req.params.id);
+    await prisma.usuarioEmpresaPermissao.deleteMany({ where: { usuarioId: id } });
+    const linhas = permissoesPorEmpresa
+      .filter((p) => p.empresaId)
+      .map((p) => ({
+        usuarioId: id,
+        empresaId: Number(p.empresaId),
+        menus: Array.isArray(p.menus) ? p.menus : [],
+      }));
+    if (linhas.length) await prisma.usuarioEmpresaPermissao.createMany({ data: linhas });
+  }
+
   const usuario = await prisma.usuario.update({
     where: { id: Number(req.params.id) },
     data: {
@@ -60,11 +76,10 @@ router.put("/:id", exigirAdmin, asyncHandler(async (req, res) => {
       // só mexe nisso se o front mandou array (mesmo vazio, pra permitir
       // remover todo acesso).
       empresas: Array.isArray(empresaIds) ? { set: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
-      // Mesma regra dos menus: array substitui a lista inteira.
-      permissoes: Array.isArray(permissoes) ? permissoes : undefined,
     },
     select: {
       id: true, nome: true, email: true, papel: true, ativo: true, permissoes: true,
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
       empresas: { select: { id: true, razaoSocial: true } },
       colaboradorId: true,
       colaborador: { select: { id: true, nome: true, cargo: true, setor: true } },

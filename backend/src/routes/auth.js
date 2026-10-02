@@ -12,6 +12,20 @@ const router = express.Router();
 // agenda faria as pessoas simplesmente pararem de abrir.
 const DURACAO_TOKEN = { web: "8h", app: "30d" };
 
+/**
+ * Menus liberados para esta pessoa NESTA empresa.
+ *
+ * A permissão é do par usuário + empresa. Sem configuração para a empresa
+ * escolhida, vale a lista antiga do usuário; sem nenhuma das duas, tudo
+ * liberado — que é o comportamento de quem foi cadastrado antes desta trava
+ * existir, e evita trancar alguém por falta de configuração.
+ */
+function menusDoUsuario(usuario, empresaId) {
+  const daEmpresa = usuario.permissoesPorEmpresa?.find((p) => p.empresaId === empresaId);
+  if (daEmpresa) return daEmpresa.menus || [];
+  return usuario.permissoes || [];
+}
+
 function gerarToken(usuario, empresaId, origem = "web") {
   return jwt.sign(
     // O colaborador vinculado vai no token: a agenda e os documentos usam
@@ -21,7 +35,7 @@ function gerarToken(usuario, empresaId, origem = "web") {
       sub: usuario.id, papel: usuario.papel, nome: usuario.nome,
       empresaId: empresaId ?? null,
       colaboradorId: usuario.colaboradorId ?? null,
-      permissoes: usuario.permissoes || [],
+      permissoes: menusDoUsuario(usuario, empresaId),
     },
     process.env.JWT_SECRET,
     { expiresIn: DURACAO_TOKEN[origem] || DURACAO_TOKEN.web }
@@ -37,7 +51,7 @@ function gerarToken(usuario, empresaId, origem = "web") {
 // efeito prático pra quem é "operador" — um "admin" acessa todas as
 // empresas ativas automaticamente, então a lista é ignorada nesse caso.
 router.post("/registrar", asyncHandler(async (req, res) => {
-  const { nome, email, senha, papel, empresaIds, colaboradorId, permissoes } = req.body;
+  const { nome, email, senha, papel, empresaIds, colaboradorId, permissoesPorEmpresa } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ erro: "nome, email e senha são obrigatórios" });
   }
@@ -86,7 +100,14 @@ router.post("/registrar", asyncHandler(async (req, res) => {
       email,
       senhaHash,
       papel: totalUsuarios === 0 ? "admin" : papel === "admin" ? "admin" : "operador",
-      permissoes: Array.isArray(permissoes) ? permissoes : [],
+      permissoesPorEmpresa: Array.isArray(permissoesPorEmpresa) && permissoesPorEmpresa.length ? {
+        create: permissoesPorEmpresa
+          .filter((p) => p.empresaId)
+          .map((p) => ({
+            empresaId: Number(p.empresaId),
+            menus: Array.isArray(p.menus) ? p.menus : [],
+          })),
+      } : undefined,
       empresas: empresaIds?.length ? { connect: empresaIds.map((id) => ({ id: Number(id) })) } : undefined,
       // Liga o login à ficha de colaborador, quando informada.
       colaborador: colaboradorId ? { connect: { id: Number(colaboradorId) } } : undefined,
@@ -123,7 +144,10 @@ router.post("/registrar", asyncHandler(async (req, res) => {
 router.post("/renovar", autenticar, asyncHandler(async (req, res) => {
   const usuario = await prisma.usuario.findUnique({
     where: { id: req.usuario.id },
-    select: { id: true, nome: true, email: true, papel: true, ativo: true, colaboradorId: true, permissoes: true },
+    select: {
+      id: true, nome: true, email: true, papel: true, ativo: true, colaboradorId: true, permissoes: true,
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
+    },
   });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Usuário inativo" });
@@ -154,7 +178,10 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   const usuario = await prisma.usuario.findUnique({
     where: { email },
-    include: { empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true } } },
+    include: {
+      empresas: { where: { ativo: true }, select: { id: true, razaoSocial: true } },
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
+    },
   });
   if (!usuario || !usuario.ativo) {
     return res.status(401).json({ erro: "Credenciais inválidas" });
@@ -173,7 +200,7 @@ router.post("/login", asyncHandler(async (req, res) => {
   if (totalEmpresas === 0) {
     return res.json({
       token: gerarToken(usuario, null, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: null,
     });
   }
@@ -193,7 +220,7 @@ router.post("/login", asyncHandler(async (req, res) => {
     const unica = empresasPermitidas[0];
     return res.json({
       token: gerarToken(usuario, unica.id, origem),
-      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
+      usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
       empresa: unica,
     });
   }
@@ -211,7 +238,7 @@ router.post("/login", asyncHandler(async (req, res) => {
 
   res.json({
     token: gerarToken(usuario, empresaEscolhida.id, origem),
-    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null, permissoes: usuario.permissoes || [] },
+    usuario: { id: usuario.id, nome: usuario.nome, email: usuario.email, papel: usuario.papel, colaboradorId: usuario.colaboradorId ?? null },
     empresa: empresaEscolhida,
   });
 }));
@@ -236,11 +263,19 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
       // Vem do banco, não do token: alteração de permissão passa a valer na
       // próxima abertura da tela, sem exigir novo login.
       permissoes: true,
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
       colaborador: { select: { id: true, nome: true } },
     },
   });
 
-  res.json({ ...req.usuario, ...dados, empresa });
+  // O que a tela recebe é a lista já resolvida para a empresa da sessão.
+  const { permissoesPorEmpresa, ...resto } = dados;
+  res.json({
+    ...req.usuario,
+    ...resto,
+    permissoes: menusDoUsuario(dados, req.usuario.empresaId),
+    empresa,
+  });
 }));
 
 module.exports = router;

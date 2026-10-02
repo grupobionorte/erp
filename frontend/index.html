@@ -751,7 +751,7 @@ const MODULES = {
       { key: "senha", label: "Senha", type: "password", required: true, hideOnEdit: true },
       { key: "papel", label: "Papel", type: "select", options: ["operador", "admin"], default: "operador" },
       { key: "empresaIds", label: "Empresas com acesso", type: "empresas-multiselect" },
-      { key: "permissoes", label: "Menus liberados", type: "menus-multiselect" },
+      { key: "permissoesPorEmpresa", label: "Menus liberados por empresa", type: "permissoes-por-empresa" },
       {
         key: "colaboradorId", label: "Colaborador", type: "vinculo",
         fonte: "/colaboradores", vazio: "Sem colaborador vinculado",
@@ -766,7 +766,7 @@ const MODULES = {
       senha: data.senha,
       papel: data.papel || "operador",
       empresaIds: data.empresaIds || [],
-      permissoes: data.permissoes || [],
+      permissoesPorEmpresa: data.permissoesPorEmpresa || [],
       colaboradorId: data.colaboradorId ?? null,
     }),
     fromApi: (r) => ({
@@ -775,7 +775,9 @@ const MODULES = {
       email: r.email,
       papel: r.papel,
       empresaIds: (r.empresas || []).map(e => e.id),
-      permissoes: r.permissoes || [],
+      permissoesPorEmpresa: (r.permissoesPorEmpresa || []).map(p => ({
+        empresaId: p.empresaId, menus: p.menus || [],
+      })),
       colaboradorId: r.colaboradorId ?? null,
     }),
   },
@@ -1303,7 +1305,7 @@ function CadastroDeOutroModulo({ moduleKey, onFechar, onCriado }) {
   return <RecordForm moduleKey={moduleKey} record={null} onSave={salvar} onCancel={onFechar} />;
 }
 
-function Field({ field, value, onChange, disabled }) {
+function Field({ field, value, onChange, disabled, dados }) {
   // Campo que puxa outro cadastro para vincular (usuário <-> colaborador).
   // A lista vem da própria API, então o que aparece aqui é sempre o que
   // está cadastrado de verdade.
@@ -1520,6 +1522,84 @@ function Field({ field, value, onChange, disabled }) {
           ))}
         </div>
         <p className="hint">Só vale pra usuários com papel Operador — Admin acessa todas as empresas automaticamente.</p>
+      </div>
+    );
+  }
+
+  if (field.type === "permissoes-por-empresa") {
+    const [menus, setMenus] = useState(null);
+    const [empresas, setEmpresas] = useState(null);
+
+    useEffect(() => {
+      Promise.all([apiRequest("/usuarios/menus"), apiRequest("/empresas")])
+        .then(([m, e]) => { setMenus(m); setEmpresas(e); })
+        .catch(() => { setMenus([]); setEmpresas([]); });
+    }, []);
+
+    // Só as empresas que o usuário pode acessar: permitir configurar menu
+    // de uma empresa onde ele nem entra seria configuração morta.
+    const liberadas = (empresas || []).filter(e => (dados?.empresaIds || []).includes(e.id));
+    const porEmpresa = value || [];
+
+    const menusDa = (empresaId) =>
+      porEmpresa.find(p => Number(p.empresaId) === Number(empresaId))?.menus || [];
+
+    const definir = (empresaId, novosMenus) => {
+      const outras = porEmpresa.filter(p => Number(p.empresaId) !== Number(empresaId));
+      onChange([...outras, { empresaId, menus: novosMenus }]);
+    };
+
+    const alternar = (empresaId, chave) => {
+      const atuais = menusDa(empresaId);
+      definir(empresaId, atuais.includes(chave) ? atuais.filter(x => x !== chave) : [...atuais, chave]);
+    };
+
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+
+        {!dados?.empresaIds?.length && (
+          <p className="hint">Marque primeiro as empresas com acesso, acima.</p>
+        )}
+
+        {liberadas.map(empresa => {
+          const escolhidos = menusDa(empresa.id);
+          return (
+            <section key={empresa.id} className="pf-secao" style={{ paddingTop: 10 }}>
+              <h4 className="pf-secao-titulo" style={{ fontSize: 13 }}>
+                {empresa.nomeFantasia || empresa.razaoSocial}
+                <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+                  {escolhidos.length ? `${escolhidos.length} menu(s)` : "tudo liberado"}
+                </span>
+              </h4>
+              <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>
+                <button type="button" className="btn" style={{ padding: "3px 9px", fontSize: 12 }}
+                  onClick={() => definir(empresa.id, (menus || []).map(m => m.chave))}>
+                  Marcar todos
+                </button>
+                <button type="button" className="btn" style={{ padding: "3px 9px", fontSize: 12 }}
+                  onClick={() => definir(empresa.id, [])}>
+                  Limpar
+                </button>
+              </div>
+              <div className="checklist">
+                {menus === null && <p className="hint">Carregando…</p>}
+                {(menus || []).map(menu => (
+                  <label key={menu.chave} className="checklist-item">
+                    <input type="checkbox" checked={escolhidos.includes(menu.chave)}
+                      onChange={() => alternar(empresa.id, menu.chave)} />
+                    {menu.rotulo}
+                  </label>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+
+        <p className="hint">
+          Empresa sem nenhum menu marcado libera tudo nela. Admin acessa o sistema inteiro,
+          independentemente desta configuração.
+        </p>
       </div>
     );
   }
@@ -2186,6 +2266,7 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
                   value={data[f.key]}
                   onChange={v => setField(f.key, v)}
                   disabled={f.readOnlyOnEdit && editando}
+                  dados={data}
                 />
               </div>
             ))}

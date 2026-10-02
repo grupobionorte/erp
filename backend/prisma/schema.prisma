@@ -70,6 +70,7 @@ model Usuario {
 
   @@map("usuarios")
   inscricoesPush InscricaoPush[]
+  permissoesPorEmpresa UsuarioEmpresaPermissao[]
 }
 
 model Ncm {
@@ -198,6 +199,7 @@ model Empresa {
   equipamentos     Equipamento[]
   ordensManutencao OrdemManutencao[]
   operacoes Operacao[]
+  permissoesDeUsuarios UsuarioEmpresaPermissao[]
 }
 
 model Pessoa {
@@ -1228,4 +1230,23 @@ model Operacao {
 
   @@index([empresaId, codigo])
   @@map("operacoes")
+}
+
+// Menus liberados para um usuário DENTRO de uma empresa.
+//
+// A mesma pessoa costuma ter papéis diferentes em cada empresa do grupo:
+// cuida do faturamento numa e só do ponto na outra. Uma lista única não
+// consegue expressar isso.
+model UsuarioEmpresaPermissao {
+  id    Int      @id @default(autoincrement())
+  menus String[] @default([])
+
+  usuarioId Int     @map("usuario_id")
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  empresaId Int     @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, empresaId])
+  @@map("usuario_empresa_permissoes")
 }

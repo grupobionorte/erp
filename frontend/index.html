@@ -874,7 +874,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.005";
+const VERSAO_SISTEMA = "1.006";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -1521,7 +1521,7 @@ function Field({ field, value, onChange, disabled, dados }) {
     return (
       <div className="field-group">
         <label className="field-label">{field.label}</label>
-        <div className="checklist checklist-colunas">
+        <div className="checklist">
           {opcoes === null && <p className="hint">Carregando…</p>}
           {opcoes?.length === 0 && <p className="hint">Nenhuma empresa cadastrada ainda.</p>}
           {(opcoes || []).map(emp => (
@@ -9425,13 +9425,6 @@ function ErpBiomassa() {
         .emissao-form { max-width: 420px; }
         .checklist { display: flex; flex-direction: column; gap: 6px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; padding: 8px; max-height: 160px; overflow-y: auto; }
         .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-        /* Lista curta em várias colunas: numa coluna só, dez empresas viram
-           uma tira estreita e rolável sem necessidade. */
-        .checklist-colunas {
-          display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-          gap: 4px 14px; max-height: none;
-        }
-
         /* Permissões: um cartão por empresa, lado a lado. */
         .permissoes-grade {
           display: grid; gap: 10px;

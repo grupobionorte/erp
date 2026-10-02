@@ -599,17 +599,25 @@ const MODULES = {
       { key: "descricao", label: "Descrição", type: "text", required: true },
       { key: "dataInicio", label: "Data de início", type: "date" },
       { key: "dataFim", label: "Data de término", type: "date" },
+      {
+        key: "fornecedorId", label: "Fornecedor da matéria-prima", type: "vinculo",
+        fonte: "/pessoas?papel=fornecedor", vazio: "Nenhum",
+        cadastroModulo: "fornecedores",
+        // Nome com o documento, como nas demais listas de pessoa.
+        rotulo: (f) => rotuloPessoa({ nome: f.nomeRazaoSocial, documento: f.documento }),
+      },
       // Base do custo de cada viagem: multiplicado pela quantidade
       // descarregada.
       { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda" },
     ],
-    columns: ["codigo", "descricao", "periodo"],
+    columns: ["codigo", "descricao", "fornecedorNome", "periodo"],
     toApi: (data) => ({
       codigo: data.codigo,
       descricao: data.descricao,
       dataInicio: data.dataInicio || null,
       dataFim: data.dataFim || null,
       valorUnitarioMateriaPrima: data.valorUnitarioMateriaPrima === "" ? null : data.valorUnitarioMateriaPrima,
+      fornecedorId: data.fornecedorId ?? null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -618,6 +626,8 @@ const MODULES = {
       dataInicio: r.dataInicio ? String(r.dataInicio).slice(0, 10) : "",
       dataFim: r.dataFim ? String(r.dataFim).slice(0, 10) : "",
       valorUnitarioMateriaPrima: r.valorUnitarioMateriaPrima ?? "",
+      fornecedorId: r.fornecedorId ?? null,
+      fornecedorNome: r.fornecedor?.nomeRazaoSocial || "—",
       // Coluna só de leitura, para a listagem mostrar o período numa linha.
       periodo: [
         r.dataInicio ? new Date(r.dataInicio).toLocaleDateString("pt-BR") : "—",
@@ -879,7 +889,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.018";
+const VERSAO_SISTEMA = "1.019";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {

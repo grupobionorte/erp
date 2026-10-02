@@ -16,12 +16,13 @@ router.get("/", asyncHandler(async (req, res) => {
       empresaId: req.usuario.empresaId || undefined,
       ativo: req.query.inativas === "1" ? undefined : true,
     },
+    include: { fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } },
     orderBy: [{ dataInicio: "desc" }, { codigo: "asc" }],
   }));
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -34,13 +35,14 @@ router.post("/", asyncHandler(async (req, res) => {
       dataFim: dataDoDia(dataFim) || undefined,
       valorUnitarioMateriaPrima: valorUnitarioMateriaPrima !== undefined && valorUnitarioMateriaPrima !== ""
         ? Number(valorUnitarioMateriaPrima) : undefined,
+      fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
   }));
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -54,6 +56,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorUnitarioMateriaPrima: valorUnitarioMateriaPrima === "" || valorUnitarioMateriaPrima === null
         ? null
         : (valorUnitarioMateriaPrima !== undefined ? Number(valorUnitarioMateriaPrima) : undefined),
+      fornecedorId: fornecedorId === "" || fornecedorId === null
+        ? null
+        : (fornecedorId !== undefined ? Number(fornecedorId) : undefined),
     },
   }));
 }));

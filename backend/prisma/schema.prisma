@@ -245,6 +245,7 @@ model Pessoa {
   @@unique([documento, empresaId])
   @@map("pessoas")
   contasPagar ContaPagar[]
+  operacoesComoFornecedor Operacao[] @relation("OperacoesFornecedor")
 }
 
 model Colaborador {
@@ -1224,6 +1225,10 @@ model Operacao {
   // Quanto custa a matéria-prima por unidade nesta operação. É o que
   // transforma a quantidade descarregada em custo, viagem a viagem.
   valorUnitarioMateriaPrima Float? @map("valor_unitario_materia_prima")
+
+  // De quem vem a matéria-prima desta operação.
+  fornecedorId Int?    @map("fornecedor_id")
+  fornecedor   Pessoa? @relation("OperacoesFornecedor", fields: [fornecedorId], references: [id])
 
   ativo Boolean @default(true)
 

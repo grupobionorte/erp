@@ -892,7 +892,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.024";
+const VERSAO_SISTEMA = "1.025";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2308,6 +2308,12 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
   );
 }
 
+// Cores do resultado da viagem: azul é o que entra para a empresa,
+// vermelho é o que sai. O lucro fica azul ou vermelho conforme o sinal.
+const COR_CREDITO = "#1565c0";
+const COR_DEBITO = "#c62828";
+const corDoLucro = (valor) => (valor != null && valor < 0 ? COR_DEBITO : COR_CREDITO);
+
 // Lançamento de uma viagem. Os totais aparecem calculados enquanto se
 // digita, e podem ser sobrescritos quando a conta não fecha com a realidade.
 function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }) {
@@ -2390,14 +2396,12 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
   // Campo calculado: mostra o valor sem deixar editar, com a fórmula
   // embaixo. Deixar editável permitiria um número que não corresponde à
   // conta, e aí ninguém saberia qual dos dois está certo.
-  const ValorCalculado = ({ valor, nota, destaque }) => (
+  const ValorCalculado = ({ valor, nota, cor }) => (
     <>
       <input
         disabled
         value={valor != null ? `R$ ${formatarMoeda(valor)}` : ""}
-        style={destaque
-          ? { fontWeight: 600, color: valor != null && valor < 0 ? "#c62828" : "#00732F" }
-          : undefined}
+        style={cor ? { fontWeight: 600, color: cor } : undefined}
       />
       <p className="hint">{nota}</p>
     </>
@@ -2540,12 +2544,13 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Valor total do serviço</label>
-                <ValorCalculado valor={totalServico} nota="unitário da NF × quantidade descarregada" />
+                <ValorCalculado valor={totalServico} nota="unitário da NF × quantidade descarregada" cor={COR_CREDITO} />
               </div>
               <div className="field-group">
                 <label className="field-label">Custo da matéria-prima</label>
                 <ValorCalculado
                   valor={custoMateriaPrima}
+                  cor={COR_DEBITO}
                   nota={precoMateriaPrima != null
                     ? `R$ ${formatarMoeda(precoMateriaPrima)} × quantidade descarregada`
                     : "informe o valor unitário na aba Dados da operação"}
@@ -2553,11 +2558,11 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
               </div>
               <div className="field-group">
                 <label className="field-label">Transporte</label>
-                <ValorCalculado valor={custoTransporte} nota="unitário × quantidade descarregada" />
+                <ValorCalculado valor={custoTransporte} nota="unitário × quantidade descarregada" cor={COR_DEBITO} />
               </div>
               <div className="field-group">
                 <label className="field-label">Lucro bruto</label>
-                <ValorCalculado valor={lucro} nota="serviço − matéria-prima − transporte" destaque />
+                <ValorCalculado valor={lucro} nota="serviço − matéria-prima − transporte" cor={corDoLucro(lucro)} />
               </div>
             </div>
           </section>
@@ -2634,11 +2639,12 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
         <div className="cte-resumo" style={{ marginBottom: 12 }}>
           <div><span className="cte-resumo-rotulo">Notas</span><span className="cte-resumo-valor">{money(T.valorNf)}</span></div>
           <div><span className="cte-resumo-rotulo">Transporte</span><span className="cte-resumo-valor">{money(T.transporte)}</span></div>
-          <div><span className="cte-resumo-rotulo">Serviço</span><span className="cte-resumo-valor">{money(T.servico)}</span></div>
-          <div><span className="cte-resumo-rotulo">Matéria-prima</span><span className="cte-resumo-valor">{money(T.materiaPrima)}</span></div>
+          <div><span className="cte-resumo-rotulo">Serviço</span><span className="cte-resumo-valor" style={{ color: COR_CREDITO }}>{money(T.servico)}</span></div>
+          <div><span className="cte-resumo-rotulo">Matéria-prima</span><span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(T.materiaPrima)}</span></div>
+          <div><span className="cte-resumo-rotulo">Transporte real</span><span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(T.custoTransporte)}</span></div>
           <div>
             <span className="cte-resumo-rotulo">Lucro bruto</span>
-            <span className="cte-resumo-valor" style={{ color: (T.lucro || 0) < 0 ? "#c62828" : "#00732F" }}>
+            <span className="cte-resumo-valor" style={{ color: corDoLucro(T.lucro || 0) }}>
               {money(T.lucro)}
             </span>
           </div>
@@ -2689,10 +2695,10 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 <td>{dataBr(v.dataDescarga)}</td>
                 <td style={{ textAlign: "right" }}>{v.quantidadeDescarga != null ? formatarQuantidade(v.quantidadeDescarga) : "—"}</td>
                 <td>{v.ticket || "—"}</td>
-                <td style={{ textAlign: "right" }}>{money(v.custoTransporte)}</td>
-                <td style={{ textAlign: "right" }}>{money(v.valorTotalServico)}</td>
-                <td style={{ textAlign: "right" }}>{money(v.custoMateriaPrima)}</td>
-                <td style={{ textAlign: "right", color: (v.lucroBruto || 0) < 0 ? "#c62828" : undefined }}>
+                <td style={{ textAlign: "right", color: COR_DEBITO }}>{money(v.custoTransporte)}</td>
+                <td style={{ textAlign: "right", color: COR_CREDITO }}>{money(v.valorTotalServico)}</td>
+                <td style={{ textAlign: "right", color: COR_DEBITO }}>{money(v.custoMateriaPrima)}</td>
+                <td style={{ textAlign: "right", color: corDoLucro(v.lucroBruto) }}>
                   {money(v.lucroBruto)}
                 </td>
                 <td className="actions-col" style={{ whiteSpace: "nowrap" }}>

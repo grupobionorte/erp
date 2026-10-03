@@ -163,40 +163,76 @@ const diaValido = (valor) => /^\d{4}-\d{2}-\d{2}$/.test(String(valor || ""));
 const inicioDoDia = (dia) => new Date(`${dia}T00:00:00-04:00`);
 const fimDoDia = (dia) => new Date(`${dia}T23:59:59.999-04:00`);
 
-router.get("/:id/viagens", asyncHandler(async (req, res) => {
-  // Filtro pela data da descarga. Os totais saem só das viagens filtradas,
-  // para o resumo da tela bater com a lista que aparece.
-  const { descargaDe, descargaAte } = req.query;
-  const filtroDescarga = diaValido(descargaDe) || diaValido(descargaAte)
-    ? {
-        dataDescarga: {
-          gte: diaValido(descargaDe) ? inicioDoDia(descargaDe) : undefined,
-          lte: diaValido(descargaAte) ? fimDoDia(descargaAte) : undefined,
-        },
-      }
-    : {};
+// Filtro pela data da descarga. Os totais saem só das viagens filtradas,
+// para o resumo da tela bater com a lista que aparece.
+function filtroDescarga({ descargaDe, descargaAte }) {
+  if (!diaValido(descargaDe) && !diaValido(descargaAte)) return {};
+  return {
+    dataDescarga: {
+      gte: diaValido(descargaDe) ? inicioDoDia(descargaDe) : undefined,
+      lte: diaValido(descargaAte) ? fimDoDia(descargaAte) : undefined,
+    },
+  };
+}
+
+function totaisDasViagens(viagens) {
+  const somar = (campo) => viagens.reduce((t, v) => t + (Number(v[campo]) || 0), 0);
+  return {
+    viagens: viagens.length,
+    quantidadeNf: somar("quantidadeNf"),
+    quantidadeDescarga: somar("quantidadeDescarga"),
+    valorNf: somar("valorTotalNf"),
+    transporte: somar("valorTotalTransporte"),
+    custoTransporte: somar("custoTransporte"),
+    servico: somar("valorTotalServico"),
+    materiaPrima: somar("custoMateriaPrima"),
+    lucro: somar("lucroBruto"),
+  };
+}
+
+// CPF/CNPJ do jeito que a tela grava no cliente da viagem (nome - documento).
+function documentoFormatado(documento) {
+  const d = String(documento || "").replace(/\D/g, "");
+  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  return null;
+}
+
+// Viagens de um cliente, de todas as operações. Fica aqui, e não em
+// /pessoas, para seguir a permissão do menu Operações: quem não vê as
+// operações também não vê as viagens pelo cadastro do cliente.
+//
+// O cliente da viagem é gravado como texto ("NOME - CNPJ"), então a busca é
+// pelo CNPJ/CPF, que não muda — trocar a razão social no cadastro não faz
+// as viagens antigas sumirem. Texto digitado sem o documento não entra.
+router.get("/viagens-por-cliente/:pessoaId", asyncHandler(async (req, res) => {
+  const pessoa = await prisma.pessoa.findUnique({
+    where: { id: Number(req.params.pessoaId) },
+    select: { documento: true },
+  });
+  const documento = documentoFormatado(pessoa?.documento);
+  if (!documento) return res.json({ viagens: [], totais: totaisDasViagens([]) });
 
   const viagens = await prisma.viagemOperacao.findMany({
-    where: { operacaoId: Number(req.params.id), ...filtroDescarga },
+    where: {
+      clienteDestino: { contains: documento },
+      operacao: { empresaId: req.usuario.empresaId || undefined },
+      ...filtroDescarga(req.query),
+    },
+    include: { operacao: { select: { id: true, codigo: true, descricao: true } } },
     orderBy: [{ dataLancamento: "desc" }, { id: "desc" }],
   });
 
-  const somar = (campo) => viagens.reduce((t, v) => t + (Number(v[campo]) || 0), 0);
+  res.json({ viagens, totais: totaisDasViagens(viagens) });
+}));
 
-  res.json({
-    viagens,
-    totais: {
-      viagens: viagens.length,
-      quantidadeNf: somar("quantidadeNf"),
-      quantidadeDescarga: somar("quantidadeDescarga"),
-      valorNf: somar("valorTotalNf"),
-      transporte: somar("valorTotalTransporte"),
-      custoTransporte: somar("custoTransporte"),
-      servico: somar("valorTotalServico"),
-      materiaPrima: somar("custoMateriaPrima"),
-      lucro: somar("lucroBruto"),
-    },
+router.get("/:id/viagens", asyncHandler(async (req, res) => {
+  const viagens = await prisma.viagemOperacao.findMany({
+    where: { operacaoId: Number(req.params.id), ...filtroDescarga(req.query) },
+    orderBy: [{ dataLancamento: "desc" }, { id: "desc" }],
   });
+
+  res.json({ viagens, totais: totaisDasViagens(viagens) });
 }));
 
 // O preço da matéria-prima é da operação, não da viagem: mudou o preço,

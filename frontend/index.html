@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.030";
+const VERSAO_SISTEMA = "1.031";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2034,6 +2034,9 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
   const [salvando, setSalvando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [salvo, setSalvo] = useState(false);
+  // Cliente já salvo ganha a aba das viagens lançadas para ele.
+  const temViagens = moduleKey === "clientes" && editando;
+  const [aba, setAba] = useState("dados");
 
   const pf = data.tipo === "Pessoa Física";
   const endereco = data.endereco || emptyEndereco;
@@ -2121,7 +2124,16 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
+        {temViagens && (
+          <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
+            <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
+            <button type="button" className="cte-aba" aria-selected={aba === "viagens"} onClick={() => setAba("viagens")}>Viagens</button>
+          </div>
+        )}
+
         <div className="modal-body">
+          {temViagens && aba === "viagens" && <ViagensDoCliente pessoaId={record.id} />}
+          <div hidden={aba !== "dados"}>
           <section className="pf-secao">
             <h4 className="pf-secao-titulo">Identificação</h4>
             <div className="pf-grade">
@@ -2261,6 +2273,7 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
             </div>
             {erro && <p className="pf-aviso">{erro}</p>}
           </section>
+          </div>
         </div>
 
         <div className="modal-footer pf-rodape">
@@ -2828,6 +2841,104 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
           onSalvo={() => { setEditando(null); carregar(); }}
         />
       )}
+    </div>
+  );
+}
+
+// Viagens lançadas para um cliente, em todas as operações. Só consulta: a
+// viagem é lançada e corrigida dentro da operação. O vínculo é o CPF/CNPJ
+// gravado no "Cliente (destino)" da viagem.
+function ViagensDoCliente({ pessoaId }) {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [descargaDe, setDescargaDe] = useState("");
+  const [descargaAte, setDescargaAte] = useState("");
+  const filtrando = Boolean(descargaDe || descargaAte);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (descargaDe) params.set("descargaDe", descargaDe);
+    if (descargaAte) params.set("descargaAte", descargaAte);
+    const consulta = params.toString() ? `?${params}` : "";
+    apiRequest(`/operacoes/viagens-por-cliente/${pessoaId}${consulta}`)
+      .then(r => { setDados(r); setErro(""); })
+      .catch(e => setErro(e.message));
+  }, [pessoaId, descargaDe, descargaAte]);
+
+  if (erro) return <p className="error-text">{erro}</p>;
+  if (!dados) return <p className="hint">Carregando…</p>;
+
+  const T = dados.totais;
+  const dataBr = (iso) => (iso ? new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR") : "—");
+  const money = (v) => (v != null ? `R$ ${formatarMoeda(v)}` : "—");
+  const qtde = (v) => (v != null ? formatarQuantidade(v) : "—");
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+        <div className="subtle" style={{ fontSize: 13 }}>
+          {T.viagens} viagem{T.viagens !== 1 ? "ns" : ""}{filtrando ? " no período" : ""} ·
+          {" "}carregado {formatarQuantidade(T.quantidadeNf || 0)} ·
+          {" "}descarregado {formatarQuantidade(T.quantidadeDescarga || 0)} ·
+          {" "}serviço <span style={{ color: COR_CREDITO, fontWeight: 600 }}>{money(T.servico)}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className="subtle" style={{ fontSize: 13 }}>Descarga de</span>
+          <input type="date" value={descargaDe} onChange={e => setDescargaDe(e.target.value)}
+            aria-label="Data inicial da descarga" style={{ width: 150 }} />
+          <span className="subtle" style={{ fontSize: 13 }}>até</span>
+          <input type="date" value={descargaAte} onChange={e => setDescargaAte(e.target.value)}
+            aria-label="Data final da descarga" style={{ width: 150 }} />
+          {filtrando && (
+            <button className="btn" style={{ padding: "6px 10px", fontSize: 13 }}
+              onClick={() => { setDescargaDe(""); setDescargaAte(""); }}>
+              Limpar
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table className="data-table tabela-densa planilha-viagens">
+          <thead>
+            <tr>
+              <th>Lançam.</th>
+              <th>Operação</th>
+              <th>NF</th>
+              <th style={{ textAlign: "right" }}>Qtde</th>
+              <th style={{ textAlign: "right" }}>Total NF</th>
+              <th>Placa</th>
+              <th>Descarga</th>
+              <th style={{ textAlign: "right" }}>Qtde desc.</th>
+              <th>Ticket</th>
+              <th style={{ textAlign: "right" }}>Serviço</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dados.viagens.map(v => (
+              <tr key={v.id}>
+                <td>{dataBr(v.dataLancamento)}</td>
+                <td><div className="cortar" title={v.operacao?.descricao || ""}>{v.operacao?.codigo || "—"}</div></td>
+                <td>{v.numeroNf || "—"}</td>
+                <td style={{ textAlign: "right" }}>{qtde(v.quantidadeNf)}</td>
+                <td style={{ textAlign: "right" }}>{money(v.valorTotalNf)}</td>
+                <td>{v.placa || "—"}</td>
+                <td>{dataBr(v.dataDescarga)}</td>
+                <td style={{ textAlign: "right" }}>{qtde(v.quantidadeDescarga)}</td>
+                <td>{v.ticket || "—"}</td>
+                <td style={{ textAlign: "right", color: COR_CREDITO }}>{money(v.valorTotalServico)}</td>
+              </tr>
+            ))}
+            {!dados.viagens.length && <tr><td colSpan={10}>
+              {filtrando ? "Nenhuma viagem com descarga nesse período." : "Nenhuma viagem lançada para este cliente."}
+            </td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="hint" style={{ marginTop: 10 }}>
+        Aparecem as viagens em que este cliente foi escolhido como "Cliente (destino)" no carregamento.
+        Para corrigir uma viagem, abra a operação dela.
+      </p>
     </div>
   );
 }

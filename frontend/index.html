@@ -596,9 +596,6 @@ const MODULES = {
     // Frente de trabalho: contrato de colheita, obra, safra.
     fields: [
       { key: "codigo", label: "Código", type: "text", required: true },
-      { key: "descricao", label: "Descrição", type: "text", required: true },
-      { key: "dataInicio", label: "Data de início", type: "date" },
-      { key: "dataFim", label: "Data de término", type: "date" },
       {
         key: "fornecedorId", label: "Fornecedor da matéria-prima", type: "vinculo",
         fonte: "/pessoas?papel=fornecedor", vazio: "Nenhum",
@@ -606,6 +603,9 @@ const MODULES = {
         // Nome com o documento, como nas demais listas de pessoa.
         rotulo: (f) => rotuloPessoa({ nome: f.nomeRazaoSocial, documento: f.documento }),
       },
+      { key: "descricao", label: "Descrição", type: "text", required: true },
+      { key: "dataInicio", label: "Data de início", type: "date" },
+      { key: "dataFim", label: "Data de término", type: "date" },
       // Base do custo de cada viagem: multiplicado pela quantidade
       // descarregada.
       { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda" },
@@ -892,7 +892,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.021";
+const VERSAO_SISTEMA = "1.022";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {

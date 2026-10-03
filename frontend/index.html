@@ -45,6 +45,7 @@ function Plus(props) { return <IconBase {...props}><line x1="12" y1="5" x2="12" 
 function Pencil(props) { return <IconBase {...props}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></IconBase>; }
 function Trash2(props) { return <IconBase {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>; }
 function X(props) { return <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>; }
+function ChevronDown(props) { return <IconBase {...props}><polyline points="6 9 12 15 18 9"/></IconBase>; }
 function Search(props) { return <IconBase {...props}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>; }
 function ChevronRight(props) { return <IconBase {...props}><polyline points="9 18 15 12 9 6"/></IconBase>; }
 function AlertCircle(props) { return <IconBase {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></IconBase>; }
@@ -902,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.028";
+const VERSAO_SISTEMA = "1.029";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2319,6 +2320,85 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
   );
 }
 
+// Campo de texto com lista de sugestões. Substitui o <datalist> do
+// navegador, que filtra pelo que já está escrito: com um cliente escolhido,
+// a seta só mostrava ele mesmo, e era preciso apagar o campo para ver os
+// outros. Aqui a seta mostra sempre a lista inteira; digitar filtra.
+// O texto continua livre — vale também o que não está na lista.
+const textoDeBusca = (t) => String(t || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+function CampoComLista({ value, onChange, opcoes, ariaLabel }) {
+  // null = fechado; "todos" = aberto pela seta; "filtrado" = aberto digitando
+  const [modo, setModo] = useState(null);
+  const [destaque, setDestaque] = useState(-1);
+
+  const visiveis = modo === "filtrado" && value
+    ? opcoes.filter(o => textoDeBusca(o.valor).includes(textoDeBusca(value)))
+    : opcoes;
+
+  const escolher = (opcao) => { onChange(opcao.valor); setModo(null); setDestaque(-1); };
+
+  const teclado = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!modo) { setModo("todos"); setDestaque(0); return; }
+      setDestaque(i => Math.min(i + 1, visiveis.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setDestaque(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter" && modo && visiveis[destaque]) {
+      e.preventDefault();
+      escolher(visiveis[destaque]);
+    } else if (e.key === "Escape") {
+      setModo(null);
+    }
+  };
+
+  return (
+    <div className="campo-lista">
+      <input
+        value={value ?? ""}
+        aria-label={ariaLabel}
+        onChange={e => { onChange(e.target.value); setModo("filtrado"); setDestaque(-1); }}
+        onKeyDown={teclado}
+        onBlur={() => setTimeout(() => setModo(null), 150)}
+      />
+      <button
+        type="button"
+        className="campo-lista-seta"
+        tabIndex={-1}
+        aria-label="Mostrar todos"
+        onMouseDown={e => {
+          // Sem isso o campo perde o foco, o onBlur fecha a lista logo
+          // depois de abrir e a seta parece não responder.
+          e.preventDefault();
+          e.currentTarget.previousSibling.focus();
+          setModo(m => (m === "todos" ? null : "todos"));
+          setDestaque(-1);
+        }}
+      >
+        <ChevronDown size={16} />
+      </button>
+      {modo && visiveis.length > 0 && (
+        <div className="ncm-suggestions">
+          {visiveis.map((o, i) => (
+            <button
+              key={o.chave ?? o.valor}
+              type="button"
+              className="ncm-suggestion"
+              style={i === destaque || o.valor === value ? { background: "var(--erp-azul-claro)" } : undefined}
+              onMouseDown={e => { e.preventDefault(); escolher(o); }}
+            >
+              <span>{o.valor}</span>
+              {o.detalhe && <span className="ncm-descricao">{o.detalhe}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Cores do resultado da viagem: azul é o que entra para a empresa,
 // vermelho é o que sai. O lucro fica azul ou vermelho conforme o sinal.
 const COR_CREDITO = "#1565c0";
@@ -2333,6 +2413,11 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
   // cliente ou o veículo sejam alterados depois.
   const { items: clientes } = useApiCollection("clientes");
   const { items: veiculos } = useApiCollection("veiculos");
+  // Nome e documento juntos, como nas listas de cliente dos documentos
+  // fiscais: razão social parecida entre filiais só se distingue pelo CNPJ.
+  const opcoesClientes = (clientes || []).map(c => ({ chave: c.id, valor: rotuloPessoa(c) }));
+  const opcoesPlacas = (veiculos || []).filter(v => v.placa)
+    .map(v => ({ chave: v.id, valor: v.placa, detalhe: v.descricao || v.modelo || "" }));
 
   const hoje = new Date().toISOString().slice(0, 10);
   const dia = (v) => (v ? String(v).slice(0, 10) : "");
@@ -2446,18 +2531,17 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
                   {/* O tomador quase sempre é o próprio cliente: acompanha o
                       cliente enquanto estiver vazio ou igual a ele. Se foi
                       trocado à mão, não é sobrescrito. */}
-                  <input list="viagem-clientes-destino" value={dados.clienteDestino}
-                    onChange={e => {
-                      const valor = e.target.value;
+                  <CampoComLista
+                    value={dados.clienteDestino}
+                    opcoes={opcoesClientes}
+                    ariaLabel="Cliente (destino)"
+                    onChange={valor => {
                       setDados(d => ({
                         ...d,
                         clienteDestino: valor,
                         tomador: !d.tomador || d.tomador === d.clienteDestino ? valor : d.tomador,
                       }));
                     }} />
-                  <datalist id="viagem-clientes-destino">
-                    {(clientes || []).map(c => <option key={c.id} value={rotuloPessoa(c)} />)}
-                  </datalist>
                 </div>
                 <div className="field-group">
                   <label className="field-label">Quantidade</label>
@@ -2488,24 +2572,13 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
                 </div>
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Tomador</label>
-                  <input list="viagem-tomadores" value={dados.tomador}
-                    onChange={e => set("tomador", e.target.value)} />
-                  {/* Nome e documento juntos, como nas listas de cliente dos
-                      documentos fiscais: razão social parecida entre filiais
-                      só se distingue pelo CNPJ. */}
-                  <datalist id="viagem-tomadores">
-                    {(clientes || []).map(c => <option key={c.id} value={rotuloPessoa(c)} />)}
-                  </datalist>
+                  <CampoComLista value={dados.tomador} opcoes={opcoesClientes} ariaLabel="Tomador"
+                    onChange={v => set("tomador", v)} />
                 </div>
                 <div className="field-group">
                   <label className="field-label">Placa</label>
-                  <input list="viagem-placas" value={dados.placa}
-                    onChange={e => set("placa", e.target.value.toUpperCase())} />
-                  <datalist id="viagem-placas">
-                    {(veiculos || []).map(v => (
-                      <option key={v.id} value={v.placa}>{v.descricao || v.modelo || ""}</option>
-                    ))}
-                  </datalist>
+                  <CampoComLista value={dados.placa} opcoes={opcoesPlacas} ariaLabel="Placa"
+                    onChange={v => set("placa", v.toUpperCase())} />
                 </div>
                 <div className="field-group">
                   <label className="field-label">Valor unitário</label>
@@ -9988,6 +10061,13 @@ function ErpBiomassa() {
         .doc-tipo { font-size: 15px; font-weight: 500; margin: 0; }
         .loading { padding: 2rem; color: var(--text-secondary, #6b6b68); font-size: 13px; }
         .ncm-field { position: relative; }
+        .campo-lista { position: relative; }
+        .campo-lista input { padding-right: 30px; }
+        .campo-lista-seta {
+          position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+          border: none; background: none; cursor: pointer; padding: 4px 6px;
+          color: var(--text-secondary, #6b6b68); display: flex; align-items: center;
+        }
         .ncm-suggestions { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface-2, #fff); border: 0.5px solid var(--border-strong, #c9c6ba); border-radius: 8px; max-height: 220px; overflow-y: auto; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .ncm-suggestion { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; border: none; background: none; cursor: pointer; text-align: left; border-bottom: 0.5px solid var(--border, #e5e3da); }
         .ncm-suggestion:last-child { border-bottom: none; }

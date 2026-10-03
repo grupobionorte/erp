@@ -892,7 +892,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.022";
+const VERSAO_SISTEMA = "1.023";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2326,6 +2326,7 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
     quantidadeNf: viagem?.quantidadeNf ?? "",
     valorUnitarioNf: viagem?.valorUnitarioNf ?? "",
     valorTotalNf: viagem?.valorTotalNf ?? "",
+    clienteDestino: viagem?.clienteDestino || "",
     dataCte: dia(viagem?.dataCte),
     numeroCte: viagem?.numeroCte || "",
     tomador: viagem?.tomador || "",
@@ -2424,6 +2425,14 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
                 <div className="field-group">
                   <label className="field-label">Número da NF</label>
                   <input value={dados.numeroNf} onChange={e => set("numeroNf", e.target.value)} />
+                </div>
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Cliente (destino)</label>
+                  <input list="viagem-clientes-destino" value={dados.clienteDestino}
+                    onChange={e => set("clienteDestino", e.target.value)} />
+                  <datalist id="viagem-clientes-destino">
+                    {(clientes || []).map(c => <option key={c.id} value={rotuloPessoa(c)} />)}
+                  </datalist>
                 </div>
                 <div className="field-group">
                   <label className="field-label">Quantidade</label>
@@ -2629,11 +2638,12 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
       {erro && <p className="error-text">{erro}</p>}
 
       <div style={{ overflowX: "auto" }}>
-        <table className="data-table tabela-densa" style={{ minWidth: 1100 }}>
+        <table className="data-table tabela-densa" style={{ minWidth: 1220 }}>
           <thead>
             <tr>
               <th>Lançam.</th>
               <th>NF</th>
+              <th>Cliente</th>
               <th style={{ textAlign: "right" }}>Qtde</th>
               <th style={{ textAlign: "right" }}>Unit.</th>
               <th style={{ textAlign: "right" }}>Total NF</th>
@@ -2657,6 +2667,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
               <tr key={v.id}>
                 <td>{dataBr(v.dataLancamento)}</td>
                 <td>{v.numeroNf || "—"}</td>
+                <td>{v.clienteDestino || "—"}</td>
                 <td style={{ textAlign: "right" }}>{v.quantidadeNf != null ? formatarQuantidade(v.quantidadeNf) : "—"}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorUnitarioNf)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalNf)}</td>
@@ -2680,7 +2691,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 </td>
               </tr>
             ))}
-            {!dados.viagens.length && <tr><td colSpan={18}>Nenhuma viagem lançada ainda.</td></tr>}
+            {!dados.viagens.length && <tr><td colSpan={19}>Nenhuma viagem lançada ainda.</td></tr>}
           </tbody>
         </table>
       </div>

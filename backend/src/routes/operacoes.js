@@ -135,6 +135,7 @@ function montarViagem(dados, valorUnitarioMateriaPrima) {
     quantidadeNf: numero(dados.quantidadeNf),
     valorUnitarioNf: numero(dados.valorUnitarioNf),
     valorTotalNf: calculado.totalNf,
+    clienteDestino: dados.clienteDestino || null,
 
     dataCte: dataDoDia(dados.dataCte),
     numeroCte: dados.numeroCte || null,

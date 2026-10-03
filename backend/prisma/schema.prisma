@@ -1276,6 +1276,9 @@ model ViagemOperacao {
   quantidadeNf   Float?   @map("quantidade_nf")
   valorUnitarioNf Float?  @map("valor_unitario_nf")
   valorTotalNf    Float?  @map("valor_total_nf")
+  // Para quem vai a carga. Texto, como o tomador: a viagem é registro
+  // histórico e não deve mudar se o cadastro do cliente mudar.
+  clienteDestino  String? @map("cliente_destino")
 
   // Conhecimento de transporte.
   dataCte   DateTime? @map("data_cte")

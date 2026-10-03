@@ -902,7 +902,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.027";
+const VERSAO_SISTEMA = "1.028";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2597,15 +2597,25 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
   const [dados, setDados] = useState(null);
   const [editando, setEditando] = useState(null);
   const [erro, setErro] = useState("");
+  // Período da descarga. O servidor filtra e devolve os totais só do
+  // período, para o resumo bater com a lista.
+  const [descargaDe, setDescargaDe] = useState("");
+  const [descargaAte, setDescargaAte] = useState("");
+  const filtrando = Boolean(descargaDe || descargaAte);
 
   const carregar = useCallback(async () => {
     if (!operacaoId) { setDados({ viagens: [], totais: {} }); return; }
+    const params = new URLSearchParams();
+    if (descargaDe) params.set("descargaDe", descargaDe);
+    if (descargaAte) params.set("descargaAte", descargaAte);
+    const consulta = params.toString() ? `?${params}` : "";
     try {
-      setDados(await apiRequest(`/operacoes/${operacaoId}/viagens`));
+      setDados(await apiRequest(`/operacoes/${operacaoId}/viagens${consulta}`));
+      setErro("");
     } catch (e) {
       setErro(e.message);
     }
-  }, [operacaoId]);
+  }, [operacaoId, descargaDe, descargaAte]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -2634,22 +2644,34 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
         </p>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
         <div className="subtle" style={{ fontSize: 13 }}>
-          {T.viagens} viagem{T.viagens !== 1 ? "ns" : ""} ·
+          {T.viagens} viagem{T.viagens !== 1 ? "ns" : ""}{filtrando ? " no período" : ""} ·
           {" "}carregado {formatarQuantidade(T.quantidadeNf || 0)} ·
           {" "}descarregado {formatarQuantidade(T.quantidadeDescarga || 0)}
         </div>
-        <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 13 }}
-          onClick={() => setEditando({})}>
-          <Plus size={14} /> Nova viagem
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className="subtle" style={{ fontSize: 13 }}>Descarga de</span>
+          <input type="date" value={descargaDe} onChange={e => setDescargaDe(e.target.value)}
+            aria-label="Data inicial da descarga" style={{ width: 150 }} />
+          <span className="subtle" style={{ fontSize: 13 }}>até</span>
+          <input type="date" value={descargaAte} onChange={e => setDescargaAte(e.target.value)}
+            aria-label="Data final da descarga" style={{ width: 150 }} />
+          {filtrando && (
+            <button className="btn" style={{ padding: "6px 10px", fontSize: 13 }}
+              onClick={() => { setDescargaDe(""); setDescargaAte(""); }}>
+              Limpar
+            </button>
+          )}
+          <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 13 }}
+            onClick={() => setEditando({})}>
+            <Plus size={14} /> Nova viagem
+          </button>
+        </div>
       </div>
 
       {T.viagens > 0 && (
         <div className="cte-resumo" style={{ marginBottom: 12 }}>
-          <div><span className="cte-resumo-rotulo">Notas</span><span className="cte-resumo-valor">{money(T.valorNf)}</span></div>
-          <div><span className="cte-resumo-rotulo">Transporte</span><span className="cte-resumo-valor">{money(T.transporte)}</span></div>
           <div><span className="cte-resumo-rotulo">Serviço</span><span className="cte-resumo-valor" style={{ color: COR_CREDITO }}>{money(T.servico)}</span></div>
           <div><span className="cte-resumo-rotulo">Matéria-prima</span><span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(T.materiaPrima)}</span></div>
           <div><span className="cte-resumo-rotulo">Transporte real</span><span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(T.custoTransporte)}</span></div>
@@ -2716,7 +2738,9 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 </td>
               </tr>
             ))}
-            {!dados.viagens.length && <tr><td colSpan={18}>Nenhuma viagem lançada ainda.</td></tr>}
+            {!dados.viagens.length && <tr><td colSpan={18}>
+              {filtrando ? "Nenhuma viagem com descarga nesse período." : "Nenhuma viagem lançada ainda."}
+            </td></tr>}
           </tbody>
         </table>
       </div>

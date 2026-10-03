@@ -157,9 +157,27 @@ function montarViagem(dados, valorUnitarioMateriaPrima) {
   };
 }
 
+// Dia inteiro no fuso da operação: a descarga é gravada ao meio-dia de
+// Cuiabá, e o filtro precisa pegar o dia de MT, não o de UTC.
+const diaValido = (valor) => /^\d{4}-\d{2}-\d{2}$/.test(String(valor || ""));
+const inicioDoDia = (dia) => new Date(`${dia}T00:00:00-04:00`);
+const fimDoDia = (dia) => new Date(`${dia}T23:59:59.999-04:00`);
+
 router.get("/:id/viagens", asyncHandler(async (req, res) => {
+  // Filtro pela data da descarga. Os totais saem só das viagens filtradas,
+  // para o resumo da tela bater com a lista que aparece.
+  const { descargaDe, descargaAte } = req.query;
+  const filtroDescarga = diaValido(descargaDe) || diaValido(descargaAte)
+    ? {
+        dataDescarga: {
+          gte: diaValido(descargaDe) ? inicioDoDia(descargaDe) : undefined,
+          lte: diaValido(descargaAte) ? fimDoDia(descargaAte) : undefined,
+        },
+      }
+    : {};
+
   const viagens = await prisma.viagemOperacao.findMany({
-    where: { operacaoId: Number(req.params.id) },
+    where: { operacaoId: Number(req.params.id), ...filtroDescarga },
     orderBy: [{ dataLancamento: "desc" }, { id: "desc" }],
   });
 

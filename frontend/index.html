@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.029";
+const VERSAO_SISTEMA = "1.030";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2327,7 +2327,7 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
 // O texto continua livre — vale também o que não está na lista.
 const textoDeBusca = (t) => String(t || "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
-function CampoComLista({ value, onChange, opcoes, ariaLabel }) {
+function CampoComLista({ value, onChange, opcoes, ariaLabel, placeholder }) {
   // null = fechado; "todos" = aberto pela seta; "filtrado" = aberto digitando
   const [modo, setModo] = useState(null);
   const [destaque, setDestaque] = useState(-1);
@@ -2359,6 +2359,7 @@ function CampoComLista({ value, onChange, opcoes, ariaLabel }) {
       <input
         value={value ?? ""}
         aria-label={ariaLabel}
+        placeholder={placeholder}
         onChange={e => { onChange(e.target.value); setModo("filtrado"); setDestaque(-1); }}
         onKeyDown={teclado}
         onBlur={() => setTimeout(() => setModo(null), 150)}
@@ -8430,6 +8431,11 @@ naturezaOperacao: naturezaOperacao || undefined,
     else if (unidade === "KG") setUnidadeMedidaCarga("KG");
   };
 
+  // Lista dos campos de produto: descrição, com código e unidade embaixo.
+  const opcoesProdutos = (produtos || []).filter(p => p.descricao).map(p => ({
+    chave: p.id, valor: p.descricao, detalhe: [p.codigo, p.unidade].filter(Boolean).join(" · "),
+  }));
+
   // A carga vem das notas vinculadas; os campos acima só existem para
   // corrigir quando a soma não representa o que está no caminhão.
   const somarNotas = (campo) => documentosTransportados.reduce((t, d) => t + (Number(d[campo]) || 0), 0);
@@ -8490,17 +8496,13 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Produto predominante</label>
                 {/* Busca no cadastro de produtos: escolher um produto já
                     define como a carga é medida. */}
-                <input
-                  list="produtos-predominante"
+                <CampoComLista
                   value={produtoPredominante}
+                  opcoes={opcoesProdutos}
+                  ariaLabel="Produto predominante"
                   placeholder={sugestaoProduto || "Busque no cadastro de produtos"}
-                  onChange={e => escolherProdutoPredominante(e.target.value)}
+                  onChange={escolherProdutoPredominante}
                 />
-                <datalist id="produtos-predominante">
-                  {(produtos || []).map(p => (
-                    <option key={p.id} value={p.descricao}>{[p.codigo, p.unidade].filter(Boolean).join(" · ")}</option>
-                  ))}
-                </datalist>
                 <p className="hint">É o que aparece no DACTe e o que a fiscalização de estrada confere na carroceria.</p>
               </div>
               <div className="field-group">
@@ -8637,17 +8639,13 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Natureza da mercadoria</label>
                 {/* É o produto que está sendo transportado: vem do cadastro
                     de produtos, com a lista filtrando conforme se digita. */}
-                <input
-                  list="produtos-natureza-mercadoria"
+                <CampoComLista
                   value={docEmEdicao.naturezaMercadoria}
+                  opcoes={opcoesProdutos}
+                  ariaLabel="Natureza da mercadoria"
                   placeholder="Busque no cadastro de produtos"
-                  onChange={e => setDocCampo("naturezaMercadoria", e.target.value)}
+                  onChange={v => setDocCampo("naturezaMercadoria", v)}
                 />
-                <datalist id="produtos-natureza-mercadoria">
-                  {(produtos || []).map(p => (
-                    <option key={p.id} value={p.descricao}>{[p.codigo, p.unidade].filter(Boolean).join(" · ")}</option>
-                  ))}
-                </datalist>
                 <p className="hint">
                   {(produtos || []).length
                     ? "Escolha um produto cadastrado ou escreva livremente."

@@ -892,7 +892,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.023";
+const VERSAO_SISTEMA = "1.024";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2428,8 +2428,18 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
                 </div>
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Cliente (destino)</label>
+                  {/* O tomador quase sempre é o próprio cliente: acompanha o
+                      cliente enquanto estiver vazio ou igual a ele. Se foi
+                      trocado à mão, não é sobrescrito. */}
                   <input list="viagem-clientes-destino" value={dados.clienteDestino}
-                    onChange={e => set("clienteDestino", e.target.value)} />
+                    onChange={e => {
+                      const valor = e.target.value;
+                      setDados(d => ({
+                        ...d,
+                        clienteDestino: valor,
+                        tomador: !d.tomador || d.tomador === d.clienteDestino ? valor : d.tomador,
+                      }));
+                    }} />
                   <datalist id="viagem-clientes-destino">
                     {(clientes || []).map(c => <option key={c.id} value={rotuloPessoa(c)} />)}
                   </datalist>

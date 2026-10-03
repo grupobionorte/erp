@@ -902,7 +902,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.026";
+const VERSAO_SISTEMA = "1.027";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2665,7 +2665,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
       {erro && <p className="error-text">{erro}</p>}
 
       <div style={{ overflowX: "auto" }}>
-        <table className="data-table tabela-densa planilha-viagens" style={{ minWidth: 1220 }}>
+        <table className="data-table tabela-densa planilha-viagens" style={{ minWidth: 1050 }}>
           <thead>
             <tr>
               <th>Lançam.</th>
@@ -2675,7 +2675,6 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
               <th style={{ textAlign: "right" }}>Unit.</th>
               <th style={{ textAlign: "right" }}>Total NF</th>
               <th>CT-e</th>
-              <th>Tomador</th>
               <th>Placa</th>
               <th style={{ textAlign: "right" }}>Unit. transp.</th>
               <th style={{ textAlign: "right" }}>Total transp.</th>
@@ -2699,7 +2698,6 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 <td style={{ textAlign: "right" }}>{money(v.valorUnitarioNf)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalNf)}</td>
                 <td>{v.numeroCte || "—"}<span className="subtle" style={{ fontSize: 11, marginLeft: 6 }}>{dataBr(v.dataCte)}</span></td>
-                <td><div className="cortar" title={v.tomador || ""}>{v.tomador || "—"}</div></td>
                 <td>{v.placa || "—"}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorUnitarioTransporte)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalTransporte)}</td>
@@ -2718,7 +2716,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 </td>
               </tr>
             ))}
-            {!dados.viagens.length && <tr><td colSpan={19}>Nenhuma viagem lançada ainda.</td></tr>}
+            {!dados.viagens.length && <tr><td colSpan={18}>Nenhuma viagem lançada ainda.</td></tr>}
           </tbody>
         </table>
       </div>

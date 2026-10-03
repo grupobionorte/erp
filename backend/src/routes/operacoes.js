@@ -22,7 +22,7 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -36,13 +36,14 @@ router.post("/", asyncHandler(async (req, res) => {
       valorUnitarioMateriaPrima: valorUnitarioMateriaPrima !== undefined && valorUnitarioMateriaPrima !== ""
         ? Number(valorUnitarioMateriaPrima) : undefined,
       fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
+      umidade: umidade !== undefined && umidade !== "" ? Number(umidade) : undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
   }));
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -59,6 +60,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       fornecedorId: fornecedorId === "" || fornecedorId === null
         ? null
         : (fornecedorId !== undefined ? Number(fornecedorId) : undefined),
+      umidade: umidade === "" || umidade === null
+        ? null
+        : (umidade !== undefined ? Number(umidade) : undefined),
     },
   }));
 }));

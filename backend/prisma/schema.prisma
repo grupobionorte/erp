@@ -1226,6 +1226,10 @@ model Operacao {
   // transforma a quantidade descarregada em custo, viagem a viagem.
   valorUnitarioMateriaPrima Float? @map("valor_unitario_materia_prima")
 
+  // Umidade contratada da biomassa, em porcentagem. Fica na operação
+  // porque é condição do contrato, não de cada viagem.
+  umidade Float?
+
   // De quem vem a matéria-prima desta operação.
   fornecedorId Int?    @map("fornecedor_id")
   fornecedor   Pessoa? @relation("OperacoesFornecedor", fields: [fornecedorId], references: [id])

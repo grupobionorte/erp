@@ -609,6 +609,7 @@ const MODULES = {
       // Base do custo de cada viagem: multiplicado pela quantidade
       // descarregada.
       { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda" },
+      { key: "umidade", label: "Umidade (%)", type: "number" },
     ],
     columns: ["codigo", "descricao", "fornecedorNome", "periodo"],
     toApi: (data) => ({
@@ -618,6 +619,7 @@ const MODULES = {
       dataFim: data.dataFim || null,
       valorUnitarioMateriaPrima: data.valorUnitarioMateriaPrima === "" ? null : data.valorUnitarioMateriaPrima,
       fornecedorId: data.fornecedorId ?? null,
+      umidade: data.umidade === "" ? null : data.umidade,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -628,6 +630,7 @@ const MODULES = {
       valorUnitarioMateriaPrima: r.valorUnitarioMateriaPrima ?? "",
       fornecedorId: r.fornecedorId ?? null,
       fornecedorNome: r.fornecedor?.nomeRazaoSocial || "—",
+      umidade: r.umidade ?? "",
       // Coluna só de leitura, para a listagem mostrar o período numa linha.
       periodo: [
         r.dataInicio ? new Date(r.dataInicio).toLocaleDateString("pt-BR") : "—",
@@ -889,7 +892,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.019";
+const VERSAO_SISTEMA = "1.021";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {

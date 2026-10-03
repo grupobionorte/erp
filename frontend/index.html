@@ -329,6 +329,7 @@ function mapEndereco(endereco) {
 const MODULES = {
   clientes: {
     label: "Clientes",
+    singular: "Cliente",
     icon: Users,
     color: "blue",
     apiPath: "/pessoas",
@@ -374,6 +375,7 @@ const MODULES = {
   },
   fornecedores: {
     label: "Fornecedores",
+    singular: "Fornecedor",
     icon: Building2,
     color: "teal",
     apiPath: "/pessoas",
@@ -417,6 +419,7 @@ const MODULES = {
   },
   colaboradores: {
     label: "Colaboradores",
+    singular: "Colaborador",
     icon: UserCog,
     color: "coral",
     apiPath: "/colaboradores",
@@ -460,6 +463,7 @@ const MODULES = {
   },
   transportadoras: {
     label: "Transportadoras",
+    singular: "Transportadora", feminino: true,
     icon: Truck,
     color: "amber",
     apiPath: "/transportadoras",
@@ -497,6 +501,7 @@ const MODULES = {
   },
   veiculos: {
     label: "Veículos",
+    singular: "Veículo",
     icon: Car,
     color: "purple",
     apiPath: "/veiculos",
@@ -590,6 +595,7 @@ const MODULES = {
   },
   operacoes: {
     label: "Operações",
+    singular: "Operação", feminino: true,
     icon: Building2,
     color: "blue",
     apiPath: "/operacoes",
@@ -640,6 +646,7 @@ const MODULES = {
   },
   motoristas: {
     label: "Motoristas",
+    singular: "Motorista",
     icon: Users,
     color: "amber",
     apiPath: "/motoristas",
@@ -694,6 +701,7 @@ const MODULES = {
   },
   produtos: {
     label: "Produtos",
+    singular: "Produto",
     icon: Package,
     color: "green",
     apiPath: "/produtos",
@@ -758,6 +766,7 @@ const MODULES = {
   },
   usuarios: {
     label: "Usuários",
+    singular: "Usuário",
     icon: Shield,
     color: "pink",
     adminOnly: true,
@@ -803,6 +812,7 @@ const MODULES = {
   },
   empresas: {
     label: "Configurações",
+    singular: "Empresa", feminino: true,
     icon: Settings,
     color: "gray",
     adminOnly: true,
@@ -892,7 +902,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.025";
+const VERSAO_SISTEMA = "1.026";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2015,7 +2025,8 @@ function JornadaAba({ colaboradorId }) {
 function PessoaForm({ moduleKey, record, onSave, onCancel }) {
   const config = MODULES[moduleKey];
   const editando = !!record?.id;
-  const rotuloSingular = config.label.replace(/es$/, "").replace(/s$/, "");
+  // Do MODULES: cortar "es" do nome do menu transformava Clientes em "Client".
+  const rotuloSingular = config.singular;
 
   const [data, setData] = useState(() => record || { tipo: "Pessoa Jurídica", contribuinte: "Contribuinte", endereco: emptyEndereco });
   const [erro, setErro] = useState("");
@@ -2654,7 +2665,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
       {erro && <p className="error-text">{erro}</p>}
 
       <div style={{ overflowX: "auto" }}>
-        <table className="data-table tabela-densa" style={{ minWidth: 1220 }}>
+        <table className="data-table tabela-densa planilha-viagens" style={{ minWidth: 1220 }}>
           <thead>
             <tr>
               <th>Lançam.</th>
@@ -2683,12 +2694,12 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
               <tr key={v.id}>
                 <td>{dataBr(v.dataLancamento)}</td>
                 <td>{v.numeroNf || "—"}</td>
-                <td>{v.clienteDestino || "—"}</td>
+                <td><div className="cortar" title={v.clienteDestino || ""}>{v.clienteDestino || "—"}</div></td>
                 <td style={{ textAlign: "right" }}>{v.quantidadeNf != null ? formatarQuantidade(v.quantidadeNf) : "—"}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorUnitarioNf)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalNf)}</td>
-                <td>{v.numeroCte || "—"}<span className="subtle" style={{ display: "block", fontSize: 11 }}>{dataBr(v.dataCte)}</span></td>
-                <td>{v.tomador || "—"}</td>
+                <td>{v.numeroCte || "—"}<span className="subtle" style={{ fontSize: 11, marginLeft: 6 }}>{dataBr(v.dataCte)}</span></td>
+                <td><div className="cortar" title={v.tomador || ""}>{v.tomador || "—"}</div></td>
                 <td>{v.placa || "—"}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorUnitarioTransporte)}</td>
                 <td style={{ textAlign: "right" }}>{money(v.valorTotalTransporte)}</td>
@@ -2793,7 +2804,9 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           tamanho embaixo do cursor. */}
       <div className={`modal modal-cadastro${temViagens ? " modal-planilha" : ""}`}>
         <div className="modal-header">
-          <h3>{editando ? "Editar" : "Novo"} {config.label.replace(/s$/, "")}</h3>
+          {/* Singular e gênero vêm do MODULES: tirar o "s" do nome do menu
+              dava "Editar Operaçõe" e "Novo Transportadora". */}
+          <h3>{editando ? "Editar" : config.feminino ? "Nova" : "Novo"} {config.singular}</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
@@ -9652,6 +9665,11 @@ function ErpBiomassa() {
         .tabela-densa .icon-btn { padding: 2px; }
         .tabela-densa .icon-btn svg { width: 14px; height: 14px; }
         .tabela-densa td, .tabela-densa th { vertical-align: middle; }
+        /* Planilha de viagens: uma viagem por linha, sempre. Nome longo de
+           cliente e tomador é cortado com reticências; o nome inteiro
+           aparece ao parar o mouse em cima. */
+        .planilha-viagens td { white-space: nowrap; }
+        .planilha-viagens .cortar { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 
         .tabela-compacta { table-layout: fixed; }
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem

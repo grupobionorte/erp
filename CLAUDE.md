@@ -66,10 +66,26 @@ notificações push).
 
 ## Decisões que não devem ser revertidas sem conversa
 
-**Fuso horário.** Data vinda da tela é só o dia; gravar como meia-noite UTC
-coloca o documento no dia anterior em Mato Grosso. Use
-`dataNoFusoComHoraAtual` ou meio-dia no fuso. Já houve um dia inteiro de
-notas com a data errada na listagem por causa disso.
+**Fuso horário.** O sistema inteiro trabalha no horário de Cuiabá
+(UTC-4). Data vinda da tela é só o dia; gravar como meia-noite UTC coloca o
+documento no dia anterior em Mato Grosso. Já houve um dia inteiro de notas
+com a data errada na listagem por causa disso.
+
+- Nunca use `new Date().toISOString().slice(0, 10)` como "hoje": depois das
+  20h em Cuiabá ele já é amanhã. Nem `slice(0, 10)` em instante com hora
+  (emissão, saída, batida): dá o dia em UTC.
+- Servidor: `backend/src/lib/fuso.js` — `hojeNoFuso`, `intervaloNoFuso`
+  (todo filtro de/até), `dataHoraNoFuso`, `instanteDaTela` (data+hora sem
+  fuso vinda da tela) e `diaDoCampo` (campo só-data que o Prisma devolve
+  como `Date`). Na emissão, `dataNoFusoComHoraAtual`.
+- Tela: no início do `index.html` — `FUSO_OPERACAO`, `hojeNoFuso`,
+  `diaDoInstante`/`horaDoInstante` (ler emissão e saída), `dataSemHoraBr`
+  (exibir campo só-data) e `dataBrDoInstante`.
+- O TZ do processo no Render continua UTC de propósito: filtros de campos
+  só-data contam com isso. Mudar exige revisar esses filtros antes.
+- 20:00 em Cuiabá é meia-noite UTC exata, o formato antigo "só o dia" que
+  `focusNfe.normalizarDataEmissao` completa com a hora atual. Por isso
+  `dataHoraNoFuso` da rota fiscal soma 1 ms nesse instante — não remova.
 
 **Documento fiscal autorizado é permanente.** Rascunho e rejeitado podem ser
 apagados; autorizado e cancelado, nunca. `scripts/zerar-banco.js` recusa

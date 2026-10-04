@@ -286,6 +286,47 @@ router.delete("/:id/viagens/:viagemId", asyncHandler(async (req, res) => {
 }));
 
 /* ---------------------------------------------------------------------------
+   Resumo de receitas e despesas da operação.
+
+   Receita: o serviço das viagens. Despesas: o que as próprias viagens já
+   carregam (matéria-prima e transporte real) mais as contas a pagar
+   lançadas para a operação. Conta cancelada não entra; aberta e paga
+   entram pelo valor da conta, porque a despesa existe mesmo antes de paga.
+--------------------------------------------------------------------------- */
+router.get("/:id/resumo", asyncHandler(async (req, res) => {
+  const operacaoId = Number(req.params.id);
+  const arredondar = (valor) => Math.round((Number(valor) || 0) * 100) / 100;
+  const [viagens, contas] = await Promise.all([
+    prisma.viagemOperacao.findMany({ where: { operacaoId } }),
+    prisma.contaPagar.findMany({
+      where: { operacaoId, status: { not: "cancelada" } },
+      select: { valor: true, status: true },
+    }),
+  ]);
+
+  const v = totaisDasViagens(viagens);
+  const somar = (lista) => arredondar(lista.reduce((t, c) => t + (Number(c.valor) || 0), 0));
+  const despesas = {
+    total: somar(contas),
+    pagas: somar(contas.filter((c) => c.status === "paga")),
+    abertas: somar(contas.filter((c) => c.status === "aberta")),
+    quantidade: contas.length,
+  };
+  const receitas = arredondar(v.servico);
+  const materiaPrima = arredondar(v.materiaPrima);
+  const transporte = arredondar(v.custoTransporte);
+
+  res.json({
+    viagens: v.viagens,
+    receitas,
+    materiaPrima,
+    transporte,
+    despesas,
+    resultado: arredondar(receitas - materiaPrima - transporte - despesas.total),
+  });
+}));
+
+/* ---------------------------------------------------------------------------
    Faturas da operação.
 
    Cobram do cliente de destino o valor do serviço (unitário da NF ×

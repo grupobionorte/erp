@@ -968,6 +968,11 @@ model ContaPagar {
   fornecedorId Int?    @map("fornecedor_id")
   fornecedor   Pessoa? @relation(fields: [fornecedorId], references: [id])
 
+  // Operação a que a despesa pertence, quando pertence: entra no resumo de
+  // despesas e receitas dela. Vazio é despesa geral da empresa.
+  operacaoId Int?      @map("operacao_id")
+  operacao   Operacao? @relation(fields: [operacaoId], references: [id])
+
   categoriaId Int?              @map("categoria_id")
   categoria   CategoriaDespesa? @relation(fields: [categoriaId], references: [id])
 
@@ -986,6 +991,7 @@ model ContaPagar {
   criadoEm DateTime @default(now()) @map("criado_em")
 
   @@index([empresaId, status, vencimento])
+  @@index([operacaoId])
   @@map("contas_pagar")
 }
 
@@ -1249,6 +1255,7 @@ model Operacao {
   @@map("operacoes")
   viagens ViagemOperacao[]
   faturas FaturaOperacao[]
+  contasPagar ContaPagar[]
 }
 
 // Menus liberados para um usuário DENTRO de uma empresa.

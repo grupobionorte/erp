@@ -19,7 +19,15 @@ const incluir = {
   fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } },
   categoria: { select: { id: true, nome: true } },
   centroCusto: { select: { id: true, nome: true } },
+  operacao: { select: { id: true, codigo: true, descricao: true } },
 };
+
+// "sem" = despesas gerais, sem operação; número = só daquela operação.
+function filtroOperacao(operacaoId) {
+  if (operacaoId === "sem") return { operacaoId: null };
+  if (operacaoId) return { operacaoId: Number(operacaoId) };
+  return {};
+}
 
 // Soma meses preservando o fim do mês: vencimento dia 31 em fevereiro cai
 // no último dia, não no dia 3 de março.
@@ -105,7 +113,7 @@ router.delete("/centros-custo/:id", asyncHandler(async (req, res) => {
 // Contas
 // ---------------------------------------------------------------------------
 router.get("/", asyncHandler(async (req, res) => {
-  const { de, ate, status, fornecedorId, categoriaId, centroCustoId } = req.query;
+  const { de, ate, status, fornecedorId, categoriaId, centroCustoId, operacaoId } = req.query;
 
   const contas = await prisma.contaPagar.findMany({
     where: {
@@ -120,6 +128,7 @@ router.get("/", asyncHandler(async (req, res) => {
       ...(fornecedorId ? { fornecedorId: Number(fornecedorId) } : {}),
       ...(categoriaId ? { categoriaId: Number(categoriaId) } : {}),
       ...(centroCustoId ? { centroCustoId: Number(centroCustoId) } : {}),
+      ...filtroOperacao(operacaoId),
     },
     include: incluir,
     orderBy: [{ vencimento: "asc" }, { id: "asc" }],
@@ -153,7 +162,7 @@ router.get("/", asyncHandler(async (req, res) => {
 router.post("/", asyncHandler(async (req, res) => {
   const {
     descricao, valor, vencimento, competencia, fornecedorId, categoriaId, centroCustoId,
-    documento, observacao,
+    operacaoId, documento, observacao,
     // Repetição: "parcelado" divide o valor; "mensal" repete o mesmo valor.
     repeticao, quantidade,
     // Conta que já nasce paga: acontece quando o lançamento é feito depois
@@ -165,7 +174,11 @@ router.post("/", asyncHandler(async (req, res) => {
     return res.status(400).json({ erro: "Informe descrição, valor e vencimento" });
   }
 
-  const vezes = Math.max(1, Math.min(Number(quantidade) || 1, 60));
+  // A quantidade só vale para parcelado e mensal. A tela manda o número do
+  // campo (2 por padrão) mesmo na conta única, e usá-lo ali gravava a conta
+  // em dobro.
+  const repete = repeticao === "parcelado" || repeticao === "mensal";
+  const vezes = repete ? Math.max(1, Math.min(Number(quantidade) || 1, 60)) : 1;
   const parcelado = repeticao === "parcelado" && vezes > 1;
   const mensal = repeticao === "mensal" && vezes > 1;
   const grupo = vezes > 1 ? crypto.randomUUID() : null;
@@ -181,6 +194,7 @@ router.post("/", asyncHandler(async (req, res) => {
     fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
     categoriaId: categoriaId ? Number(categoriaId) : undefined,
     centroCustoId: centroCustoId ? Number(centroCustoId) : undefined,
+    operacaoId: operacaoId ? Number(operacaoId) : undefined,
     documento: documento || undefined,
     observacao: observacao || undefined,
     empresaId: req.usuario.empresaId || undefined,
@@ -209,14 +223,15 @@ router.post("/", asyncHandler(async (req, res) => {
     ...(i === 0 ? pagamento : {}),
   }));
 
-  await prisma.contaPagar.createMany({ data: registros });
-
-  const criadas = await prisma.contaPagar.findMany({
-    where: grupo ? { grupo } : { id: { gte: 0 } },
-    include: incluir,
-    orderBy: { vencimento: "asc" },
-    ...(grupo ? {} : { take: 1, orderBy: { id: "desc" } }),
-  });
+  // Conta única é criada direto: buscar "a última criada" depois devolvia
+  // a de outra empresa quando duas eram lançadas ao mesmo tempo.
+  let criadas;
+  if (grupo) {
+    await prisma.contaPagar.createMany({ data: registros });
+    criadas = await prisma.contaPagar.findMany({ where: { grupo }, include: incluir, orderBy: { vencimento: "asc" } });
+  } else {
+    criadas = [await prisma.contaPagar.create({ data: registros[0], include: incluir })];
+  }
 
   res.status(201).json({
     contas: criadas,
@@ -226,8 +241,11 @@ router.post("/", asyncHandler(async (req, res) => {
 
 router.put("/:id", asyncHandler(async (req, res) => {
   const {
-    empresaId, fornecedorId, categoriaId, centroCustoId, vencimento, competencia,
+    empresaId, fornecedorId, categoriaId, centroCustoId, operacaoId, vencimento, competencia,
     dataPagamento, valorPago, jurosMulta, desconto,
+    // Só existem no lançamento (parcelar/repetir). A tela manda junto na
+    // edição, e repassados ao banco faziam toda edição falhar.
+    repeticao, quantidade,
     ...dados
   } = req.body;
 
@@ -250,6 +268,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       fornecedorId: fornecedorId === null || fornecedorId === "" ? null : (fornecedorId ? Number(fornecedorId) : undefined),
       categoriaId: categoriaId === null || categoriaId === "" ? null : (categoriaId ? Number(categoriaId) : undefined),
       centroCustoId: centroCustoId === null || centroCustoId === "" ? null : (centroCustoId ? Number(centroCustoId) : undefined),
+      operacaoId: operacaoId === null || operacaoId === "" ? null : (operacaoId ? Number(operacaoId) : undefined),
       vencimento: vencimento ? new Date(`${String(vencimento).slice(0, 10)}T12:00:00Z`) : undefined,
       competencia: competencia ? new Date(`${String(competencia).slice(0, 10)}T12:00:00Z`) : undefined,
     },

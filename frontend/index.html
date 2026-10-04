@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.037";
+const VERSAO_SISTEMA = "1.038";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2965,6 +2965,142 @@ const escaparHtml = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp
 // descarga, confere as viagens e grava a fatura com número. Cada viagem
 // entra em uma fatura só; cancelar a fatura libera as viagens, e o número
 // dela nunca é reaproveitado.
+// Despesas da operação: as contas a pagar lançadas para ela e o resumo de
+// receitas e despesas. A conta é a mesma do Contas a pagar — lançada aqui,
+// aparece lá também, com a operação preenchida.
+function DespesasAba({ operacaoId }) {
+  const { items: fornecedores } = useApiCollection("fornecedores");
+  const [contas, setContas] = useState(null);
+  const [resumo, setResumo] = useState(null);
+  const [categorias, setCategorias] = useState([]);
+  const [centros, setCentros] = useState([]);
+  const [erro, setErro] = useState("");
+  const [contaEmEdicao, setContaEmEdicao] = useState(null);
+  const [contaParaBaixa, setContaParaBaixa] = useState(null);
+
+  const carregar = useCallback(async () => {
+    if (!operacaoId) return;
+    try {
+      const [lista, r] = await Promise.all([
+        apiRequest(`/contas-pagar?operacaoId=${operacaoId}&status=todas`),
+        apiRequest(`/operacoes/${operacaoId}/resumo`),
+      ]);
+      setContas(lista.contas);
+      setResumo(r);
+      setErro("");
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  }, [operacaoId]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    Promise.all([apiRequest("/contas-pagar/categorias"), apiRequest("/contas-pagar/centros-custo")])
+      .then(([cats, ccs]) => { setCategorias(cats); setCentros(ccs); })
+      .catch(() => { /* a tela funciona sem classificação */ });
+  }, []);
+
+  if (!operacaoId) return <p className="hint">Salve a operação primeiro para lançar despesas.</p>;
+  if (erro && !contas) return <p className="error-text" style={{ padding: "0 22px" }}>{erro}</p>;
+  if (!contas || !resumo) return <p className="hint">Carregando…</p>;
+
+  const dataBr = (iso) => new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR");
+  const money = (v) => `R$ ${formatarMoeda(v || 0)}`;
+  const despesasTotais = resumo.materiaPrima + resumo.transporte + resumo.despesas.total;
+
+  return (
+    <div style={{ padding: "0 22px 18px" }}>
+      <section className="pf-secao" style={{ paddingTop: 6 }}>
+        <h4 className="pf-secao-titulo">Resumo da operação</h4>
+        <div className="cte-resumo" style={{ marginTop: 4 }}>
+          <div><span className="cte-resumo-rotulo">Receitas (serviço)</span>
+            <span className="cte-resumo-valor" style={{ color: COR_CREDITO }}>{money(resumo.receitas)}</span></div>
+          <div><span className="cte-resumo-rotulo">Matéria-prima</span>
+            <span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(resumo.materiaPrima)}</span></div>
+          <div><span className="cte-resumo-rotulo">Transporte real</span>
+            <span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(resumo.transporte)}</span></div>
+          <div><span className="cte-resumo-rotulo">Despesas lançadas</span>
+            <span className="cte-resumo-valor" style={{ color: COR_DEBITO }}>{money(resumo.despesas.total)}</span></div>
+          <div><span className="cte-resumo-rotulo">Resultado</span>
+            <span className="cte-resumo-valor" style={{ color: corDoLucro(resumo.resultado) }}>{money(resumo.resultado)}</span></div>
+        </div>
+        <p className="hint">
+          {resumo.viagens} viage{resumo.viagens !== 1 ? "ns" : "m"} · total de despesas {money(despesasTotais)} ·
+          {" "}despesas lançadas: {money(resumo.despesas.pagas)} pagas e {money(resumo.despesas.abertas)} em aberto.
+          {" "}Contas canceladas não entram.
+        </p>
+      </section>
+
+      <section className="pf-secao">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <h4 className="pf-secao-titulo" style={{ margin: 0 }}>Despesas lançadas</h4>
+          <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setContaEmEdicao({})}>
+            <Plus size={14} /> Nova despesa
+          </button>
+        </div>
+        {erro && <p className="error-text">{erro}</p>}
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th style={{ width: 90 }}>Vencimento</th>
+              <th>Descrição</th>
+              <th>Fornecedor</th>
+              <th>Categoria</th>
+              <th style={{ width: 110, textAlign: "right" }}>Valor</th>
+              <th style={{ width: 110 }}>Situação</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {contas.map(conta => {
+              const s = situacaoConta(conta);
+              return (
+                <tr key={conta.id}>
+                  <td>{dataBr(conta.vencimento)}</td>
+                  <td>{conta.descricao}{conta.documento ? <span className="subtle"> · {conta.documento}</span> : null}</td>
+                  <td>{conta.fornecedor?.nomeRazaoSocial || "—"}</td>
+                  <td>{conta.categoria?.nome || "—"}</td>
+                  <td style={{ textAlign: "right", color: COR_DEBITO }}>{money(conta.valor)}</td>
+                  <td style={{ color: s.cor }}>{s.texto}</td>
+                  <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                    {conta.status === "aberta" ? (
+                      <>
+                        <button className="icon-btn" title="Dar baixa" onClick={() => setContaParaBaixa(conta)}>✓</button>
+                        <button className="icon-btn" title="Editar" onClick={() => setContaEmEdicao(conta)}><Pencil size={14} /></button>
+                        <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluirConta(conta, carregar)}><Trash2 size={14} /></button>
+                      </>
+                    ) : (
+                      <button className="icon-btn" title="Desfazer baixa" onClick={() => estornarConta(conta, carregar)}>↺</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {!contas.length && <tr><td colSpan={7}>Nenhuma despesa lançada para esta operação.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      {contaEmEdicao && (
+        <ContaPagarForm
+          conta={contaEmEdicao.id ? contaEmEdicao : null}
+          fornecedores={fornecedores}
+          categorias={categorias}
+          centros={centros}
+          operacaoFixa={operacaoId}
+          onFechar={() => setContaEmEdicao(null)}
+          onSalvo={() => { setContaEmEdicao(null); carregar(); }}
+        />
+      )}
+      {contaParaBaixa && (
+        <BaixaContaModal
+          conta={contaParaBaixa}
+          onFechar={() => setContaParaBaixa(null)}
+          onSalvo={() => { setContaParaBaixa(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function FaturasAba({ operacaoId }) {
   const [faturas, setFaturas] = useState(null);
   const [clientes, setClientes] = useState([]);
@@ -3410,6 +3546,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
                 Faturas
               </button>
             )}
+            {temViagens && (
+              <button type="button" className="cte-aba" aria-selected={aba === "despesas"} onClick={() => setAba("despesas")}>
+                Despesas
+              </button>
+            )}
             {temJornada && (
               <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
                 Horários de trabalho
@@ -3432,6 +3573,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
             />
           )}
           {temViagens && aba === "faturas" && <FaturasAba operacaoId={record?.id} />}
+          {temViagens && aba === "despesas" && <DespesasAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
             <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} />
@@ -7386,7 +7528,43 @@ function LeituraModal({ equipamento, onFechar, onSalvo }) {
 
 // Lançamento. O parcelamento e a repetição mensal são resolvidos aqui: o
 // servidor cria um registro por parcela ou por mês.
-function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, onSalvo }) {
+// Situação pelo vencimento: é o que decide a cor da linha. Usada no Contas
+// a pagar e na aba Despesas da operação.
+function situacaoConta(conta) {
+  if (conta.status === "paga") return { texto: "paga", cor: "#00732F" };
+  if (conta.status === "cancelada") return { texto: "cancelada", cor: "#8a887f" };
+  const hojeZero = new Date(); hojeZero.setHours(0, 0, 0, 0);
+  const venc = new Date(String(conta.vencimento).slice(0, 10) + "T12:00:00Z");
+  const dias = Math.round((venc - hojeZero) / 86400000);
+  if (dias < 0) return { texto: `atrasada ${Math.abs(dias)}d`, cor: "#c62828" };
+  if (dias === 0) return { texto: "vence hoje", cor: "#b57a12" };
+  if (dias <= 7) return { texto: `vence em ${dias}d`, cor: "#b57a12" };
+  return { texto: "em aberto", cor: "#6b6b68" };
+}
+
+async function excluirConta(conta, depois) {
+  const doGrupo = conta.grupo && conta.parcelaTotal > 1
+    && window.confirm(`Excluir TODAS as ${conta.parcelaTotal} parcelas em aberto desse lançamento?\n\nCancelar exclui só esta.`);
+  if (!doGrupo && !window.confirm("Excluir essa conta?")) return;
+  try {
+    await apiRequest(`/contas-pagar/${conta.id}${doGrupo ? "?grupo=1" : ""}`, { method: "DELETE" });
+    depois();
+  } catch (e) {
+    alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\n${e.detalhe}` : ""}`);
+  }
+}
+
+async function estornarConta(conta, depois) {
+  if (!window.confirm("Desfazer a baixa dessa conta? Ela volta para em aberto.")) return;
+  try {
+    await apiRequest(`/contas-pagar/${conta.id}/estornar`, { method: "POST" });
+    depois();
+  } catch (e) { alert(`Não foi possível estornar: ${e.message}`); }
+}
+
+// Operação fixa: lançada de dentro da aba Despesas da operação, a conta já
+// nasce dela e o campo não muda ali.
+function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, operacaoFixa, onFechar, onSalvo }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [dados, setDados] = useState(() => ({
     descricao: conta?.descricao || "",
@@ -7395,6 +7573,7 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
     fornecedorId: conta?.fornecedorId ? String(conta.fornecedorId) : "",
     categoriaId: conta?.categoriaId ? String(conta.categoriaId) : "",
     centroCustoId: conta?.centroCustoId ? String(conta.centroCustoId) : "",
+    operacaoId: conta?.operacaoId ? String(conta.operacaoId) : (operacaoFixa ? String(operacaoFixa) : ""),
     documento: conta?.documento || "",
     observacao: conta?.observacao || "",
     repeticao: "unica",
@@ -7481,6 +7660,17 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, onFechar, on
                 </select>
               </div>
             </div>
+            {!operacaoFixa && (
+              <div className="nf-grid-4">
+                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                  <label className="field-label">Operação</label>
+                  <select value={dados.operacaoId} onChange={e => set("operacaoId", e.target.value)}>
+                    <option value="">Sem operação (despesa geral)</option>
+                    {(operacoes || []).map(o => <option key={o.id} value={o.id}>{o.codigo} — {o.descricao}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="pf-secao">
@@ -7799,8 +7989,10 @@ function ContasPagarView() {
   })();
 
   const { items: fornecedores } = useApiCollection("fornecedores");
+  const { items: operacoes } = useApiCollection("operacoes");
 
-  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: ultimoDiaMes, status: "aberta" });
+  // operacaoId: "" = todas, "sem" = só as gerais, número = só daquela operação.
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: ultimoDiaMes, status: "aberta", operacaoId: "" });
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -7839,39 +8031,59 @@ function ContasPagarView() {
   useEffect(() => { carregarApoio(); }, [carregarApoio]);
   useEffect(() => { carregar(); }, [carregar]);
 
-  const excluir = async (conta) => {
-    const doGrupo = conta.grupo && conta.parcelaTotal > 1
-      && window.confirm(`Excluir TODAS as ${conta.parcelaTotal} parcelas em aberto desse lançamento?\n\nCancelar exclui só esta.`);
-    if (!doGrupo && !window.confirm("Excluir essa conta?")) return;
-    try {
-      await apiRequest(`/contas-pagar/${conta.id}${doGrupo ? "?grupo=1" : ""}`, { method: "DELETE" });
-      carregar();
-    } catch (e) {
-      alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\n${e.detalhe}` : ""}`);
-    }
-  };
-
-  const estornar = async (conta) => {
-    if (!window.confirm("Desfazer a baixa dessa conta? Ela volta para em aberto.")) return;
-    try {
-      await apiRequest(`/contas-pagar/${conta.id}/estornar`, { method: "POST" });
-      carregar();
-    } catch (e) { alert(`Não foi possível estornar: ${e.message}`); }
-  };
+  const excluir = (conta) => excluirConta(conta, carregar);
+  const estornar = (conta) => estornarConta(conta, carregar);
+  const situacao = situacaoConta;
 
   const dataBr = (iso) => new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR");
 
-  // Situação pelo vencimento: é o que decide a cor da linha.
-  const situacao = (conta) => {
-    if (conta.status === "paga") return { texto: "paga", cor: "#00732F" };
-    if (conta.status === "cancelada") return { texto: "cancelada", cor: "#8a887f" };
-    const hojeZero = new Date(); hojeZero.setHours(0, 0, 0, 0);
-    const venc = new Date(String(conta.vencimento).slice(0, 10) + "T12:00:00Z");
-    const dias = Math.round((venc - hojeZero) / 86400000);
-    if (dias < 0) return { texto: `atrasada ${Math.abs(dias)}d`, cor: "#c62828" };
-    if (dias === 0) return { texto: "vence hoje", cor: "#b57a12" };
-    if (dias <= 7) return { texto: `vence em ${dias}d`, cor: "#b57a12" };
-    return { texto: "em aberto", cor: "#6b6b68" };
+  // Relatório do que está no filtro, para imprimir ou salvar em PDF.
+  const imprimirRelatorio = () => {
+    if (!dados?.contas.length) { alert("Nenhuma conta no filtro para o relatório."); return; }
+    const janela = window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+    const op = filtro.operacaoId === "sem" ? "Sem operação (despesas gerais)"
+      : filtro.operacaoId ? (() => { const o = (operacoes || []).find(x => String(x.id) === String(filtro.operacaoId)); return o ? `${o.codigo} — ${o.descricao}` : ""; })()
+      : "Todas";
+    const situacaoTexto = { aberta: "Em aberto", paga: "Pagas", todas: "Todas" }[filtro.status] || "Todas";
+    const total = dados.contas.reduce((t, c) => t + (Number(c.valor) || 0), 0);
+    const linhas = dados.contas.map(c => `
+      <tr>
+        <td>${dataBr(c.vencimento)}</td>
+        <td>${escaparHtml(c.descricao)}${c.documento ? ` <span class="doc">· ${escaparHtml(c.documento)}</span>` : ""}</td>
+        <td>${escaparHtml(c.fornecedor?.nomeRazaoSocial || "—")}</td>
+        <td>${escaparHtml(c.operacao ? c.operacao.codigo : "—")}</td>
+        <td>${escaparHtml(c.categoria?.nome || "—")}</td>
+        <td>${escaparHtml(situacao(c).texto)}</td>
+        <td class="num">R$ ${formatarMoeda(c.valor)}</td>
+      </tr>`).join("");
+    janela.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Contas a pagar</title>
+      <style>
+        @page { size: A4; margin: 14mm; }
+        body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #23231F; font-size: 11px; }
+        h1 { font-size: 15px; margin: 0 0 2px; }
+        .sub { color: #6B6B68; font-size: 11px; margin-bottom: 14px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .3px;
+             color: #55534C; border-bottom: 1px solid #23231F; padding: 5px 4px; }
+        td { padding: 4px; border-bottom: 1px solid #E5E3DA; }
+        .num { text-align: right; white-space: nowrap; }
+        .doc { color: #6B6B68; }
+        tfoot td { font-weight: 600; border-top: 1px solid #23231F; border-bottom: none; font-size: 12px; }
+      </style></head><body>
+        <h1>Contas a pagar</h1>
+        <div class="sub">
+          Vencimento de ${filtro.de ? dataBr(filtro.de) : "—"} a ${filtro.ate ? dataBr(filtro.ate) : "—"} ·
+          Situação: ${situacaoTexto} · Operação: ${escaparHtml(op)}
+        </div>
+        <table>
+          <thead><tr><th>Vencimento</th><th>Descrição</th><th>Fornecedor</th><th>Operação</th><th>Categoria</th><th>Situação</th><th class="num">Valor</th></tr></thead>
+          <tbody>${linhas}</tbody>
+          <tfoot><tr><td colspan="6">${dados.contas.length} conta${dados.contas.length !== 1 ? "s" : ""}</td><td class="num">R$ ${formatarMoeda(total)}</td></tr></tfoot>
+        </table>
+        <script>window.onload = () => window.print();<\/script>
+      </body></html>`);
+    janela.document.close();
   };
 
   const T = dados?.totais;
@@ -7889,6 +8101,9 @@ function ContasPagarView() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={imprimirRelatorio}>
+            <FileText size={14} /> Relatório
+          </button>
           <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setGerenciarCadastros(true)}>
             Categorias e centros
           </button>
@@ -7918,7 +8133,7 @@ function ContasPagarView() {
       )}
 
       <div className="nf-section">
-        <div className="nf-grid-3">
+        <div className="nf-grid-4">
           <div className="field-group">
             <label className="field-label">Vencimento de</label>
             <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
@@ -7933,6 +8148,14 @@ function ContasPagarView() {
               <option value="aberta">Em aberto</option>
               <option value="paga">Pagas</option>
               <option value="todas">Todas</option>
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Operação</label>
+            <select value={filtro.operacaoId} onChange={e => setFiltro(f => ({ ...f, operacaoId: e.target.value }))}>
+              <option value="">Todas</option>
+              <option value="sem">Sem operação (despesas gerais)</option>
+              {(operacoes || []).map(o => <option key={o.id} value={o.id}>{o.codigo} — {o.descricao}</option>)}
             </select>
           </div>
         </div>
@@ -7950,6 +8173,7 @@ function ContasPagarView() {
               <th>Fornecedor</th>
               <th>Categoria</th>
               <th>Centro de custo</th>
+              <th>Operação</th>
               <th style={{ width: 110, textAlign: "right" }}>Valor</th>
               <th style={{ width: 110 }}>Situação</th>
               <th className="actions-col"></th>
@@ -7965,6 +8189,7 @@ function ContasPagarView() {
                   <td>{conta.fornecedor?.nomeRazaoSocial || "—"}</td>
                   <td>{conta.categoria?.nome || "—"}</td>
                   <td>{conta.centroCusto?.nome || "—"}</td>
+                  <td title={conta.operacao?.descricao || ""}>{conta.operacao?.codigo || "—"}</td>
                   <td style={{ textAlign: "right" }}>R$ {formatarMoeda(conta.valor)}</td>
                   <td style={{ color: s.cor }}>{s.texto}</td>
                   <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
@@ -7981,7 +8206,7 @@ function ContasPagarView() {
                 </tr>
               );
             })}
-            {!dados.contas.length && <tr><td colSpan={8}>Nenhuma conta nesse filtro.</td></tr>}
+            {!dados.contas.length && <tr><td colSpan={9}>Nenhuma conta nesse filtro.</td></tr>}
           </tbody>
         </table>
       )}
@@ -7992,6 +8217,7 @@ function ContasPagarView() {
           fornecedores={fornecedores}
           categorias={categorias}
           centros={centros}
+          operacoes={operacoes}
           onFechar={() => setContaEmEdicao(null)}
           onSalvo={() => { setContaEmEdicao(null); carregar(); }}
         />

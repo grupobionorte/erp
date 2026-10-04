@@ -2,6 +2,7 @@ const express = require("express");
 
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
+const { hojeNoFuso } = require("../lib/fuso");
 const { enviarPushParaColaborador } = require("../lib/push");
 
 const router = express.Router();
@@ -56,7 +57,9 @@ router.get("/", asyncHandler(async (req, res) => {
   });
 
   // Contagens que a tela usa para orientar quem abre a agenda.
-  const hoje = dataDoDia(new Date().toISOString());
+  // Hoje de Cuiabá: pelo UTC, depois das 20h os eventos do dia já contavam
+  // como atrasados.
+  const hoje = dataDoDia(hojeNoFuso());
   const pendentes = eventos.filter((e) => e.status === "pendente");
 
   res.json({

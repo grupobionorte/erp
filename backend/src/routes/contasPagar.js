@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const express = require("express");
 
 const prisma = require("../lib/prisma");
+const { hojeNoFuso } = require("../lib/fuso");
 const asyncHandler = require("../lib/asyncHandler");
 
 const router = express.Router();
@@ -136,10 +137,12 @@ router.get("/", asyncHandler(async (req, res) => {
   });
 
   // Resumo do que importa na rotina: o que já venceu e o que vence logo.
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+  // Vencimento é gravado ao meio-dia UTC; "hoje" é o dia de Cuiabá no mesmo
+  // horário. Pelo relógio do servidor, depois das 20h a conta que vence
+  // hoje já contava como atrasada.
+  const hoje = new Date(`${hojeNoFuso()}T12:00:00Z`);
   const daquiSeteDias = new Date(hoje);
-  daquiSeteDias.setDate(daquiSeteDias.getDate() + 7);
+  daquiSeteDias.setUTCDate(daquiSeteDias.getUTCDate() + 7);
 
   const abertas = contas.filter((c) => c.status === "aberta");
   const somar = (lista) => lista.reduce((t, c) => t + (Number(c.valor) || 0), 0);
@@ -289,7 +292,7 @@ router.post("/:id/pagar", asyncHandler(async (req, res) => {
     where: { id: conta.id },
     data: {
       status: "paga",
-      dataPagamento: dataPagamento ? new Date(`${String(dataPagamento).slice(0, 10)}T12:00:00Z`) : new Date(),
+      dataPagamento: dataPagamento ? new Date(`${String(dataPagamento).slice(0, 10)}T12:00:00Z`) : new Date(`${hojeNoFuso()}T12:00:00Z`),
       valorPago: valorPago !== undefined && valorPago !== "" ? Number(valorPago) : conta.valor,
       jurosMulta: jurosMulta ? Number(jurosMulta) : undefined,
       desconto: desconto ? Number(desconto) : undefined,

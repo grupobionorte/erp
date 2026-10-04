@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { apurarPeriodo } = require("../lib/jornada");
+const { intervaloNoFuso, instanteDaTela } = require("../lib/fuso");
 const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
 
@@ -224,13 +225,13 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
 router.get("/marcacoes", asyncHandler(async (req, res) => {
   const { colaboradorId, de, ate } = req.query;
 
+  // Dias inteiros de Cuiabá: em UTC, as batidas depois das 20h do último
+  // dia ficavam de fora.
+  const periodo = intervaloNoFuso(de, ate);
   const marcacoes = await prisma.marcacaoPonto.findMany({
     where: {
       colaboradorId: colaboradorId ? Number(colaboradorId) : undefined,
-      dataHora: {
-        gte: de ? new Date(de) : undefined,
-        lte: ate ? new Date(`${ate}T23:59:59`) : undefined,
-      },
+      dataHora: { gte: periodo.inicio, lte: periodo.fim },
       colaborador: { empresaId: req.usuario.empresaId ?? undefined },
     },
     include: {
@@ -301,7 +302,9 @@ router.post("/tratamentos", asyncHandler(async (req, res) => {
   const tratamento = await prisma.tratamentoPonto.create({
     data: {
       tipo,
-      dataHora: new Date(dataHora),
+      // A tela manda "dia + hora" sem fuso: é hora de Cuiabá. Lido como UTC,
+      // um tratamento às 08:00 era gravado como 04:00.
+      dataHora: instanteDaTela(dataHora),
       motivo: motivo.trim(),
       colaboradorId: Number(colaboradorId),
       marcacaoId: marcacaoId ? Number(marcacaoId) : null,
@@ -478,8 +481,9 @@ router.get("/espelho", asyncHandler(async (req, res) => {
   const jornada = await prisma.jornadaTrabalho.findFirst({
     where: {
       colaboradorId: colaborador.id,
-      vigenciaInicio: { lte: new Date(`${ate}T23:59:59`) },
-      OR: [{ vigenciaFim: null }, { vigenciaFim: { gte: new Date(`${de}T00:00:00`) } }],
+      // Vigência é campo só-data, gravado à meia-noite UTC: compara em UTC.
+      vigenciaInicio: { lte: new Date(`${ate}T23:59:59Z`) },
+      OR: [{ vigenciaFim: null }, { vigenciaFim: { gte: new Date(`${de}T00:00:00Z`) } }],
     },
     include: { dias: true },
     orderBy: { vigenciaInicio: "desc" },
@@ -488,7 +492,7 @@ router.get("/espelho", asyncHandler(async (req, res) => {
   const marcacoes = await prisma.marcacaoPonto.findMany({
     where: {
       colaboradorId: colaborador.id,
-      dataHora: { gte: new Date(`${de}T00:00:00`), lte: new Date(`${ate}T23:59:59`) },
+      dataHora: { gte: intervaloNoFuso(de, ate).inicio, lte: intervaloNoFuso(de, ate).fim },
     },
     include: {
       tratamentos: true,

@@ -14,22 +14,7 @@
       sairia errado.
    =========================================================================== */
 
-const FUSO_PADRAO = process.env.TZ_FISCAL || "America/Cuiaba";
-
-// Partes de data/hora de um instante, já no fuso da operação.
-function partesNoFuso(data, timeZone = FUSO_PADRAO) {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone, year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
-    }).formatToParts(data).map((x) => [x.type, x.value])
-  );
-  return {
-    dia: `${p.year}-${p.month}-${p.day}`,
-    minutos: Number(p.hour) * 60 + Number(p.minute),
-    hora: `${p.hour}:${p.minute}`,
-  };
-}
+const { FUSO: FUSO_PADRAO, partesNoFuso, diaDoCampo } = require("./fuso");
 
 const paraMinutos = (hhmm) => {
   if (!hhmm || !/^\d{1,2}:\d{2}$/.test(hhmm)) return null;
@@ -68,12 +53,12 @@ function previstoNoDia(jornada, dia) {
   if (!jornada) return null;
 
   const dentroDaVigencia =
-    (!jornada.vigenciaInicio || dia >= String(jornada.vigenciaInicio).slice(0, 10)) &&
-    (!jornada.vigenciaFim || dia <= String(jornada.vigenciaFim).slice(0, 10));
+    (!jornada.vigenciaInicio || dia >= diaDoCampo(jornada.vigenciaInicio)) &&
+    (!jornada.vigenciaFim || dia <= diaDoCampo(jornada.vigenciaFim));
   if (!dentroDaVigencia) return null;
 
   if (jornada.tipo === "escala") {
-    const referencia = String(jornada.dataReferencia || jornada.vigenciaInicio || dia).slice(0, 10);
+    const referencia = diaDoCampo(jornada.dataReferencia || jornada.vigenciaInicio) || dia;
     const diasTrabalho = jornada.diasTrabalho || 6;
     const cicloDias = diasTrabalho + (jornada.diasFolga || 1);
     const passados = Math.round(

@@ -451,10 +451,21 @@ function horaLocalIso(d = agora()) {
          `${sinal}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
 }
 
+// Hora de Cuiabá para mostrar e falar, mesmo que o tablet esteja em outro
+// fuso. O instante gravado já vai com o fuso do aparelho (horaLocalIso) e é
+// convertido certo no servidor; aqui é só o que a pessoa vê e ouve.
+function noFuso(d) {
+  const x = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Cuiaba", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(d).map((v) => [v.type, v.value]));
+  return { h: x.hour, m: x.minute, s: x.second, dataBr: `${x.day}/${x.month}/${x.year}` };
+}
+
 function tique() {
   const d = agora();
-  const p = (n) => String(n).padStart(2, "0");
-  $("relogio").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const f = noFuso(d);
+  $("relogio").textContent = `${f.h}:${f.m}:${f.s}`;
   if (estado.repouso) atualizarRepouso();
 }
 setInterval(tique, 1000);
@@ -577,13 +588,12 @@ function batidaRecente(colaboradorId) {
 }
 
 function mostrarJaRegistrou(colaborador, quando, metodo) {
-  const p = (n) => String(n).padStart(2, "0");
   estado.ocupado = true;
   $("jrNome").textContent = colaborador.nome;
-  $("jrDetalhe").textContent = `Você já registrou às ${p(quando.getHours())}:${p(quando.getMinutes())}`;
+  $("jrDetalhe").textContent = `Você já registrou às ${noFuso(quando).h}:${noFuso(quando).m}`;
   $("jaRegistrou").classList.remove("oculto");
   bipar(false);
-  falar(`${colaborador.nome.split(" ")[0]}, você já registrou às ${p(quando.getHours())} e ${p(quando.getMinutes())}. Se precisar registrar de novo, toque no botão verde.`,
+  falar(`${colaborador.nome.split(" ")[0]}, você já registrou às ${noFuso(quando).h} e ${noFuso(quando).m}. Se precisar registrar de novo, toque no botão verde.`,
         { repetirApos: 0, interromper: true });
 
   const fechar = () => {
@@ -633,18 +643,17 @@ function registrarBatida(colaborador, metodo, { ignorarJanela = false, foto = nu
 
 function mostrarConfirmacao(colaborador, marcacao) {
   const d = new Date(marcacao.dataHora);
-  const p = (n) => String(n).padStart(2, "0");
   $("confIcone").textContent = "✓";
   $("confNome").textContent = colaborador.nome;
-  $("confHora").textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  $("confHora").textContent = `${noFuso(d).h}:${noFuso(d).m}`;
   $("confDetalhe").textContent =
-    `${d.toLocaleDateString("pt-BR")} · comprovante ${marcacao.idLocal.slice(0, 8).toUpperCase()}` +
+    `${noFuso(d).dataBr} · comprovante ${marcacao.idLocal.slice(0, 8).toUpperCase()}` +
     (navigator.onLine ? "" : " · será enviado quando a internet voltar");
   $("confirmacao").classList.remove("oculto", "erro");
   bipar(true);
   estado.fase = null;
   // O que mais importa ouvir: quem registrou e a que horas.
-  falar(`Ponto registrado. ${colaborador.nome.split(" ")[0]}, ${p(d.getHours())} e ${p(d.getMinutes())}.`,
+  falar(`Ponto registrado. ${colaborador.nome.split(" ")[0]}, ${noFuso(d).h} e ${noFuso(d).m}.`,
         { repetirApos: 0, interromper: true });
   setTimeout(() => { $("confirmacao").classList.add("oculto"); estado.ocupado = false; }, 4000);
 }
@@ -800,8 +809,7 @@ function sairDoRepouso() {
 
 function atualizarRepouso() {
   const d = agora();
-  const p = (n) => String(n).padStart(2, "0");
-  $("repousoRelogio").textContent = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  $("repousoRelogio").textContent = `${noFuso(d).h}:${noFuso(d).m}`;
   $("repousoFila").textContent = estado.fila.length
     ? `${estado.fila.length} registro(s) aguardando envio`
     : "";

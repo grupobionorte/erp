@@ -16,19 +16,7 @@ const router = express.Router();
 
 // Início e fim do dia no fuso da operação. Sem isso, uma nota emitida às 21h
 // de Mato Grosso cairia no dia seguinte e sumiria do relatório do mês.
-function intervaloNoFuso(de, ate) {
-  const zona = process.env.TZ_FISCAL || "America/Cuiaba";
-  const offset = (dia) => {
-    const nome = new Intl.DateTimeFormat("en-US", { timeZone: zona, timeZoneName: "longOffset" })
-      .formatToParts(new Date(`${dia}T12:00:00Z`))
-      .find((p) => p.type === "timeZoneName").value.replace("GMT", "") || "+00:00";
-    return nome;
-  };
-  return {
-    inicio: new Date(`${de}T00:00:00${offset(de)}`),
-    fim: new Date(`${ate}T23:59:59${offset(ate)}`),
-  };
-}
+const { intervaloNoFuso } = require("../lib/fuso");
 
 /**
  * Relação de NF-e emitidas, por período e opcionalmente por cliente.

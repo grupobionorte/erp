@@ -346,7 +346,9 @@ async function ativarNotificacoes() {
 /* ---------------------------------------------------------------------------
    Dados
 --------------------------------------------------------------------------- */
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+// Hoje de Cuiabá. toISOString dá o dia em UTC, que depois das 20h já é
+// amanhã: eventos de hoje apareciam como atrasados.
+const hojeISO = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Cuiaba" }).format(new Date());
 
 // Tudo que está em aberto, do mais atrasado ao mais distante, mais os
 // concluídos recentes. Dividir em abas obrigava a procurar em qual delas a

@@ -2,6 +2,7 @@ const express = require("express");
 
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
+const { hojeNoFuso } = require("../lib/fuso");
 
 const router = express.Router();
 
@@ -48,10 +49,12 @@ function situacaoDoPlano(plano, equipamento) {
     };
   }
 
-  const hoje = new Date();
+  // Dias contados de meio-dia a meio-dia, a partir do dia de Cuiabá: com a
+  // hora do servidor, o plano virava "vencido" no meio da noite.
+  const hoje = new Date(`${hojeNoFuso()}T12:00:00Z`);
   const base = plano.ultimaData ? new Date(plano.ultimaData) : hoje;
   const proxima = new Date(base);
-  proxima.setMonth(proxima.getMonth() + Number(plano.intervalo));
+  proxima.setUTCMonth(proxima.getUTCMonth() + Number(plano.intervalo));
   const faltaDias = Math.round((proxima - hoje) / 86400000);
 
   return {

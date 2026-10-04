@@ -196,6 +196,23 @@ function casasDoValor(valor) {
   return Math.round(n * 1000) % 10 === 0 ? 2 : 3;
 }
 
+// ---------- Fuso da operação ----------
+// O sistema trabalha no horário de Mato Grosso, não no do aparelho nem no
+// de Greenwich. "new Date().toISOString()" dá o dia em UTC: depois das 20h
+// de Cuiabá ele já é amanhã, e as datas sugeridas saíam com um dia a mais.
+// Deve acompanhar o TZ_FISCAL configurado no backend.
+const FUSO_OPERACAO = "America/Cuiaba";
+
+// "AAAA-MM-DD" de hoje em Cuiabá — o valor certo para campos de data.
+const hojeNoFuso = () => new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_OPERACAO }).format(new Date());
+
+// Data sem hora vinda do banco ("2026-10-01" ou "2026-10-01T00:00:00.000Z")
+// em dd/mm/aaaa. Pelo dia gravado, sem conversão: convertida para Cuiabá,
+// a meia-noite UTC virava o dia anterior.
+const dataSemHoraBr = (valor) => (valor
+  ? new Date(`${String(valor).slice(0, 10)}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+  : "");
+
 // Quantidade de mercadoria: até três casas quando existem, sem zeros à toa.
 function formatarQuantidade(valor) {
   const n = Number(valor);
@@ -903,7 +920,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.038";
+const VERSAO_SISTEMA = "1.039";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -1835,7 +1852,7 @@ function JornadaAba({ colaboradorId }) {
   const [jornadas, setJornadas] = useState(null);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
 
   const [nova, setNova] = useState({
     tipo: "escala",
@@ -1897,8 +1914,8 @@ function JornadaAba({ colaboradorId }) {
               {jornadas.map(j => (
                 <tr key={j.id}>
                   <td>
-                    {new Date(j.vigenciaInicio).toLocaleDateString("pt-BR")}
-                    {j.vigenciaFim ? ` até ${new Date(j.vigenciaFim).toLocaleDateString("pt-BR")}` : " — atual"}
+                    {dataSemHoraBr(j.vigenciaInicio)}
+                    {j.vigenciaFim ? ` até ${dataSemHoraBr(j.vigenciaFim)}` : " — atual"}
                   </td>
                   <td>{j.tipo === "escala" ? "Escala" : "Semanal"}</td>
                   <td>{[j.entrada, j.intervaloInicio, j.intervaloFim, j.saida].filter(Boolean).join(" · ") || "por dia da semana"}</td>
@@ -2433,7 +2450,7 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
   const opcoesPlacas = (veiculos || []).filter(v => v.placa)
     .map(v => ({ chave: v.id, valor: v.placa, detalhe: v.descricao || v.modelo || "" }));
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const dia = (v) => (v ? String(v).slice(0, 10) : "");
 
   const [dados, setDados] = useState(() => ({
@@ -3851,11 +3868,10 @@ function LoginScreen({ onLogin }) {
 }
 
 // ---------- Controle de ponto ----------
-// O espelho mostra a hora no fuso da operação, não no fuso de quem está
-// olhando. Sem isso, o RH em outro estado veria a batida com uma hora de
-// diferença — e num espelho de ponto isso vira discussão trabalhista.
-// Deve acompanhar o TZ_FISCAL configurado no backend.
-const FUSO_OPERACAO = "America/Cuiaba";
+// O espelho mostra a hora no fuso da operação (FUSO_OPERACAO), não no fuso
+// de quem está olhando. Sem isso, o RH em outro estado veria a batida com
+// uma hora de diferença — e num espelho de ponto isso vira discussão
+// trabalhista.
 
 const horaPonto = (iso) => new Date(iso).toLocaleTimeString("pt-BR", {
   timeZone: FUSO_OPERACAO, hour: "2-digit", minute: "2-digit",
@@ -4313,7 +4329,7 @@ function FotoDaBatidaModal({ batida, onFechar }) {
                 style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid #e5e3da" }} />
               <p style={{ marginBottom: 2, fontWeight: 500 }}>{dados.colaborador}</p>
               <p className="subtle" style={{ marginTop: 0 }}>
-                {new Date(dados.dataHora).toLocaleString("pt-BR")}
+                {diaPonto(dados.dataHora)} {horaPonto(dados.dataHora)}
               </p>
               <p style={{ color: situacao.cor, fontSize: 13 }}>{situacao.texto}</p>
             </>
@@ -4328,7 +4344,7 @@ function FotoDaBatidaModal({ batida, onFechar }) {
 }
 
 function PontoEspelho() {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
   const [fotoDe, setFotoDe] = useState(null);
@@ -4844,7 +4860,7 @@ function ClientesDoMes() {
     });
   };
 
-  const mesNome = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const mesNome = new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric", timeZone: FUSO_OPERACAO });
 
   return (
     <div className="nf-section" style={{ marginBottom: 18 }}>
@@ -4915,7 +4931,7 @@ function ClientesDoMes() {
 // mostra o que exige ação, não a agenda inteira.
 function AgendaDoPainel({ onNavigate }) {
   const [eventos, setEventos] = useState(null);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
 
   const carregar = useCallback(async () => {
     const ate = new Date(`${hoje}T12:00:00Z`);
@@ -5505,7 +5521,7 @@ const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Telea
 const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
   // Documento novo já nasce com o colaborador de quem está emitindo — o
   // vínculo vem do cadastro do usuário.
@@ -6256,7 +6272,7 @@ function situacaoGuia(nota) {
 }
 
 function RelatorioNfeModal({ onFechar }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
   const { items: clientes } = useApiCollection("clientes");
@@ -6444,7 +6460,7 @@ function RelatorioNfeModal({ onFechar }) {
 // ---------- Agenda ----------
 
 function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dados, setDados] = useState(() => ({
     titulo: evento?.titulo || "",
     descricao: evento?.descricao || "",
@@ -6654,7 +6670,7 @@ function EventoForm({ evento, colaboradores, onFechar, onSalvo }) {
 }
 
 function AgendaView() {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const daquiUmMes = (() => {
     const d = new Date(`${hoje}T12:00:00Z`);
     d.setUTCMonth(d.getUTCMonth() + 1);
@@ -7054,7 +7070,7 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
 // Registro do serviço feito. Ao vincular um plano, a data e a leitura
 // reposicionam o próximo vencimento — é o que mantém o aviso honesto.
 function OrdemManutencaoForm({ ordem, equipamentos, colaboradores, onFechar, onSalvo }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dados, setDados] = useState(() => ({
     equipamentoId: ordem?.equipamentoId ? String(ordem.equipamentoId) : "",
     data: ordem?.data ? String(ordem.data).slice(0, 10) : hoje,
@@ -7533,9 +7549,11 @@ function LeituraModal({ equipamento, onFechar, onSalvo }) {
 function situacaoConta(conta) {
   if (conta.status === "paga") return { texto: "paga", cor: "#00732F" };
   if (conta.status === "cancelada") return { texto: "cancelada", cor: "#8a887f" };
-  const hojeZero = new Date(); hojeZero.setHours(0, 0, 0, 0);
+  // De meio-dia a meio-dia, pelo dia de Cuiabá: não depende do fuso do
+  // aparelho nem da hora em que a tela é aberta.
+  const hojeMeioDia = new Date(`${hojeNoFuso()}T12:00:00Z`);
   const venc = new Date(String(conta.vencimento).slice(0, 10) + "T12:00:00Z");
-  const dias = Math.round((venc - hojeZero) / 86400000);
+  const dias = Math.round((venc - hojeMeioDia) / 86400000);
   if (dias < 0) return { texto: `atrasada ${Math.abs(dias)}d`, cor: "#c62828" };
   if (dias === 0) return { texto: "vence hoje", cor: "#b57a12" };
   if (dias <= 7) return { texto: `vence em ${dias}d`, cor: "#b57a12" };
@@ -7565,7 +7583,7 @@ async function estornarConta(conta, depois) {
 // Operação fixa: lançada de dentro da aba Despesas da operação, a conta já
 // nasce dela e o campo não muda ali.
 function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, operacaoFixa, onFechar, onSalvo }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dados, setDados] = useState(() => ({
     descricao: conta?.descricao || "",
     valor: conta?.valor ?? "",
@@ -7795,7 +7813,7 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, o
 // Baixa do pagamento. Valor pago separado do valor da conta porque juros e
 // desconto são a regra, não a exceção.
 function BaixaContaModal({ conta, onFechar, onSalvo }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dados, setDados] = useState({
     dataPagamento: hoje,
     valorPago: conta.valor,
@@ -7979,7 +7997,7 @@ function CategoriasECentrosModal({ categorias, centros, onFechar, onMudou }) {
 }
 
 function ContasPagarView() {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const primeiroDia = `${hoje.slice(0, 8)}01`;
   const ultimoDiaMes = (() => {
     const d = new Date(`${hoje.slice(0, 8)}01T12:00:00Z`);
@@ -8834,7 +8852,7 @@ function NfeCteField({ onSelecionar }) {
 }
 
 function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
   // Documento novo já nasce com o colaborador de quem está emitindo — o
   // vínculo vem do cadastro do usuário.

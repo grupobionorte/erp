@@ -1,13 +1,13 @@
 databases:
   - name: erp-biomassa-db
-    plan: free
+    plan: 0.1c-256mb
     postgresMajorVersion: 16
 
 services:
   - type: web
     name: erp-biomassa-backend
     runtime: node
-    plan: free
+    plan: 0.5c-512mb
     rootDir: backend
     buildCommand: npm install && npx prisma generate
     startCommand: npx prisma migrate deploy && npm start
@@ -20,7 +20,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: FOCUS_NFE_BASE_URL
-        value: https://homologacao.focusnfe.com.br
+        sync: false
       - key: FOCUS_NFE_TOKEN
         sync: false
       - key: FRONTEND_URL

@@ -217,6 +217,10 @@ model Pessoa {
   email            String?
   eCliente         Boolean    @default(false) @map("e_cliente")
   eFornecedor      Boolean    @default(false) @map("e_fornecedor")
+  // "cliente" ou "fornecedor". Cada registro tem um papel só: o mesmo CNPJ
+  // como cliente e como fornecedor são dois cadastros independentes. As
+  // marcações acima continuam por compatibilidade e seguem o papel.
+  papel            String
   ativo            Boolean    @default(true)
   criadoEm         DateTime   @default(now()) @map("criado_em")
 
@@ -239,10 +243,10 @@ model Pessoa {
   documentosComoExpedidor    DocumentoFiscal[] @relation("CteExpedidor")
   documentosComoRecebedor    DocumentoFiscal[] @relation("CteRecebedor")
 
-  // CPF/CNPJ único por empresa, não mais pro sistema inteiro — assim duas
-  // empresas do grupo podem ter o mesmo cliente/fornecedor cadastrado cada
-  // uma na sua base, sem conflito.
-  @@unique([documento, empresaId])
+  // CPF/CNPJ único por empresa e por papel — duas empresas do grupo podem
+  // ter cada uma seu cadastro, e a mesma empresa pode ter o CNPJ como
+  // cliente e como fornecedor, sem um mexer no outro.
+  @@unique([documento, empresaId, papel])
   @@map("pessoas")
   contasPagar ContaPagar[]
   operacoesComoFornecedor Operacao[] @relation("OperacoesFornecedor")

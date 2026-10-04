@@ -231,6 +231,7 @@ router.get("/viagens-por-cliente/:pessoaId", asyncHandler(async (req, res) => {
 router.get("/:id/viagens", asyncHandler(async (req, res) => {
   const viagens = await prisma.viagemOperacao.findMany({
     where: { operacaoId: Number(req.params.id), ...filtroDescarga(req.query) },
+    include: { fatura: { select: { numero: true } } },
     orderBy: [{ dataLancamento: "desc" }, { id: "desc" }],
   });
 
@@ -254,7 +255,23 @@ router.post("/:id/viagens", asyncHandler(async (req, res) => {
   }));
 }));
 
+// Viagem já cobrada não muda: o total da fatura deixaria de bater com as
+// viagens dela. Para corrigir, cancela-se a fatura, corrige e fatura de novo.
+async function recusarSeFaturada(viagemId, res) {
+  const viagem = await prisma.viagemOperacao.findUnique({
+    where: { id: Number(viagemId) },
+    select: { fatura: { select: { numero: true } } },
+  });
+  if (!viagem?.fatura) return false;
+  res.status(409).json({
+    erro: `Essa viagem está na fatura nº ${viagem.fatura.numero}. ` +
+      "Para alterar ou excluir, cancele a fatura antes (aba Faturas).",
+  });
+  return true;
+}
+
 router.put("/:id/viagens/:viagemId", asyncHandler(async (req, res) => {
+  if (await recusarSeFaturada(req.params.viagemId, res)) return;
   const preco = await precoMateriaPrima(req.params.id);
   res.json(await prisma.viagemOperacao.update({
     where: { id: Number(req.params.viagemId) },
@@ -263,7 +280,163 @@ router.put("/:id/viagens/:viagemId", asyncHandler(async (req, res) => {
 }));
 
 router.delete("/:id/viagens/:viagemId", asyncHandler(async (req, res) => {
+  if (await recusarSeFaturada(req.params.viagemId, res)) return;
   await prisma.viagemOperacao.delete({ where: { id: Number(req.params.viagemId) } });
+  res.status(204).send();
+}));
+
+/* ---------------------------------------------------------------------------
+   Faturas da operação.
+
+   Cobram do cliente de destino o valor do serviço (unitário da NF ×
+   quantidade descarregada) das viagens descarregadas num período. Cada
+   viagem entra em uma fatura só.
+--------------------------------------------------------------------------- */
+
+// Viagens que podem entrar numa fatura: do cliente, descarregadas no
+// período, ainda sem fatura e com o valor do serviço calculado (sem a
+// quantidade descarregada não há o que cobrar).
+function filtroFaturaveis(operacaoId, { cliente, de, ate }) {
+  return {
+    operacaoId: Number(operacaoId),
+    faturaId: null,
+    clienteDestino: cliente,
+    valorTotalServico: { not: null },
+    dataDescarga: { gte: inicioDoDia(de), lte: fimDoDia(ate) },
+  };
+}
+
+function lerPeriodo(fonte) {
+  const cliente = String(fonte.cliente || "").trim();
+  const { de, ate } = fonte;
+  if (!cliente) return { erro: "Escolha o cliente." };
+  if (!diaValido(de) || !diaValido(ate)) return { erro: "Informe a data inicial e a final da descarga." };
+  if (de > ate) return { erro: "A data inicial é depois da final." };
+  return { cliente, de, ate };
+}
+
+// Clientes que aparecem nas viagens da operação, para a lista da tela.
+router.get("/:id/faturas/clientes", asyncHandler(async (req, res) => {
+  const linhas = await prisma.viagemOperacao.findMany({
+    where: { operacaoId: Number(req.params.id), clienteDestino: { not: null } },
+    distinct: ["clienteDestino"],
+    select: { clienteDestino: true },
+    orderBy: { clienteDestino: "asc" },
+  });
+  res.json(linhas.map((l) => l.clienteDestino).filter(Boolean));
+}));
+
+router.get("/:id/faturas/previa", asyncHandler(async (req, res) => {
+  const periodo = lerPeriodo(req.query);
+  if (periodo.erro) return res.status(400).json({ erro: periodo.erro });
+
+  const viagens = await prisma.viagemOperacao.findMany({
+    where: filtroFaturaveis(req.params.id, periodo),
+    orderBy: [{ dataDescarga: "asc" }, { id: "asc" }],
+  });
+  res.json({ viagens, totais: totaisDasViagens(viagens) });
+}));
+
+router.get("/:id/faturas", asyncHandler(async (req, res) => {
+  res.json(await prisma.faturaOperacao.findMany({
+    where: { operacaoId: Number(req.params.id) },
+    include: { _count: { select: { viagens: true } } },
+    orderBy: { numero: "desc" },
+  }));
+}));
+
+router.post("/:id/faturas", asyncHandler(async (req, res) => {
+  const periodo = lerPeriodo(req.body);
+  if (periodo.erro) return res.status(400).json({ erro: periodo.erro });
+  const ids = (Array.isArray(req.body.viagemIds) ? req.body.viagemIds : []).map(Number).filter(Boolean);
+  if (!ids.length) return res.status(400).json({ erro: "Selecione ao menos uma viagem." });
+
+  const operacao = await prisma.operacao.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { id: true, empresaId: true },
+  });
+  if (!operacao) return res.status(404).json({ erro: "Operação não encontrada." });
+
+  const gerar = () => prisma.$transaction(async (tx) => {
+    // As viagens são conferidas de novo aqui: entre a prévia e o clique
+    // alguém pode ter faturado ou alterado uma delas.
+    const viagens = await tx.viagemOperacao.findMany({
+      where: { ...filtroFaturaveis(operacao.id, periodo), id: { in: ids } },
+    });
+    if (viagens.length !== ids.length) {
+      throw Object.assign(new Error(
+        "Alguma viagem selecionada já foi faturada ou mudou. Atualize a prévia e tente de novo."
+      ), { status: 409 });
+    }
+
+    const ultima = await tx.faturaOperacao.findFirst({
+      where: { empresaId: operacao.empresaId },
+      orderBy: { numero: "desc" },
+      select: { numero: true },
+    });
+    const totais = totaisDasViagens(viagens);
+
+    const criada = await tx.faturaOperacao.create({
+      data: {
+        numero: (ultima?.numero || 0) + 1,
+        empresaId: operacao.empresaId,
+        operacaoId: operacao.id,
+        cliente: periodo.cliente,
+        descargaDe: dataDoDia(periodo.de),
+        descargaAte: dataDoDia(periodo.ate),
+        quantidadeTotal: totais.quantidadeDescarga,
+        valorTotal: totais.servico,
+      },
+    });
+    await tx.viagemOperacao.updateMany({ where: { id: { in: ids } }, data: { faturaId: criada.id } });
+    return criada;
+  });
+
+  // O tratamento geral de erros não olha o status do erro; a recusa
+  // prevista vira 409 aqui, com a mensagem para a tela.
+  try {
+    res.status(201).json(await gerar());
+  } catch (erro) {
+    if (erro.status) return res.status(erro.status).json({ erro: erro.message });
+    throw erro;
+  }
+}));
+
+// Fatura completa, para a impressão: com as viagens e os dados da empresa.
+router.get("/:id/faturas/:faturaId", asyncHandler(async (req, res) => {
+  const fatura = await prisma.faturaOperacao.findFirst({
+    where: { id: Number(req.params.faturaId), operacaoId: Number(req.params.id) },
+    include: {
+      viagens: { orderBy: [{ dataDescarga: "asc" }, { id: "asc" }] },
+      operacao: { select: { codigo: true, descricao: true } },
+    },
+  });
+  if (!fatura) return res.status(404).json({ erro: "Fatura não encontrada." });
+
+  const empresa = fatura.empresaId
+    ? await prisma.empresa.findUnique({
+        where: { id: fatura.empresaId },
+        select: { razaoSocial: true, nomeFantasia: true, cnpj: true, logoUrl: true },
+      })
+    : null;
+  res.json({ ...fatura, empresa });
+}));
+
+// Cancelar libera as viagens para outra fatura, mas a fatura fica
+// gravada: apagar faria o número dela voltar a ser usado, e uma fatura já
+// enviada ao cliente teria o mesmo número de outra.
+router.delete("/:id/faturas/:faturaId", asyncHandler(async (req, res) => {
+  const fatura = await prisma.faturaOperacao.findFirst({
+    where: { id: Number(req.params.faturaId), operacaoId: Number(req.params.id) },
+    select: { id: true, canceladaEm: true },
+  });
+  if (!fatura) return res.status(404).json({ erro: "Fatura não encontrada." });
+  if (fatura.canceladaEm) return res.status(409).json({ erro: "Essa fatura já está cancelada." });
+
+  await prisma.$transaction([
+    prisma.viagemOperacao.updateMany({ where: { faturaId: fatura.id }, data: { faturaId: null } }),
+    prisma.faturaOperacao.update({ where: { id: fatura.id }, data: { canceladaEm: new Date() } }),
+  ]);
   res.status(204).send();
 }));
 

@@ -1248,6 +1248,7 @@ model Operacao {
   @@index([empresaId, codigo])
   @@map("operacoes")
   viagens ViagemOperacao[]
+  faturas FaturaOperacao[]
 }
 
 // Menus liberados para um usuário DENTRO de uma empresa.
@@ -1315,8 +1316,44 @@ model ViagemOperacao {
   operacaoId Int      @map("operacao_id")
   operacao   Operacao @relation(fields: [operacaoId], references: [id], onDelete: Cascade)
 
+  // Fatura em que a viagem foi cobrada. Viagem faturada não pode ser
+  // alterada nem excluída: o total da fatura deixaria de bater com ela.
+  faturaId Int?             @map("fatura_id")
+  fatura   FaturaOperacao?  @relation(fields: [faturaId], references: [id], onDelete: SetNull)
+
   criadoEm DateTime @default(now()) @map("criado_em")
 
   @@index([operacaoId, dataLancamento])
+  @@index([faturaId])
   @@map("viagens_operacao")
+}
+
+// Fatura de viagens: cobra do cliente de destino o valor do serviço das
+// viagens descarregadas num período. Não se apaga: cancelada, guarda o
+// número (que nunca é reaproveitado) e libera as viagens.
+model FaturaOperacao {
+  id       Int @id @default(autoincrement())
+  // Sequência por empresa: é o número que o cliente vê.
+  numero   Int
+  empresaId Int? @map("empresa_id")
+
+  operacaoId Int      @map("operacao_id")
+  operacao   Operacao @relation(fields: [operacaoId], references: [id], onDelete: Cascade)
+
+  // Como gravado no "Cliente (destino)" das viagens (nome - CNPJ).
+  cliente     String
+  descargaDe  DateTime @map("descarga_de")
+  descargaAte DateTime @map("descarga_ate")
+
+  // Totais do momento em que foi gerada.
+  quantidadeTotal Float @map("quantidade_total")
+  valorTotal      Float @map("valor_total")
+
+  viagens ViagemOperacao[]
+
+  canceladaEm DateTime? @map("cancelada_em")
+  criadoEm    DateTime  @default(now()) @map("criado_em")
+
+  @@unique([empresaId, numero])
+  @@map("faturas_operacao")
 }

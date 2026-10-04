@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.035";
+const VERSAO_SISTEMA = "1.036";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2786,7 +2786,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
       {erro && <p className="error-text">{erro}</p>}
 
       <div style={{ overflowX: "auto" }}>
-        <table className="data-table tabela-densa planilha-viagens" style={{ minWidth: 1050 }}>
+        <table className="data-table tabela-densa planilha-viagens" style={{ minWidth: 1110 }}>
           <thead>
             <tr>
               <th>Lançam.</th>
@@ -2806,6 +2806,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
               <th style={{ textAlign: "right" }}>Serviço</th>
               <th style={{ textAlign: "right" }}>Matéria-prima</th>
               <th style={{ textAlign: "right" }}>Lucro</th>
+              <th>Fatura</th>
               <th className="actions-col"></th>
             </tr>
           </thead>
@@ -2831,13 +2832,14 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
                 <td style={{ textAlign: "right", color: corDoLucro(v.lucroBruto) }}>
                   {money(v.lucroBruto)}
                 </td>
+                <td>{v.fatura ? `Nº ${v.fatura.numero}` : "—"}</td>
                 <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
                   <button className="icon-btn" title="Editar" onClick={() => setEditando(v)}><Pencil size={14} /></button>
                   <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(v)}><Trash2 size={14} /></button>
                 </td>
               </tr>
             ))}
-            {!dados.viagens.length && <tr><td colSpan={18}>
+            {!dados.viagens.length && <tr><td colSpan={19}>
               {filtrando ? "Nenhuma viagem com descarga nesse período." : "Nenhuma viagem lançada ainda."}
             </td></tr>}
           </tbody>
@@ -2955,6 +2957,304 @@ function ViagensDoCliente({ pessoaId }) {
   );
 }
 
+// Texto vindo do banco entra no HTML da impressão: sem escapar, um "<" ou
+// "&" no nome do cliente quebraria a página.
+const escaparHtml = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// Faturas da operação: escolhe o cliente de destino e o período de
+// descarga, confere as viagens e grava a fatura com número. Cada viagem
+// entra em uma fatura só; cancelar a fatura libera as viagens, e o número
+// dela nunca é reaproveitado.
+function FaturasAba({ operacaoId }) {
+  const [faturas, setFaturas] = useState(null);
+  const [clientes, setClientes] = useState([]);
+  const [cliente, setCliente] = useState("");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const [previa, setPrevia] = useState(null);
+  const [marcadas, setMarcadas] = useState(new Set());
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  const carregar = useCallback(async () => {
+    if (!operacaoId) return;
+    try {
+      const [lista, nomes] = await Promise.all([
+        apiRequest(`/operacoes/${operacaoId}/faturas`),
+        apiRequest(`/operacoes/${operacaoId}/faturas/clientes`),
+      ]);
+      setFaturas(lista);
+      setClientes(nomes);
+    } catch (e) { setErro(e.message); }
+  }, [operacaoId]);
+
+  useEffect(() => { carregar(); }, [carregar]);
+
+  // Mudou o filtro, a prévia antiga não vale mais.
+  useEffect(() => { setPrevia(null); }, [cliente, de, ate]);
+
+  if (!operacaoId) return <p className="hint">Salve a operação primeiro para gerar faturas.</p>;
+  if (!faturas) return <p className="hint">Carregando…</p>;
+
+  const dataBr = (iso) => (iso ? new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR") : "—");
+  const money = (v) => (v != null ? `R$ ${formatarMoeda(v)}` : "—");
+  const qtde = (v) => (v != null ? formatarQuantidade(v) : "—");
+
+  const buscar = async () => {
+    setErro(""); setOcupado(true);
+    try {
+      const params = new URLSearchParams({ cliente, de, ate });
+      const r = await apiRequest(`/operacoes/${operacaoId}/faturas/previa?${params}`);
+      setPrevia(r);
+      setMarcadas(new Set(r.viagens.map(v => v.id)));
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+    finally { setOcupado(false); }
+  };
+
+  const selecionadas = previa ? previa.viagens.filter(v => marcadas.has(v.id)) : [];
+  const somaQtde = selecionadas.reduce((t, v) => t + (Number(v.quantidadeDescarga) || 0), 0);
+  const somaValor = selecionadas.reduce((t, v) => t + (Number(v.valorTotalServico) || 0), 0);
+
+  const alternar = (id) => setMarcadas(m => {
+    const novo = new Set(m);
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    return novo;
+  });
+
+  const gerar = async () => {
+    if (!selecionadas.length) { setErro("Selecione ao menos uma viagem."); return; }
+    // A janela da impressão abre já no clique: depois de esperar o
+    // servidor, o navegador não reconhece mais o clique e bloqueia.
+    const janela = window.open("", "_blank");
+    setErro(""); setOcupado(true);
+    try {
+      const fatura = await apiRequest(`/operacoes/${operacaoId}/faturas`, {
+        method: "POST",
+        body: JSON.stringify({ cliente, de, ate, viagemIds: selecionadas.map(v => v.id) }),
+      });
+      setPrevia(null);
+      await carregar();
+      imprimir(fatura.id, janela);
+    } catch (e) {
+      if (janela) janela.close();
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    }
+    finally { setOcupado(false); }
+  };
+
+  const cancelar = async (f) => {
+    if (!window.confirm(`Cancelar a fatura nº ${f.numero}? As viagens dela voltam a ficar livres para outra fatura, e o número ${f.numero} não será usado de novo.`)) return;
+    try {
+      await apiRequest(`/operacoes/${operacaoId}/faturas/${f.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(e.message); }
+  };
+
+  const imprimir = async (faturaId, janelaAberta) => {
+    // A janela abre antes da busca: aberta depois de um await, o navegador
+    // trata como pop-up e bloqueia. Ao gerar, ela já vem aberta do clique.
+    const janela = janelaAberta || window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+    try {
+      const f = await apiRequest(`/operacoes/${operacaoId}/faturas/${faturaId}`);
+      const cnpj = String(f.empresa?.cnpj || "").replace(/\D/g, "");
+      const cnpjFormatado = cnpj.length === 14
+        ? cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5") : (f.empresa?.cnpj || "");
+      const linhas = f.viagens.map(v => `
+        <tr>
+          <td>${dataBr(v.dataDescarga)}</td>
+          <td>${escaparHtml(v.numeroNf || "—")}</td>
+          <td>${escaparHtml(v.placa || "—")}</td>
+          <td>${escaparHtml(v.ticket || "—")}</td>
+          <td class="num">${qtde(v.quantidadeDescarga)}</td>
+          <td class="num">${money(v.valorUnitarioNf)}</td>
+          <td class="num">${money(v.valorTotalServico)}</td>
+        </tr>`).join("");
+
+      janela.document.write(`
+        <!DOCTYPE html><html><head><meta charset="utf-8"><title>Fatura nº ${f.numero}</title>
+        <style>
+          @page { size: A4; margin: 14mm; }
+          body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #23231F; font-size: 11px; }
+          .topo { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #23231F; padding-bottom: 10px; margin-bottom: 14px; }
+          .topo img { max-height: 54px; max-width: 140px; }
+          .empresa { font-size: 13px; font-weight: 600; }
+          .doc { color: #6B6B68; }
+          h1 { font-size: 18px; margin: 0 0 10px; }
+          .dados { display: grid; grid-template-columns: 110px 1fr; gap: 3px 10px; margin-bottom: 16px; font-size: 12px; }
+          .dados b { color: #55534C; font-weight: 500; }
+          table { width: 100%; border-collapse: collapse; }
+          th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .3px;
+               color: #55534C; border-bottom: 1px solid #23231F; padding: 5px 4px; }
+          td { padding: 4px; border-bottom: 1px solid #E5E3DA; }
+          .num { text-align: right; white-space: nowrap; }
+          tfoot td { font-weight: 600; border-top: 1px solid #23231F; border-bottom: none; font-size: 12px; }
+        </style></head><body>
+          <div class="topo">
+            ${f.empresa?.logoUrl ? `<img src="${escaparHtml(f.empresa.logoUrl)}">` : ""}
+            <div>
+              <div class="empresa">${escaparHtml(f.empresa?.razaoSocial || "")}</div>
+              <div class="doc">${cnpjFormatado ? `CNPJ ${escaparHtml(cnpjFormatado)}` : ""}</div>
+            </div>
+          </div>
+          <h1>Fatura nº ${f.numero}</h1>
+          <div class="dados">
+            <b>Cliente</b><span>${escaparHtml(f.cliente)}</span>
+            <b>Operação</b><span>${escaparHtml([f.operacao?.codigo, f.operacao?.descricao].filter(Boolean).join(" — "))}</span>
+            <b>Descargas de</b><span>${dataBr(f.descargaDe)} a ${dataBr(f.descargaAte)}</span>
+            <b>Emitida em</b><span>${new Date(f.criadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" })}</span>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Descarga</th><th>NF</th><th>Placa</th><th>Ticket</th>
+              <th class="num">Qtde descarregada</th><th class="num">Unitário</th><th class="num">Valor</th>
+            </tr></thead>
+            <tbody>${linhas}</tbody>
+            <tfoot><tr>
+              <td colspan="4">${f.viagens.length} viage${f.viagens.length !== 1 ? "ns" : "m"}</td>
+              <td class="num">${qtde(f.quantidadeTotal)}</td><td></td>
+              <td class="num">${money(f.valorTotal)}</td>
+            </tr></tfoot>
+          </table>
+          <script>window.onload = () => window.print();<\/script>
+        </body></html>`);
+      janela.document.close();
+    } catch (e) {
+      janela.close();
+      alert(e.message);
+    }
+  };
+
+  return (
+    <div style={{ padding: "0 22px 18px" }}>
+      <section className="pf-secao" style={{ paddingTop: 6 }}>
+        <h4 className="pf-secao-titulo">Nova fatura</h4>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+          <div className="field-group" style={{ minWidth: 320, flex: "1 1 320px", marginBottom: 0 }}>
+            <label className="field-label">Cliente (destino)</label>
+            <select value={cliente} onChange={e => setCliente(e.target.value)}>
+              <option value="">Escolha o cliente</option>
+              {clientes.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="field-group" style={{ marginBottom: 0 }}>
+            <label className="field-label">Descarga de</label>
+            <input type="date" value={de} onChange={e => setDe(e.target.value)} style={{ width: 150 }} />
+          </div>
+          <div className="field-group" style={{ marginBottom: 0 }}>
+            <label className="field-label">até</label>
+            <input type="date" value={ate} onChange={e => setAte(e.target.value)} style={{ width: 150 }} />
+          </div>
+          <button className="btn" onClick={buscar} disabled={ocupado || !cliente || !de || !ate}>
+            Buscar viagens
+          </button>
+        </div>
+        {!clientes.length && (
+          <p className="hint">Nenhuma viagem desta operação tem "Cliente (destino)" preenchido ainda.</p>
+        )}
+
+        {previa && (
+          <div style={{ marginTop: 12 }}>
+            {previa.viagens.length ? (
+              <>
+                <div style={{ overflowX: "auto" }}>
+                  <table className="data-table tabela-densa planilha-viagens">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 28 }}></th>
+                        <th>Descarga</th>
+                        <th>NF</th>
+                        <th>Placa</th>
+                        <th>Ticket</th>
+                        <th style={{ textAlign: "right" }}>Qtde desc.</th>
+                        <th style={{ textAlign: "right" }}>Unitário</th>
+                        <th style={{ textAlign: "right" }}>Serviço</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previa.viagens.map(v => (
+                        <tr key={v.id}>
+                          <td><input type="checkbox" checked={marcadas.has(v.id)} onChange={() => alternar(v.id)}
+                            aria-label="Incluir na fatura" style={{ width: "auto" }} /></td>
+                          <td>{dataBr(v.dataDescarga)}</td>
+                          <td>{v.numeroNf || "—"}</td>
+                          <td>{v.placa || "—"}</td>
+                          <td>{v.ticket || "—"}</td>
+                          <td style={{ textAlign: "right" }}>{qtde(v.quantidadeDescarga)}</td>
+                          <td style={{ textAlign: "right" }}>{money(v.valorUnitarioNf)}</td>
+                          <td style={{ textAlign: "right", color: COR_CREDITO }}>{money(v.valorTotalServico)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13 }}>
+                    {selecionadas.length} de {previa.viagens.length} viage{previa.viagens.length !== 1 ? "ns" : "m"} ·
+                    {" "}{formatarQuantidade(somaQtde)} ·
+                    {" "}<b style={{ color: COR_CREDITO }}>{money(somaValor)}</b>
+                  </span>
+                  <button className="btn btn-primary" onClick={gerar} disabled={ocupado || !selecionadas.length}>
+                    {ocupado ? "Gerando…" : "Gerar fatura"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="hint">
+                Nenhuma viagem a faturar desse cliente nesse período. Só entram viagens com data e
+                quantidade de descarga preenchidas que ainda não estão em outra fatura.
+              </p>
+            )}
+          </div>
+        )}
+        {erro && <p className="error-text">{erro}</p>}
+      </section>
+
+      <section className="pf-secao">
+        <h4 className="pf-secao-titulo">Faturas geradas</h4>
+        <table className="data-table tabela-densa planilha-viagens">
+          <thead>
+            <tr>
+              <th>Nº</th>
+              <th>Cliente</th>
+              <th>Descargas</th>
+              <th style={{ textAlign: "right" }}>Viagens</th>
+              <th style={{ textAlign: "right" }}>Quantidade</th>
+              <th style={{ textAlign: "right" }}>Valor</th>
+              <th>Emitida em</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {faturas.map(f => (
+              <tr key={f.id} style={f.canceladaEm ? { color: "#9A9A96", textDecoration: "line-through" } : undefined}>
+                <td>{f.numero}</td>
+                <td><div className="cortar" style={{ maxWidth: 320 }} title={f.cliente}>{f.cliente}</div></td>
+                <td>{dataBr(f.descargaDe)} a {dataBr(f.descargaAte)}</td>
+                <td style={{ textAlign: "right" }}>{f._count?.viagens ?? "—"}</td>
+                <td style={{ textAlign: "right" }}>{qtde(f.quantidadeTotal)}</td>
+                <td style={{ textAlign: "right", color: COR_CREDITO }}>{money(f.valorTotal)}</td>
+                <td>{new Date(f.criadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" })}</td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  {f.canceladaEm ? (
+                    <span style={{ fontSize: 11, textDecoration: "none", display: "inline-block" }}>Cancelada</span>
+                  ) : (
+                    <>
+                      <button className="icon-btn" title="Imprimir" onClick={() => imprimir(f.id)}><FileText size={14} /></button>
+                      <button className="icon-btn icon-btn-danger" title="Cancelar fatura" onClick={() => cancelar(f)}><Trash2 size={14} /></button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {!faturas.length && <tr><td colSpan={8}>Nenhuma fatura gerada nesta operação.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+    </div>
+  );
+}
+
 function RecordForm({ moduleKey, record, onSave, onCancel }) {
   // Clientes e fornecedores têm formulário próprio (campos que reagem ao
   // tipo de pessoa e à situação fiscal); o resto segue o genérico.
@@ -3037,6 +3337,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
                 Viagens
               </button>
             )}
+            {temViagens && (
+              <button type="button" className="cte-aba" aria-selected={aba === "faturas"} onClick={() => setAba("faturas")}>
+                Faturas
+              </button>
+            )}
             {temJornada && (
               <button type="button" className="cte-aba" aria-selected={aba === "jornada"} onClick={() => setAba("jornada")}>
                 Horários de trabalho
@@ -3058,6 +3363,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
               precoMateriaPrima={data.valorUnitarioMateriaPrima === "" ? null : Number(data.valorUnitarioMateriaPrima)}
             />
           )}
+          {temViagens && aba === "faturas" && <FaturasAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
             <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} />

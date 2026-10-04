@@ -1295,6 +1295,10 @@ model ViagemOperacao {
   // Descarga no destino.
   dataDescarga       DateTime? @map("data_descarga")
   quantidadeDescarga Float?    @map("quantidade_descarga")
+  // Pesagem na balança do destino, antes do desconto, e umidade medida na
+  // descarga (%). Por enquanto só registro: não entram em nenhuma conta.
+  quantidadeBrutaDescarga Float? @map("quantidade_bruta_descarga")
+  umidadeDescarga         Float? @map("umidade_descarga")
   ticket             String?
 
   // Resultado da viagem.

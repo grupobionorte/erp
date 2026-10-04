@@ -146,6 +146,8 @@ function montarViagem(dados, valorUnitarioMateriaPrima) {
 
     dataDescarga: dataDoDia(dados.dataDescarga),
     quantidadeDescarga: numero(dados.quantidadeDescarga),
+    quantidadeBrutaDescarga: numero(dados.quantidadeBrutaDescarga),
+    umidadeDescarga: numero(dados.umidadeDescarga),
     ticket: dados.ticket || null,
 
     custoTransporte: calculado.custoTransporte,

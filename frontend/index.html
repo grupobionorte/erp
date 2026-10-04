@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.034";
+const VERSAO_SISTEMA = "1.035";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2451,6 +2451,8 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
     valorTotalTransporte: viagem?.valorTotalTransporte ?? "",
     dataDescarga: dia(viagem?.dataDescarga),
     quantidadeDescarga: viagem?.quantidadeDescarga ?? "",
+    quantidadeBrutaDescarga: viagem?.quantidadeBrutaDescarga ?? "",
+    umidadeDescarga: viagem?.umidadeDescarga ?? "",
     ticket: viagem?.ticket || "",
     valorTotalServico: viagem?.valorTotalServico ?? "",
     custoMateriaPrima: viagem?.custoMateriaPrima ?? "",
@@ -2615,6 +2617,16 @@ function ViagemForm({ operacaoId, viagem, precoMateriaPrima, onFechar, onSalvo }
                 <div className="field-group">
                   <label className="field-label">Ticket</label>
                   <input value={dados.ticket} onChange={e => set("ticket", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Quantidade bruta</label>
+                  <input type="number" step="0.001" value={dados.quantidadeBrutaDescarga}
+                    onChange={e => set("quantidadeBrutaDescarga", e.target.value)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Umidade (%)</label>
+                  <input type="number" step="0.01" value={dados.umidadeDescarga}
+                    onChange={e => set("umidadeDescarga", e.target.value)} />
                 </div>
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Quantidade descarregada</label>

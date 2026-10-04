@@ -1351,6 +1351,10 @@ model FaturaOperacao {
 
   viagens ViagemOperacao[]
 
+  vencimento DateTime?
+  // Sai na impressão, embaixo das viagens.
+  observacao String?
+
   canceladaEm DateTime? @map("cancelada_em")
   criadoEm    DateTime  @default(now()) @map("criado_em")
 

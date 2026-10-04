@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.036";
+const VERSAO_SISTEMA = "1.037";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2975,6 +2975,11 @@ function FaturasAba({ operacaoId }) {
   const [marcadas, setMarcadas] = useState(new Set());
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [vencimento, setVencimento] = useState("");
+  const [observacao, setObservacao] = useState("");
+  // Fatura aberta para edição: a mesma tabela de viagens serve para gerar
+  // e para editar; muda o que o botão faz.
+  const [editando, setEditando] = useState(null);
 
   const carregar = useCallback(async () => {
     if (!operacaoId) return;
@@ -2991,7 +2996,7 @@ function FaturasAba({ operacaoId }) {
   useEffect(() => { carregar(); }, [carregar]);
 
   // Mudou o filtro, a prévia antiga não vale mais.
-  useEffect(() => { setPrevia(null); }, [cliente, de, ate]);
+  useEffect(() => { if (!editando) setPrevia(null); }, [cliente, de, ate]);
 
   if (!operacaoId) return <p className="hint">Salve a operação primeiro para gerar faturas.</p>;
   if (!faturas) return <p className="hint">Carregando…</p>;
@@ -3030,15 +3035,46 @@ function FaturasAba({ operacaoId }) {
     try {
       const fatura = await apiRequest(`/operacoes/${operacaoId}/faturas`, {
         method: "POST",
-        body: JSON.stringify({ cliente, de, ate, viagemIds: selecionadas.map(v => v.id) }),
+        body: JSON.stringify({ cliente, de, ate, vencimento, observacao, viagemIds: selecionadas.map(v => v.id) }),
       });
-      setPrevia(null);
+      setPrevia(null); setVencimento(""); setObservacao("");
       await carregar();
       imprimir(fatura.id, janela);
     } catch (e) {
       if (janela) janela.close();
       setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
     }
+    finally { setOcupado(false); }
+  };
+
+  const abrirEdicao = async (f) => {
+    setErro(""); setOcupado(true);
+    try {
+      const r = await apiRequest(`/operacoes/${operacaoId}/faturas/${f.id}/edicao`);
+      setEditando(r.fatura);
+      setPrevia({ viagens: r.viagens });
+      setMarcadas(new Set(r.viagens.filter(v => v.faturaId === r.fatura.id).map(v => v.id)));
+      setVencimento(r.fatura.vencimento ? String(r.fatura.vencimento).slice(0, 10) : "");
+      setObservacao(r.fatura.observacao || "");
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+    finally { setOcupado(false); }
+  };
+
+  const fecharEdicao = () => {
+    setEditando(null); setPrevia(null); setVencimento(""); setObservacao(""); setErro("");
+  };
+
+  const salvarEdicao = async () => {
+    if (!selecionadas.length) { setErro("A fatura precisa de ao menos uma viagem. Para desfazer, cancele a fatura."); return; }
+    setErro(""); setOcupado(true);
+    try {
+      await apiRequest(`/operacoes/${operacaoId}/faturas/${editando.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ vencimento, observacao, viagemIds: selecionadas.map(v => v.id) }),
+      });
+      fecharEdicao();
+      await carregar();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
     finally { setOcupado(false); }
   };
 
@@ -3089,6 +3125,7 @@ function FaturasAba({ operacaoId }) {
           td { padding: 4px; border-bottom: 1px solid #E5E3DA; }
           .num { text-align: right; white-space: nowrap; }
           tfoot td { font-weight: 600; border-top: 1px solid #23231F; border-bottom: none; font-size: 12px; }
+          .obs { margin-top: 16px; font-size: 12px; white-space: pre-wrap; }
         </style></head><body>
           <div class="topo">
             ${f.empresa?.logoUrl ? `<img src="${escaparHtml(f.empresa.logoUrl)}">` : ""}
@@ -3103,6 +3140,7 @@ function FaturasAba({ operacaoId }) {
             <b>Operação</b><span>${escaparHtml([f.operacao?.codigo, f.operacao?.descricao].filter(Boolean).join(" — "))}</span>
             <b>Descargas de</b><span>${dataBr(f.descargaDe)} a ${dataBr(f.descargaAte)}</span>
             <b>Emitida em</b><span>${new Date(f.criadoEm).toLocaleDateString("pt-BR", { timeZone: "America/Cuiaba" })}</span>
+            ${f.vencimento ? `<b>Vencimento</b><span>${dataBr(f.vencimento)}</span>` : ""}
           </div>
           <table>
             <thead><tr>
@@ -3116,6 +3154,7 @@ function FaturasAba({ operacaoId }) {
               <td class="num">${money(f.valorTotal)}</td>
             </tr></tfoot>
           </table>
+          ${f.observacao ? `<p class="obs"><b>Observação:</b> ${escaparHtml(f.observacao)}</p>` : ""}
           <script>window.onload = () => window.print();<\/script>
         </body></html>`);
       janela.document.close();
@@ -3128,7 +3167,15 @@ function FaturasAba({ operacaoId }) {
   return (
     <div style={{ padding: "0 22px 18px" }}>
       <section className="pf-secao" style={{ paddingTop: 6 }}>
-        <h4 className="pf-secao-titulo">Nova fatura</h4>
+        <h4 className="pf-secao-titulo">
+          {editando ? `Editar fatura nº ${editando.numero}` : "Nova fatura"}
+        </h4>
+        {editando ? (
+          <p className="hint" style={{ marginTop: 0 }}>
+            {editando.cliente} · descargas de {dataBr(editando.descargaDe)} a {dataBr(editando.descargaAte)}.
+            Marque as viagens que ficam na fatura; dá para incluir as desse cliente e período que ainda estão livres.
+          </p>
+        ) : (
         <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
           <div className="field-group" style={{ minWidth: 320, flex: "1 1 320px", marginBottom: 0 }}>
             <label className="field-label">Cliente (destino)</label>
@@ -3149,7 +3196,8 @@ function FaturasAba({ operacaoId }) {
             Buscar viagens
           </button>
         </div>
-        {!clientes.length && (
+        )}
+        {!editando && !clientes.length && (
           <p className="hint">Nenhuma viagem desta operação tem "Cliente (destino)" preenchido ainda.</p>
         )}
 
@@ -3188,15 +3236,34 @@ function FaturasAba({ operacaoId }) {
                     </tbody>
                   </table>
                 </div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <div className="field-group" style={{ marginBottom: 0 }}>
+                    <label className="field-label">Vencimento</label>
+                    <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)} style={{ width: 150 }} />
+                  </div>
+                  <div className="field-group" style={{ marginBottom: 0, flex: "1 1 320px" }}>
+                    <label className="field-label">Observação (sai na impressão)</label>
+                    <input value={observacao} onChange={e => setObservacao(e.target.value)} />
+                  </div>
+                </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 10, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13 }}>
                     {selecionadas.length} de {previa.viagens.length} viage{previa.viagens.length !== 1 ? "ns" : "m"} ·
                     {" "}{formatarQuantidade(somaQtde)} ·
                     {" "}<b style={{ color: COR_CREDITO }}>{money(somaValor)}</b>
                   </span>
-                  <button className="btn btn-primary" onClick={gerar} disabled={ocupado || !selecionadas.length}>
-                    {ocupado ? "Gerando…" : "Gerar fatura"}
-                  </button>
+                  {editando ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn" onClick={fecharEdicao} disabled={ocupado}>Descartar alterações</button>
+                      <button className="btn btn-primary" onClick={salvarEdicao} disabled={ocupado || !selecionadas.length}>
+                        {ocupado ? "Salvando…" : "Salvar fatura"}
+                      </button>
+                    </div>
+                  ) : (
+                    <button className="btn btn-primary" onClick={gerar} disabled={ocupado || !selecionadas.length}>
+                      {ocupado ? "Gerando…" : "Gerar fatura"}
+                    </button>
+                  )}
                 </div>
               </>
             ) : (
@@ -3240,6 +3307,7 @@ function FaturasAba({ operacaoId }) {
                     <span style={{ fontSize: 11, textDecoration: "none", display: "inline-block" }}>Cancelada</span>
                   ) : (
                     <>
+                      <button className="icon-btn" title="Editar" onClick={() => abrirEdicao(f)}><Pencil size={14} /></button>
                       <button className="icon-btn" title="Imprimir" onClick={() => imprimir(f.id)}><FileText size={14} /></button>
                       <button className="icon-btn icon-btn-danger" title="Cancelar fatura" onClick={() => cancelar(f)}><Trash2 size={14} /></button>
                     </>

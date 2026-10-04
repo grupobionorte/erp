@@ -315,6 +315,14 @@ function lerPeriodo(fonte) {
   return { cliente, de, ate };
 }
 
+// Vencimento e observação: o que a fatura tem além das viagens.
+function dadosLivresDaFatura(corpo) {
+  return {
+    vencimento: diaValido(corpo.vencimento) ? dataDoDia(corpo.vencimento) : null,
+    observacao: String(corpo.observacao || "").trim() || null,
+  };
+}
+
 // Clientes que aparecem nas viagens da operação, para a lista da tela.
 router.get("/:id/faturas/clientes", asyncHandler(async (req, res) => {
   const linhas = await prisma.viagemOperacao.findMany({
@@ -386,6 +394,7 @@ router.post("/:id/faturas", asyncHandler(async (req, res) => {
         descargaAte: dataDoDia(periodo.ate),
         quantidadeTotal: totais.quantidadeDescarga,
         valorTotal: totais.servico,
+        ...dadosLivresDaFatura(req.body),
       },
     });
     await tx.viagemOperacao.updateMany({ where: { id: { in: ids } }, data: { faturaId: criada.id } });
@@ -396,6 +405,90 @@ router.post("/:id/faturas", asyncHandler(async (req, res) => {
   // prevista vira 409 aqui, com a mensagem para a tela.
   try {
     res.status(201).json(await gerar());
+  } catch (erro) {
+    if (erro.status) return res.status(erro.status).json({ erro: erro.message });
+    throw erro;
+  }
+}));
+
+// Para editar: as viagens que já estão na fatura e as que ainda podem
+// entrar — do mesmo cliente, no período dela, sem outra fatura.
+router.get("/:id/faturas/:faturaId/edicao", asyncHandler(async (req, res) => {
+  const fatura = await prisma.faturaOperacao.findFirst({
+    where: { id: Number(req.params.faturaId), operacaoId: Number(req.params.id) },
+  });
+  if (!fatura) return res.status(404).json({ erro: "Fatura não encontrada." });
+  if (fatura.canceladaEm) return res.status(409).json({ erro: "Fatura cancelada não pode ser editada." });
+
+  const viagens = await prisma.viagemOperacao.findMany({
+    where: {
+      OR: [
+        { faturaId: fatura.id },
+        { ...filtroFaturaveis(fatura.operacaoId, periodoDaFatura(fatura)) },
+      ],
+    },
+    orderBy: [{ dataDescarga: "asc" }, { id: "asc" }],
+  });
+  res.json({ fatura, viagens });
+}));
+
+// O período gravado volta para o formato do filtro (AAAA-MM-DD, dia de MT).
+function periodoDaFatura(fatura) {
+  const dia = (d) => new Date(d.getTime() - 4 * 3600 * 1000).toISOString().slice(0, 10);
+  return { cliente: fatura.cliente, de: dia(fatura.descargaDe), ate: dia(fatura.descargaAte) };
+}
+
+// Edita a fatura: troca as viagens (o número continua o mesmo, os totais
+// são recalculados) e o vencimento e a observação.
+router.put("/:id/faturas/:faturaId", asyncHandler(async (req, res) => {
+  const ids = (Array.isArray(req.body.viagemIds) ? req.body.viagemIds : []).map(Number).filter(Boolean);
+  if (!ids.length) {
+    return res.status(400).json({ erro: "A fatura precisa de ao menos uma viagem. Para desfazer, cancele a fatura." });
+  }
+
+  const editar = () => prisma.$transaction(async (tx) => {
+    const fatura = await tx.faturaOperacao.findFirst({
+      where: { id: Number(req.params.faturaId), operacaoId: Number(req.params.id) },
+    });
+    if (!fatura) throw Object.assign(new Error("Fatura não encontrada."), { status: 404 });
+    if (fatura.canceladaEm) throw Object.assign(new Error("Fatura cancelada não pode ser editada."), { status: 409 });
+
+    // Cada viagem escolhida tem que já ser desta fatura ou estar livre para
+    // ela (mesmo cliente, dentro do período) — conferido de novo aqui.
+    const permitidas = await tx.viagemOperacao.findMany({
+      where: {
+        id: { in: ids },
+        OR: [
+          { faturaId: fatura.id },
+          { ...filtroFaturaveis(fatura.operacaoId, periodoDaFatura(fatura)) },
+        ],
+      },
+    });
+    if (permitidas.length !== ids.length) {
+      throw Object.assign(new Error(
+        "Alguma viagem escolhida já está em outra fatura ou mudou. Abra a edição de novo e confira."
+      ), { status: 409 });
+    }
+
+    await tx.viagemOperacao.updateMany({
+      where: { faturaId: fatura.id, id: { notIn: ids } },
+      data: { faturaId: null },
+    });
+    await tx.viagemOperacao.updateMany({ where: { id: { in: ids } }, data: { faturaId: fatura.id } });
+
+    const totais = totaisDasViagens(permitidas);
+    return tx.faturaOperacao.update({
+      where: { id: fatura.id },
+      data: {
+        quantidadeTotal: totais.quantidadeDescarga,
+        valorTotal: totais.servico,
+        ...dadosLivresDaFatura(req.body),
+      },
+    });
+  });
+
+  try {
+    res.json(await editar());
   } catch (erro) {
     if (erro.status) return res.status(erro.status).json({ erro: erro.message });
     throw erro;

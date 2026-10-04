@@ -903,7 +903,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.033";
+const VERSAO_SISTEMA = "1.034";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -5132,7 +5132,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro">
+      <div className="modal modal-cadastro modal-documento">
         <div className="modal-header">
           <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -8579,7 +8579,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro">
+      <div className="modal modal-cadastro modal-documento">
         <div className="modal-header" style={{ display: "block", paddingBottom: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
@@ -9965,6 +9965,14 @@ function ErpBiomassa() {
           height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto;
         }
         .modal-planilha > .modal-footer { flex: 0 0 auto; }
+        /* Documento fiscal: bem mais campos que um cadastro, então janela
+           maior em largura e altura. O corpo ocupa o que sobra, como na
+           planilha, para o rodapé com os botões nunca sair da tela. */
+        .modal-documento { width: 1280px; max-width: 96vw; height: 92vh; max-height: 92vh; }
+        .modal-documento > .modal-body {
+          height: auto; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+        }
+        .modal-documento > .modal-footer { flex: 0 0 auto; }
 
         /* Os três momentos da viagem lado a lado; em tela estreita, um
            embaixo do outro. */

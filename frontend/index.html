@@ -213,6 +213,22 @@ const dataSemHoraBr = (valor) => (valor
   ? new Date(`${String(valor).slice(0, 10)}T12:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" })
   : "");
 
+// Dia e hora de Cuiabá de um instante gravado com hora (emissão, saída).
+// "slice(0, 10)" dava o dia em UTC: uma nota das 21h aparecia no dia
+// seguinte ao ser editada, e salvar de novo a movia de dia. Meia-noite UTC
+// exata é o formato antigo "só com o dia" e vale pelo dia gravado.
+const diaDoInstante = (valor) => {
+  if (!valor) return "";
+  const texto = String(valor);
+  if (/T00:00:00(\.000)?Z$/.test(texto)) return texto.slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_OPERACAO }).format(new Date(texto));
+};
+const horaDoInstante = (valor) => new Date(valor || Date.now())
+  .toLocaleTimeString("pt-BR", { timeZone: FUSO_OPERACAO, hour: "2-digit", minute: "2-digit" });
+const dataBrDoInstante = (valor) => (valor
+  ? new Date(valor).toLocaleDateString("pt-BR", { timeZone: FUSO_OPERACAO })
+  : "");
+
 // Quantidade de mercadoria: até três casas quando existem, sem zeros à toa.
 function formatarQuantidade(valor) {
   const n = Number(valor);
@@ -920,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.039";
+const VERSAO_SISTEMA = "1.040";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -5430,7 +5446,7 @@ function MdfeView() {
                 </td>
                 <td>
                   {mdfe.dataEncerramento
-                    ? new Date(mdfe.dataEncerramento).toLocaleDateString("pt-BR")
+                    ? dataSemHoraBr(mdfe.dataEncerramento)
                     : mdfe.status === "autorizado"
                       ? <span style={{ color: "#b57a12", fontWeight: 600 }}>Em aberto</span>
                       : "—"}
@@ -5522,7 +5538,7 @@ const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito
 
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = hojeNoFuso();
-  const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? nota.dataEmissao.slice(0, 10) : hoje);
+  const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? diaDoInstante(nota.dataEmissao) : hoje);
   // Documento novo já nasce com o colaborador de quem está emitindo — o
   // vínculo vem do cadastro do usuário.
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
@@ -5542,16 +5558,13 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   };
   const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
-  const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? nota.dataSaida.slice(0, 10) : "");
+  const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? diaDoInstante(nota.dataSaida) : "");
   // A hora vem junto da data no banco; aqui os dois campos são separados
   // porque é assim que se preenche. Em nota nova, começa na hora de agora:
   // a emissão costuma acontecer no momento em que o caminhão sai, e em
   // branco o DANFE saía com 00:00.
   const [horaSaida, setHoraSaida] = useState(() => {
-    if (!nota?.dataSaida) {
-      return new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    }
-    return new Date(nota.dataSaida).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    return horaDoInstante(nota?.dataSaida);
   });
   const [informacoesComplementares, setInformacoesComplementares] = useState(nota?.informacoesComplementares || "");
 
@@ -6120,7 +6133,7 @@ function CartaCorrecaoModal({ nota, onClose }) {
             {historico?.map(c => (
               <div key={c.id} style={{ borderBottom: "1px solid #eeece4", padding: "8px 0", fontSize: 13 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "#8a887f", fontSize: 11.5 }}>
-                  <span>Nº {c.numeroSequencial} · {new Date(c.criadoEm).toLocaleString("pt-BR")}</span>
+                  <span>Nº {c.numeroSequencial} · {new Date(c.criadoEm).toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO })}</span>
                   <span style={{ fontWeight: 600, color: c.status === "erro" ? "#a32d2d" : "#27500a" }}>
                     {c.status === "erro" ? "Erro" : c.status === "registrada" ? "Registrada" : "Pendente"}
                   </span>
@@ -6262,7 +6275,7 @@ function situacaoGuia(nota) {
   if (!nota.gfNumero) return { texto: "sem GF", cor: "#c62828" };
 
   if (nota.gfValidade) {
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const hoje = new Date(`${hojeNoFuso()}T12:00:00Z`);
     const validade = new Date(String(nota.gfValidade).slice(0, 10) + "T12:00:00Z");
     const dias = Math.round((validade - hoje) / 86400000);
     if (dias < 0) return { texto: `GF vencida há ${Math.abs(dias)}d`, cor: "#c62828" };
@@ -8620,7 +8633,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                     ? `Cancelada: ${nota.justificativaCancelamento}`
                     : nota.chaveAcesso || (nota.status === "rejeitado" ? nota.motivoRejeicao : null) || "—"}
                 </td>
-                <td>{new Date(nota.dataEmissao).toLocaleDateString("pt-BR")}</td>
+                <td>{dataBrDoInstante(nota.dataEmissao)}</td>
                 <td className="actions-col" style={{ position: "relative" }}>
                   {/* Menor que o padrão: numa lista compacta, o botão de
                       ações é o que mais estica a altura da linha. */}
@@ -8853,7 +8866,7 @@ function NfeCteField({ onSelecionar }) {
 
 function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = hojeNoFuso();
-  const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? cte.dataEmissao.slice(0, 10) : hoje);
+  const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? diaDoInstante(cte.dataEmissao) : hoje);
   // Documento novo já nasce com o colaborador de quem está emitindo — o
   // vínculo vem do cadastro do usuário.
   const [colaboradorResponsavelId, setColaboradorResponsavelId] = useState(
@@ -8866,7 +8879,7 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
   // CT-e novo já nasce com o CFOP configurado em Configurações.
   const [cfopPrestacao, setCfopPrestacao] = useState(cte?.cfopPrestacao || cfopPadraoCte());
   const [tipoServico, setTipoServico] = useState(cte?.tipoServico || "Normal");
-  const [dataTransporte, setDataTransporte] = useState(cte?.dataTransporte ? cte.dataTransporte.slice(0, 10) : hoje);
+  const [dataTransporte, setDataTransporte] = useState(cte?.dataTransporte ? diaDoInstante(cte.dataTransporte) : hoje);
   const [horaTransporte, setHoraTransporte] = useState(cte?.horaTransporte || "");
   const [cteGlobalizado, setCteGlobalizado] = useState(cte?.cteGlobalizado ?? false);
   const [tipoCte, setTipoCte] = useState(cte?.tipoCte || "CT-e normal");
@@ -8935,7 +8948,7 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
       modelo: "55",
       serie: String(nota.serie || "1"),
       cfopPredominante: primeiroItem?.cfopUtilizado || primeiroItem?.produto?.cfopPadrao || "",
-      dataEmissao: nota.dataEmissao ? nota.dataEmissao.slice(0, 10) : "",
+      dataEmissao: nota.dataEmissao ? diaDoInstante(nota.dataEmissao) : "",
       naturezaMercadoria: nota.naturezaOperacao || "",
       outrasCaracteristicasCarga: "",
       baseCalculoIcms: nota.baseCalculoIcms ?? "",
@@ -9284,7 +9297,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                     <span>{d.modelo || "—"}</span>
                     <span>{d.serie || "—"}</span>
                     <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.cfopPredominante || "—"}</span>
-                    <span>{d.dataEmissao ? new Date(d.dataEmissao).toLocaleDateString("pt-BR") : "—"}</span>
+                    <span>{d.dataEmissao ? dataSemHoraBr(d.dataEmissao) : "—"}</span>
                     <span>{d.pesoBruto || "0"}</span>
                     <span>{d.pesoLiquido || "0"}</span>
                     <span>{d.m3 || "0"}</span>
@@ -10114,7 +10127,7 @@ function CteView({ onIrParaMdfe }) {
                     ? `Cancelado: ${cte.justificativaCancelamento}`
                     : cte.chaveAcesso || (cte.status === "rejeitado" ? cte.motivoRejeicao : null) || "—"}
                 </td>
-                <td>{new Date(cte.dataEmissao).toLocaleDateString("pt-BR")}</td>
+                <td>{dataBrDoInstante(cte.dataEmissao)}</td>
                 <td className="actions-col" style={{ position: "relative" }}>
                   <button
                     className="icon-btn nf-menu-trigger"

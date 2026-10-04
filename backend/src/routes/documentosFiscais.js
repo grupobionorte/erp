@@ -3,6 +3,7 @@ const prisma = require("../lib/prisma");
 const focusNfe = require("../services/focusNfe");
 
 const asyncHandler = require("../lib/asyncHandler");
+const fuso = require("../lib/fuso");
 const router = express.Router();
 
 // Referência enviada ao provedor. A primeira tentativa mantém o formato
@@ -307,7 +308,9 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       cstIbsCbsPrestacao: cstIbsCbsPrestacao || undefined,
       classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao || undefined,
       tipoServico: tipoServico || undefined,
-      dataTransporte: dataTransporte ? new Date(dataTransporte) : undefined,
+      // Um dia, ao meio-dia de Cuiabá. Gravado à meia-noite UTC, aparecia no
+      // DACTe ("SAIDA: ...") com um dia a menos. A hora fica em horaTransporte.
+      dataTransporte: dataTransporte ? dataHoraNoFuso(dataTransporte, "12:00") : undefined,
       horaTransporte: horaTransporte || undefined,
       cteGlobalizado: typeof cteGlobalizado === "boolean" ? cteGlobalizado : undefined,
       tipoCte: tipoCte || undefined,
@@ -415,18 +418,16 @@ function dataNoFusoComHoraAtual(data) {
 // Junta data e hora no fuso da operação. Sem isso, "2026-09-25" vira
 // meia-noite em UTC e a hora de saída sai zerada (ou no dia anterior) no
 // DANFE.
+//
+// 20:00 em Cuiabá é exatamente meia-noite UTC — o mesmo formato das datas
+// antigas gravadas "só com o dia", que o envio à SEFAZ reconhece e completa
+// com a hora atual (focusNfe.normalizarDataEmissao). Uma saída às 20:00 era
+// confundida com isso e ia para o dia seguinte. Um milissegundo a mais
+// desfaz a confusão sem mudar nada no que aparece (a SEFAZ usa segundos).
 function dataHoraNoFuso(data, hora) {
   if (!data) return undefined;
-  const referencia = new Date(`${data}T12:00:00Z`);
-  const offsetMin = -new Intl.DateTimeFormat("en-US", {
-    timeZone: process.env.TZ_FISCAL || "America/Cuiaba",
-    timeZoneName: "longOffset",
-  }).formatToParts(referencia).find((p) => p.type === "timeZoneName").value
-    .replace("GMT", "").split(":").reduce((h, m) => Number(h) * 60 + Math.sign(Number(h)) * Number(m));
-  const sinal = offsetMin > 0 ? "-" : "+";
-  const abs = Math.abs(offsetMin);
-  const pad = (n) => String(n).padStart(2, "0");
-  return new Date(`${data}T${hora || "00:00"}:00${sinal}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`);
+  const instante = fuso.dataHoraNoFuso(String(data).slice(0, 10), hora || "00:00");
+  return instante.getTime() % 86400000 === 0 ? new Date(instante.getTime() + 1) : instante;
 }
 
 // Gera um rascunho de CT-e a partir de uma NF-e autorizada.
@@ -708,7 +709,8 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
   // comum — mas a viagem pode ter terminado em outro lugar.
   const codigoMunicipio = req.body.codigoMunicipio || documento.codigoMunicipioDescarregamento;
   const uf = req.body.uf || documento.ufFim;
-  const dataEncerramento = req.body.dataEncerramento || new Date().toISOString().slice(0, 10);
+  // Hoje de Cuiabá: pelo UTC, depois das 20h ia para a SEFAZ a data de amanhã.
+  const dataEncerramento = String(req.body.dataEncerramento || fuso.hojeNoFuso()).slice(0, 10);
 
   // O encerramento é pelo NOME do município, não pelo código IBGE.
   const nomeMunicipio = req.body.municipio || documento.municipioDescarregamento;
@@ -731,7 +733,7 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       data: {
-        dataEncerramento: new Date(dataEncerramento),
+        dataEncerramento: new Date(`${dataEncerramento}T12:00:00Z`),
         codigoMunicipioEncerramento: codigoMunicipio ? String(codigoMunicipio) : undefined,
         municipioEncerramento: nomeMunicipio,
       },
@@ -1231,7 +1233,9 @@ router.put("/:id", asyncHandler(async (req, res) => {
       cstIbsCbsPrestacao: cstIbsCbsPrestacao ?? undefined,
       classificacaoTributariaIbsCbsPrestacao: classificacaoTributariaIbsCbsPrestacao ?? undefined,
       tipoServico: tipoServico ?? undefined,
-      dataTransporte: dataTransporte ? new Date(dataTransporte) : undefined,
+      // Um dia, ao meio-dia de Cuiabá. Gravado à meia-noite UTC, aparecia no
+      // DACTe ("SAIDA: ...") com um dia a menos. A hora fica em horaTransporte.
+      dataTransporte: dataTransporte ? dataHoraNoFuso(dataTransporte, "12:00") : undefined,
       horaTransporte: horaTransporte ?? undefined,
       cteGlobalizado: typeof cteGlobalizado === "boolean" ? cteGlobalizado : undefined,
       tipoCte: tipoCte ?? undefined,

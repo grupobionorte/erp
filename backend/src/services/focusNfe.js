@@ -1142,10 +1142,15 @@ async function encerrarMdfe({ ref, data, sigla_uf, nome_municipio }) {
 // A Focus NFe às vezes devolve caminho_danfe/caminho_xml_* como um caminho
 // relativo (ex: "/arquivos_development/..."), não a URL completa — sem
 // isso o link abriria dentro do nosso próprio site em vez do da Focus.
-function urlCompleta(caminho) {
+//
+// O caminho é do servidor da Focus que respondeu, então a base é a do
+// ambiente daquele tipo de documento — a mesma usada na chamada. Com uma
+// base única (FOCUS_NFE_BASE_URL), um documento de produção ganhava link
+// apontando para a homologação enquanto a variável estivesse lá.
+function urlCompleta(caminho, tipo) {
   if (!caminho) return caminho;
   if (caminho.startsWith("http://") || caminho.startsWith("https://")) return caminho;
-  const base = (process.env.FOCUS_NFE_BASE_URL || "").replace(/\/$/, "");
+  const base = ambienteDoTipo(tipo) === "producao" ? URL_PRODUCAO : URL_HOMOLOGACAO;
   return `${base}${caminho.startsWith("/") ? "" : "/"}${caminho}`;
 }
 

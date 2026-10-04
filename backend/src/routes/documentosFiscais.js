@@ -1089,8 +1089,8 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
         serie: serieAutorizada || undefined,
         protocoloAutorizacao: resultado.numero_protocolo || resultado.protocolo,
         dataAutorizacao: new Date(),
-        xmlUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.xml)),
-        pdfUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.pdf)),
+        xmlUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.xml), documento.tipo),
+        pdfUrl: focusNfe.urlCompleta(primeiroPreenchido(campos.pdf), documento.tipo),
       },
     });
 
@@ -1395,7 +1395,7 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
         numeroSequencial: resultado.numero_sequencial_evento || totalExistentes + 1,
         status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
         motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
-        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf),
+        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf, documento.tipo),
       },
     });
     res.status(201).json(carta);
@@ -1453,7 +1453,7 @@ router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) 
       where: { id: cartaId },
       data: {
         status: "registrada",
-        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao),
+        pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao, documento.tipo),
       },
     });
     res.json(atualizada);

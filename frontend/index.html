@@ -936,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.040";
+const VERSAO_SISTEMA = "1.041";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -996,6 +996,17 @@ async function apiDownload(path, nomeSugerido) {
   link.remove();
   // Espera o navegador iniciar o download antes de soltar a memória.
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+// XML de um documento fiscal. Link direto para o provedor só abre o XML na
+// tela do navegador; passando pelo servidor ele vem como arquivo para salvar.
+async function baixarXmlDocumento(doc, tipo) {
+  const numero = String(doc.numero || "s-n").padStart(6, "0");
+  try {
+    await apiDownload(`/documentos-fiscais/${doc.id}/xml`, `${tipo}-${numero}-${doc.chaveAcesso || ""}.xml`);
+  } catch (e) {
+    alert(`Não foi possível baixar o XML: ${e.message}`);
+  }
 }
 
 async function apiRequest(path, options = {}) {
@@ -5492,9 +5503,9 @@ function MdfeView() {
                             </button>
                           )}
                           {mdfe.xmlUrl?.startsWith("http") ? (
-                            <a className="nf-dropdown-item" href={mdfe.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                            <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); baixarXmlDocumento(mdfe, "MDFe"); }}>
                               <FileText size={14} /> Baixar XML
-                            </a>
+                            </button>
                           ) : (
                             <button className="nf-dropdown-item" disabled={processando === mdfe.id}
                               onClick={() => { setMenuAberto(null); consultarStatus(mdfe.id); }}>
@@ -8733,9 +8744,9 @@ Detalhe: ${e.detalhe}` : ""}`);
                             );
                           })()}
                           {nota.xmlUrl?.startsWith("http") ? (
-                            <a className="nf-dropdown-item" href={nota.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                            <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); baixarXmlDocumento(nota, "NFe"); }}>
                               <FileText size={14} /> Baixar XML
-                            </a>
+                            </button>
                           ) : (
                             <button
                               className="nf-dropdown-item"
@@ -10195,9 +10206,9 @@ function CteView({ onIrParaMdfe }) {
                             </button>
                           )}
                           {cte.xmlUrl?.startsWith("http") ? (
-                            <a className="nf-dropdown-item" href={cte.xmlUrl} target="_blank" rel="noreferrer" onClick={() => setMenuAberto(null)}>
+                            <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); baixarXmlDocumento(cte, "CTe"); }}>
                               <FileText size={14} /> Baixar XML
-                            </a>
+                            </button>
                           ) : (
                             // Sem link salvo (documento autorizado antes da
                             // consulta gravar o caminho): uma consulta nova

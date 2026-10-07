@@ -120,6 +120,36 @@ router.get("/", asyncHandler(async (req, res) => {
   res.json(documentos);
 }));
 
+// Entrega o XML como arquivo para download. O link direto do provedor abre
+// o XML na tela do navegador (e o atributo "download" é ignorado em outro
+// domínio), então o servidor busca o arquivo e manda com
+// Content-Disposition: attachment.
+router.get("/:id/xml", asyncHandler(async (req, res) => {
+  const documento = await prisma.documentoFiscal.findUnique({
+    where: { id: Number(req.params.id) },
+    select: { tipo: true, numero: true, chaveAcesso: true, xmlUrl: true },
+  });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (!documento.xmlUrl) return res.status(404).json({ erro: "Este documento ainda não tem XML. Use \"Buscar XML\"." });
+
+  let resposta;
+  try {
+    resposta = await fetch(documento.xmlUrl);
+  } catch (erro) {
+    return res.status(502).json({ erro: `Não foi possível buscar o XML no provedor: ${erro.message}` });
+  }
+  if (!resposta.ok) {
+    return res.status(502).json({ erro: `O provedor não entregou o XML (HTTP ${resposta.status})` });
+  }
+  const xml = Buffer.from(await resposta.arrayBuffer());
+
+  // Mesmo padrão de nome do pacote mensal: o contador acha pelo número.
+  const nome = `${documento.tipo}-${String(documento.numero || "s-n").padStart(6, "0")}-${documento.chaveAcesso || ""}.xml`;
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${nome}"`);
+  res.send(xml);
+}));
+
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },

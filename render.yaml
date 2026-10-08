@@ -26,6 +26,22 @@ services:
       - key: FRONTEND_URL
         value: https://erp-biomassa-frontend.onrender.com
 
+  # Dispara os lembretes da agenda (resumo das 7h e aviso 1 hora antes).
+  # O servidor não agenda nada por conta própria: sem este serviço, esses
+  # avisos nunca saem. O intervalo precisa casar com INTERVALO_CRON_MIN em
+  # backend/src/routes/lembretes.js.
+  - type: cron
+    name: erp-biomassa-lembretes
+    runtime: node
+    plan: starter
+    schedule: "*/5 * * * *"
+    rootDir: backend
+    buildCommand: echo "sem build necessario"
+    startCommand: curl -fsS -X POST -H "x-cron-token:$CRON_TOKEN" https://erp-biomassa-backend.onrender.com/lembretes
+    envVars:
+      - key: CRON_TOKEN
+        sync: false
+
   - type: web
     name: erp-biomassa-frontend
     runtime: static

@@ -6,6 +6,9 @@ const { enviarPushParaColaborador } = require("../lib/push");
 
 const router = express.Router();
 
+// Tem que ser igual ao intervalo do cron no render.yaml.
+const INTERVALO_CRON_MIN = 5;
+
 /* ---------------------------------------------------------------------------
    Disparo dos lembretes.
 
@@ -38,8 +41,10 @@ router.post("/", asyncHandler(async (req, res) => {
   let resumoDiario = 0;
   let umaHoraAntes = 0;
 
-  // Resumo da manhã: entre 7h e 7h59, uma vez por dia.
-  if (Number(partes.hour) === 7) {
+  // Resumo da manhã: só na chamada que cai entre 7h00 e 7h04. Conferir
+  // apenas a hora mandaria o mesmo resumo a cada chamada do cron (12 vezes
+  // numa hora, com o cron de 5 em 5 minutos).
+  if (Number(partes.hour) === 7 && Number(partes.minute) < INTERVALO_CRON_MIN) {
     const porColaborador = new Map();
     for (const evento of eventos) {
       for (const r of evento.responsaveis) {
@@ -57,13 +62,14 @@ router.post("/", asyncHandler(async (req, res) => {
     }
   }
 
-  // Uma hora antes: pega os eventos com horário entre 55 e 65 minutos à
-  // frente, para tolerar o intervalo entre as chamadas do cron.
+  // Uma hora antes: a janela tem a largura do intervalo do cron, então cada
+  // evento cai em exatamente uma chamada. Uma janela mais larga avisava
+  // duas ou três vezes o mesmo compromisso.
   for (const evento of eventos) {
     if (evento.diaTodo || !evento.horaInicio) continue;
     const [h, m] = String(evento.horaInicio).split(":").map(Number);
     const faltam = (h * 60 + m) - minutosAgora;
-    if (faltam < 55 || faltam > 65) continue;
+    if (faltam <= 60 - INTERVALO_CRON_MIN || faltam > 60) continue;
 
     for (const r of evento.responsaveis) {
       const enviado = await enviarPushParaColaborador(r.colaboradorId, {

@@ -343,6 +343,31 @@ async function ativarNotificacoes() {
   }
 }
 
+// Teste sob demanda. Só o teste feito ao ativar não basta: depois dele não
+// havia como saber se o aparelho continuava recebendo, e a falta de aviso
+// só era notada quando um compromisso passava batido.
+async function testarNotificacao() {
+  try {
+    const situacao = await api("/push/situacao");
+    if (!situacao.configurado) {
+      alert("O servidor está com as notificações desligadas (chave VAPID ausente ou inválida). Avise quem cuida do sistema.");
+      return;
+    }
+    if (!situacao.aparelhos) {
+      alert("Nenhum aparelho está inscrito neste usuário. Toque em ↻ e use \"Ativar notificações\".");
+      return;
+    }
+    const r = await api("/push/teste", { method: "POST" });
+    if (!r.enviados) {
+      alert(`O servidor não conseguiu entregar o teste (${situacao.aparelhos} aparelho(s) inscrito(s)). Ative as notificações de novo.`);
+      return;
+    }
+    alert(`Teste enviado a ${r.enviados} aparelho(s). Se nada aparecer em alguns segundos, confira os avisos do app nos ajustes do celular.`);
+  } catch (e) {
+    alert(`Não foi possível testar: ${e.message}`);
+  }
+}
+
 /* ---------------------------------------------------------------------------
    Dados
 --------------------------------------------------------------------------- */
@@ -429,7 +454,10 @@ function desenhar() {
         <h1>Agenda</h1>
         <div class="sub">${escapar(estado.usuario?.nome || "")}</div>
       </div>
-      <button class="secundario" style="padding:5px 11px;font-size:12.5px;flex:none" onclick="sair()">Sair</button>
+      <div style="display:flex;gap:6px;flex:none">
+        ${estado.push.inscrito ? `<button class="secundario" style="padding:5px 11px;font-size:12.5px;flex:none" onclick="testarNotificacao()">Testar aviso</button>` : ""}
+        <button class="secundario" style="padding:5px 11px;font-size:12.5px;flex:none" onclick="sair()">Sair</button>
+      </div>
     </header>
 
     <main>

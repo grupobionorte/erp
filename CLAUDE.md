@@ -172,7 +172,9 @@ porquê.
 - AFD e AEJ do ponto (layout da Portaria 671/2021) — não implementados
 - Regularização REP-P: INPI, certificado ICP-Brasil, responsável técnico
 - E-mail do comprovante de ponto (SMTP configurado, falta testar no plano pago)
-- Agendador dos lembretes da agenda em serviço externo de cron
+- Agendador dos lembretes da agenda: declarado no `render.yaml`
+  (`erp-biomassa-lembretes`, a cada 5 min), mas só vale depois de criado no
+  Render com o mesmo `CRON_TOKEN` do backend
 - MDF-e com carga fracionada: caminho testado, mas pouco rodado
 
 ---

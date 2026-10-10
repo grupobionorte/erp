@@ -936,7 +936,17 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.045";
+const VERSAO_SISTEMA = "1.046";
+
+// Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
+// entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
+// assim que a equipe fica sabendo o que mudou.
+const NOVIDADES = [
+  { versao: "1.046", texto: "Nova tela de entrada, com o ambiente de emissão e as novidades" },
+  { versao: "1.045", texto: "Espelho de ponto: o dia de hoje aparece \"em andamento\"" },
+  { versao: "1.044", texto: "Todas as listas mostram 50 registros por tela" },
+  { versao: "1.043", texto: "NF-e com filtro pelo período de emissão" },
+];
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -3682,6 +3692,32 @@ function LoginScreen({ onLogin }) {
     try { return localStorage.getItem(EMPRESA_LEMBRADA_KEY) || ""; } catch { return ""; }
   });
 
+  // Ambiente de emissão de cada documento, antes do login: emitir em
+  // produção achando que é teste (ou o contrário) é caro de desfazer.
+  const [ambiente, setAmbiente] = useState(null);
+  useEffect(() => {
+    apiRequest("/auth/ambiente").then(setAmbiente).catch(() => {});
+  }, []);
+
+  // Hora de Cuiabá, atualizada a cada 20 segundos.
+  const [agora, setAgora] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date()), 20000);
+    return () => clearInterval(t);
+  }, []);
+  const horaAgora = agora.toLocaleTimeString("pt-BR", { timeZone: FUSO_OPERACAO, hour: "2-digit", minute: "2-digit" });
+  const dataAgora = agora.toLocaleDateString("pt-BR", { timeZone: FUSO_OPERACAO, weekday: "long", day: "numeric", month: "long" });
+
+  // Documentos agrupados por ambiente: "NF-e: produção", "CT-e e MDF-e: teste".
+  const gruposAmbiente = (() => {
+    if (!ambiente) return [];
+    const nomes = { NFe: "NF-e", CTe: "CT-e", MDFe: "MDF-e" };
+    const porAmbiente = {};
+    for (const [tipo, amb] of Object.entries(ambiente)) (porAmbiente[amb] = porAmbiente[amb] || []).push(nomes[tipo] || tipo);
+    const juntar = (l) => (l.length > 1 ? `${l.slice(0, -1).join(", ")} e ${l.at(-1)}` : l[0]);
+    return Object.entries(porAmbiente).map(([amb, tipos]) => ({ producao: amb === "producao", texto: `${juntar(tipos)}: ${amb === "producao" ? "produção" : "teste"}` }));
+  })();
+
   // Mostra a logo da empresa lembrada (do último login neste navegador)
   // já na tela inicial, antes mesmo de digitar e-mail/senha.
   const [logoEmpresa, setLogoEmpresa] = useState(null);
@@ -3781,9 +3817,23 @@ function LoginScreen({ onLogin }) {
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           -webkit-font-smoothing: antialiased;
         }
-        .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; padding: 3rem 2.5rem; }
-        .login-brand-mark { width: 360px; height: 360px; max-width: 85%; border-radius: 24px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto; color: #fff; }
-        .login-brand-title { font-size: 25px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 18px; text-align: center; }
+        .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 3rem 3rem; }
+        .login-brand-topo { display: flex; align-items: center; gap: 14px; }
+        .login-brand-mark { width: 72px; height: 72px; flex: 0 0 72px; border-radius: 16px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
+        .login-brand-mark img { width: 100%; height: 100%; object-fit: contain; }
+        .login-brand-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+        .login-brand-sub { font-size: 13px; color: #b9cbe0; margin-top: 2px; }
+        .login-relogio-hora { font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+        .login-relogio-data { font-size: 14px; color: #b9cbe0; margin-top: 6px; }
+        .login-ambientes { display: flex; gap: 8px; flex-wrap: wrap; }
+        .login-ambiente { font-size: 13px; font-weight: 500; padding: 5px 11px; border-radius: 8px; }
+        .login-ambiente.producao { background: #eaf3de; color: #27500a; }
+        .login-ambiente.teste { background: #faeeda; color: #633806; }
+        .login-novidades { font-size: 13.5px; line-height: 1.7; }
+        .login-novidades-titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #8fb0d1; margin-bottom: 4px; }
+        .login-novidades li { list-style: none; }
+        .login-novidades ul { margin: 0; padding: 0; }
+        .login-novidades .versao { color: #8fb0d1; font-size: 12px; margin-right: 6px; font-variant-numeric: tabular-nums; }
 
         .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; border: 1.5px solid #00923F; box-sizing: border-box; }
         .login-card { width: 340px; max-width: 100%; }
@@ -3820,15 +3870,45 @@ function LoginScreen({ onLogin }) {
         .login-submit:hover:not(:disabled) { background: #00732F; }
         .login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
-        @media (max-width: 640px) { .login-brand { display: none; } }
+        @media (max-width: 640px) {
+          .login-wrap { flex-direction: column; }
+          .login-brand { flex: none; gap: 12px; padding: 1.25rem 1.25rem; }
+          .login-brand-mark { width: 48px; height: 48px; flex-basis: 48px; border-radius: 12px; }
+          .login-relogio, .login-novidades { display: none; }
+        }
       `}</style>
 
       <div className="login-brand">
-        <h1 className="login-brand-title">
-          Biomassa ERP <span className="brand-versao">v{VERSAO_SISTEMA}</span>
-        </h1>
-        <div className="login-brand-mark">
-          {logoEmpresa ? <img src={logoEmpresa} alt="Logo da empresa" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 24 }} /> : <Leaf size={96} />}
+        <div className="login-brand-topo">
+          <div className="login-brand-mark">
+            {logoEmpresa ? <img src={logoEmpresa} alt="Logo da empresa" /> : <Leaf size={36} />}
+          </div>
+          <div>
+            <h1 className="login-brand-title">Biomassa ERP <span className="brand-versao">v{VERSAO_SISTEMA}</span></h1>
+            <div className="login-brand-sub">Biomassa e transporte · Nova Mutum, MT</div>
+          </div>
+        </div>
+
+        <div className="login-relogio">
+          <div className="login-relogio-hora">{horaAgora}</div>
+          <div className="login-relogio-data">{dataAgora} · horário de Cuiabá</div>
+        </div>
+
+        {gruposAmbiente.length > 0 && (
+          <div className="login-ambientes">
+            {gruposAmbiente.map(g => (
+              <span key={g.texto} className={`login-ambiente ${g.producao ? "producao" : "teste"}`}>{g.texto}</span>
+            ))}
+          </div>
+        )}
+
+        <div className="login-novidades">
+          <div className="login-novidades-titulo">Novidades</div>
+          <ul>
+            {NOVIDADES.slice(0, 4).map(n => (
+              <li key={n.versao}><span className="versao">{n.versao}</span>{n.texto}</li>
+            ))}
+          </ul>
         </div>
       </div>
 

@@ -185,7 +185,8 @@ mantenha esse padrão.
 
 **Versão** em `VERSAO_SISTEMA` no `index.html`, exibida na barra lateral.
 Terceiro dígito para correção, segundo para recurso novo. Atualize a cada
-entrega.
+entrega, e acrescente uma linha curta em `NOVIDADES` (logo abaixo), do ponto
+de vista de quem usa: ela aparece na tela de entrada.
 
 **Toda listagem mostra 50 por tela**, com o componente `Paginacao` (mesmo
 visual e contador em todas). Dado que cresce sem parar — NF-e, CT-e, MDF-e —

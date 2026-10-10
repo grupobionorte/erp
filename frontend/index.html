@@ -936,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.041";
+const VERSAO_SISTEMA = "1.042";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -8306,16 +8306,36 @@ function NotasFiscaisView({ onIrParaCte }) {
     return () => document.removeEventListener("click", fechar);
   }, []);
 
+  // 50 notas por tela. A página e a busca vão para o servidor: trazer
+  // todas de uma vez ficava lento, e a busca na tela só alcançava as notas
+  // já carregadas.
+  const POR_PAGINA = 50;
+  const [pagina, setPagina] = useState(1);
+  const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
+  const [busca, setBusca] = useState("");
+  const [buscaAplicada, setBuscaAplicada] = useState("");
+
+  // Espera parar de digitar para buscar, e volta para a primeira página.
+  useEffect(() => {
+    const espera = setTimeout(() => { setBuscaAplicada(busca.trim()); setPagina(1); }, 350);
+    return () => clearTimeout(espera);
+  }, [busca]);
+
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      const dados = await apiRequest("/documentos-fiscais?tipo=NFe");
-      setNotas(dados);
+      const params = new URLSearchParams({ tipo: "NFe", pagina: String(pagina), porPagina: String(POR_PAGINA) });
+      if (buscaAplicada) params.set("busca", buscaAplicada);
+      const dados = await apiRequest(`/documentos-fiscais?${params}`);
+      // Excluiu a última nota da última página: volta uma página.
+      if (!dados.documentos.length && pagina > 1) { setPagina(dados.paginas); return; }
+      setNotas(dados.documentos);
+      setPaginacao({ total: dados.total, paginas: dados.paginas });
     } catch (e) {
       setErro(e.message);
       setNotas([]);
     }
-  }, []);
+  }, [pagina, buscaAplicada]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -8429,27 +8449,11 @@ function NotasFiscaisView({ onIrParaCte }) {
   // enquanto a SEFAZ processa — aqui a gente consulta sozinho de tempos em
   // tempos, sem o usuário precisar ficar clicando, até sair desse status
   // (virar autorizado ou rejeitado) ou desistir depois de um tempo.
-  const [busca, setBusca] = useState("");
-
-  // Busca por número, cliente ou chave: são os três jeitos de procurar uma
-  // nota na prática.
-  const notasFiltradas = (notas || []).filter(nota => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return true;
-    return [
-      String(nota.numero || ""),
-      nota.destinatario?.nomeRazaoSocial || "",
-      nota.chaveAcesso || "",
-    ].some(campo => campo.toLowerCase().includes(termo));
-  });
-
-  // Padrão: número maior primeiro — a nota recém-emitida é a que se procura.
-  // Rascunho ainda não tem número e fica no topo, que é onde ele precisa
-  // estar para virar nota.
-  const notasOrdenadas = notasFiltradas.slice().sort((a, b) => {
-    const numero = (n) => (n.numero == null ? Infinity : Number(n.numero));
-    return numero(b) - numero(a);
-  });
+  // Busca (número, cliente ou chave) e ordem (número maior primeiro,
+  // rascunho no topo) vêm prontas do servidor.
+  const notasOrdenadas = notas || [];
+  const primeiraDaPagina = (pagina - 1) * POR_PAGINA + 1;
+  const ultimaDaPagina = (pagina - 1) * POR_PAGINA + notasOrdenadas.length;
 
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; } // ~45s, desiste e deixa o botão manual
@@ -8547,7 +8551,7 @@ Detalhe: ${e.detalhe}` : ""}`);
           <div>
             <h2>Vendas/NFe</h2>
             <p className="subtle">
-              {busca ? `${notasFiltradas.length} de ${notas.length}` : notas.length} nota{notas.length !== 1 ? "s" : ""}
+              {paginacao.total} nota{paginacao.total !== 1 ? "s" : ""}{buscaAplicada ? " encontrada" + (paginacao.total !== 1 ? "s" : "") : ""}
             </p>
           </div>
         </div>
@@ -8592,7 +8596,12 @@ Detalhe: ${e.detalhe}` : ""}`);
         </div>
       )}
 
-      {notas.length === 0 ? (
+      {notas.length === 0 && buscaAplicada ? (
+        <div className="empty-state">
+          <Search size={32} strokeWidth={1.5} />
+          <p>Nenhuma nota encontrada para "{buscaAplicada}".</p>
+        </div>
+      ) : notas.length === 0 ? (
         <div className="empty-state">
           <FileText size={32} strokeWidth={1.5} />
           <p>Nenhuma nota fiscal ainda.</p>
@@ -8785,6 +8794,21 @@ Detalhe: ${e.detalhe}` : ""}`);
             ))}
           </tbody>
         </table>
+      )}
+
+      {paginacao.paginas > 1 && (
+        <div className="paginacao">
+          <span className="subtle">
+            {primeiraDaPagina}–{ultimaDaPagina} de {paginacao.total}
+          </span>
+          <div className="paginacao-botoes">
+            <button className="btn" onClick={() => setPagina(1)} disabled={pagina <= 1} title="Primeira página">«</button>
+            <button className="btn" onClick={() => setPagina(p => Math.max(p - 1, 1))} disabled={pagina <= 1}>‹ Anterior</button>
+            <span className="paginacao-atual">Página {pagina} de {paginacao.paginas}</span>
+            <button className="btn" onClick={() => setPagina(p => Math.min(p + 1, paginacao.paginas))} disabled={pagina >= paginacao.paginas}>Próxima ›</button>
+            <button className="btn" onClick={() => setPagina(paginacao.paginas)} disabled={pagina >= paginacao.paginas} title="Última página">»</button>
+          </div>
+        </div>
       )}
 
       {mostrarForm && (
@@ -10530,6 +10554,10 @@ function ErpBiomassa() {
         .planilha-viagens .cortar { max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
 
         .tabela-compacta { table-layout: fixed; }
+        .paginacao { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+        .paginacao-botoes { display: flex; align-items: center; gap: 6px; }
+        .paginacao-botoes .btn { padding: 5px 10px; font-size: 13px; }
+        .paginacao-atual { font-size: 13px; padding: 0 6px; white-space: nowrap; }
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem
            28px de largura e estava deixando um vão até a data. */
         .tabela-compacta .actions-col { width: 34px; padding-right: 4px; }

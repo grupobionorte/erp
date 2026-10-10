@@ -91,14 +91,36 @@ router.get("/", asyncHandler(async (req, res) => {
   // documento, a tela busca a versão completa em /documentos-fiscais/:id.
   const limite = Math.min(Number(req.query.limite) || 300, 1000);
 
+  const where = {
+    ...(tipo ? { tipo } : {}),
+    // Diferente dos outros cadastros, documento fiscal sempre tem uma
+    // empresa (é obrigatório desde o início) — não existe "documento
+    // sem empresa" pra tratar aqui.
+    ...(empresaId ? { empresaId } : {}),
+  };
+
+  // Busca por número, cliente ou chave — os três jeitos de procurar uma
+  // nota na prática. Feita aqui, e não na tela, para alcançar todas as
+  // notas e não só as da página aberta.
+  const busca = String(req.query.busca || "").trim();
+  if (busca) {
+    const digitos = busca.replace(/\D/g, "");
+    where.OR = [
+      { destinatario: { nomeRazaoSocial: { contains: busca, mode: "insensitive" } } },
+      ...(digitos ? [{ chaveAcesso: { contains: digitos } }] : []),
+      ...(/^\d{1,9}$/.test(busca) ? [{ numero: Number(busca) }] : []),
+    ];
+  }
+
+  // Com "pagina", a resposta vem paginada: { documentos, total, pagina,
+  // paginas }. Sem, continua a lista simples — o CT-e e o MDF-e usam esta
+  // mesma rota para escolher documentos.
+  const paginado = req.query.pagina !== undefined;
+  const porPagina = Math.min(Math.max(Number(req.query.porPagina) || 50, 1), 200);
+  const pagina = Math.max(Number(req.query.pagina) || 1, 1);
+
   const documentos = await prisma.documentoFiscal.findMany({
-    where: {
-      ...(tipo ? { tipo } : {}),
-      // Diferente dos outros cadastros, documento fiscal sempre tem uma
-      // empresa (é obrigatório desde o início) — não existe "documento
-      // sem empresa" pra tratar aqui.
-      ...(empresaId ? { empresaId } : {}),
-    },
+    where,
     include: {
       destinatario: { select: { id: true, nomeRazaoSocial: true, documento: true } },
       // Só o que o menu de ações precisa: enviar ao motorista pelo WhatsApp.
@@ -114,10 +136,19 @@ router.get("/", asyncHandler(async (req, res) => {
       // Contagem em vez das listas inteiras.
       _count: { select: { documentosTransportados: true, documentosVinculados: true } },
     },
-    orderBy: { dataEmissao: "desc" },
-    take: limite,
+    // Paginado: número maior primeiro, como a tela sempre ordenou — a nota
+    // recém-emitida é a que se procura, e o rascunho (sem número) fica no
+    // topo, onde precisa estar para virar nota.
+    orderBy: paginado
+      ? [{ numero: { sort: "desc", nulls: "first" } }, { id: "desc" }]
+      : { dataEmissao: "desc" },
+    ...(paginado ? { skip: (pagina - 1) * porPagina, take: porPagina } : { take: limite }),
   });
-  res.json(documentos);
+
+  if (!paginado) return res.json(documentos);
+
+  const total = await prisma.documentoFiscal.count({ where });
+  res.json({ documentos, total, pagina, porPagina, paginas: Math.max(Math.ceil(total / porPagina), 1) });
 }));
 
 // Entrega o XML como arquivo para download. O link direto do provedor abre

@@ -936,12 +936,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.047";
+const VERSAO_SISTEMA = "1.048";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.048", texto: "Tela de entrada ocupa a tela inteira, em qualquer resolução" },
   { versao: "1.047", texto: "Tela de entrada com fundo verde claro no formulário" },
   { versao: "1.046", texto: "Nova tela de entrada, com o ambiente de emissão e as novidades" },
   { versao: "1.045", texto: "Espelho de ponto: o dia de hoje aparece \"em andamento\"" },
@@ -3814,23 +3815,23 @@ function LoginScreen({ onLogin }) {
     <div className="login-wrap">
       <style>{`
         .login-wrap {
-          display: flex; min-height: 600px; width: 100%;
+          display: flex; min-height: 100%; width: 100%;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           -webkit-font-smoothing: antialiased;
         }
-        .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 3rem 3rem; }
+        .login-brand { flex: 1; background: #1F3B57; color: #fff; display: flex; flex-direction: column; justify-content: center; gap: clamp(28px, 4.5vh, 56px); padding: 3rem clamp(3rem, 6vw, 7rem); }
         .login-brand-topo { display: flex; align-items: center; gap: 14px; }
-        .login-brand-mark { width: 72px; height: 72px; flex: 0 0 72px; border-radius: 16px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
+        .login-brand-mark { width: clamp(72px, 9vh, 112px); height: clamp(72px, 9vh, 112px); flex: 0 0 auto; border-radius: 16px; background: rgba(255,255,255,0.12); display: flex; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
         .login-brand-mark img { width: 100%; height: 100%; object-fit: contain; }
-        .login-brand-title { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
-        .login-brand-sub { font-size: 13px; color: #b9cbe0; margin-top: 2px; }
-        .login-relogio-hora { font-size: 44px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
-        .login-relogio-data { font-size: 14px; color: #b9cbe0; margin-top: 6px; }
+        .login-brand-title { font-size: clamp(22px, 2.8vh, 32px); font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+        .login-brand-sub { font-size: clamp(13px, 1.6vh, 17px); color: #b9cbe0; margin-top: 2px; }
+        .login-relogio-hora { font-size: clamp(44px, 7vh, 84px); font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+        .login-relogio-data { font-size: clamp(14px, 1.8vh, 19px); color: #b9cbe0; margin-top: 6px; }
         .login-ambientes { display: flex; gap: 8px; flex-wrap: wrap; }
-        .login-ambiente { font-size: 13px; font-weight: 500; padding: 5px 11px; border-radius: 8px; }
+        .login-ambiente { font-size: clamp(13px, 1.6vh, 16px); font-weight: 500; padding: 5px 11px; border-radius: 8px; }
         .login-ambiente.producao { background: #eaf3de; color: #27500a; }
         .login-ambiente.teste { background: #faeeda; color: #633806; }
-        .login-novidades { font-size: 13.5px; line-height: 1.7; }
+        .login-novidades { font-size: clamp(13.5px, 1.7vh, 17px); line-height: 1.7; }
         .login-novidades-titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #8fb0d1; margin-bottom: 4px; }
         .login-novidades li { list-style: none; }
         .login-novidades ul { margin: 0; padding: 0; }
@@ -3838,9 +3839,9 @@ function LoginScreen({ onLogin }) {
 
         /* Verde bem claro, do mesmo verde do botão; os campos continuam brancos
            para se destacarem. */
-        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #F1F7EC; border: 1.5px solid #00923F; box-sizing: border-box; }
-        .login-card { width: 340px; max-width: 100%; }
-        .login-heading { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; color: #1F3B57; }
+        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #F1F7EC; border-left: 1.5px solid #00923F; box-sizing: border-box; }
+        .login-card { width: clamp(340px, 26vw, 420px); max-width: 100%; }
+        .login-heading { font-size: clamp(22px, 2.8vh, 30px); font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; color: #1F3B57; }
         .login-subtitle { font-size: 13.5px; color: #6b6b68; margin: 0 0 28px; line-height: 1.5; }
 
         .login-field { margin-bottom: 18px; }
@@ -3878,6 +3879,7 @@ function LoginScreen({ onLogin }) {
           .login-brand { flex: none; gap: 12px; padding: 1.25rem 1.25rem; }
           .login-brand-mark { width: 48px; height: 48px; flex-basis: 48px; border-radius: 12px; }
           .login-relogio, .login-novidades { display: none; }
+          .login-form-side { border-left: none; border-top: 1.5px solid #00923F; }
         }
       `}</style>
 
@@ -10582,8 +10584,10 @@ function ErpBiomassa() {
 
   if (!usuario) {
     return (
-      <div className="erp-root">
-        <style>{`.erp-root { min-height: 600px; border-radius: 12px; overflow: hidden; border: 0.5px solid #e5e3da; }`}</style>
+      <div className="erp-root erp-login">
+        {/* Fixa na janela inteira: a margem da página e a altura mínima de
+            600px deixavam uma faixa vazia embaixo em telas maiores. */}
+        <style>{`.erp-login { position: fixed; inset: 0; overflow: auto; }`}</style>
         <LoginScreen onLogin={setUsuario} />
       </div>
     );

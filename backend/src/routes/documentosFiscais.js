@@ -112,6 +112,18 @@ router.get("/", asyncHandler(async (req, res) => {
     ];
   }
 
+  // Período pela data de emissão, em dias inteiros de Cuiabá. Rascunho
+  // entra sempre, qualquer que seja a data: sumir do filtro do mês faria
+  // ele ser esquecido.
+  const diaValido = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  if (diaValido(req.query.de) || diaValido(req.query.ate)) {
+    const { inicio, fim } = fuso.intervaloNoFuso(
+      diaValido(req.query.de) ? req.query.de : null,
+      diaValido(req.query.ate) ? req.query.ate : null
+    );
+    where.AND = [{ OR: [{ dataEmissao: { gte: inicio, lte: fim } }, { status: "rascunho" }] }];
+  }
+
   // Com "pagina", a resposta vem paginada: { documentos, total, pagina,
   // paginas }. Sem, continua a lista simples — o CT-e e o MDF-e usam esta
   // mesma rota para escolher documentos.

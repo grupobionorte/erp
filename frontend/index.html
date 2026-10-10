@@ -936,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.042";
+const VERSAO_SISTEMA = "1.043";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -8314,6 +8314,15 @@ function NotasFiscaisView({ onIrParaCte }) {
   const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
   const [busca, setBusca] = useState("");
   const [buscaAplicada, setBuscaAplicada] = useState("");
+  // Período da emissão: abre no mês atual de Cuiabá, do dia 1 ao último.
+  const [periodo, setPeriodo] = useState(() => {
+    const hoje = hojeNoFuso();
+    const ultimo = new Date(`${hoje.slice(0, 8)}01T12:00:00Z`);
+    ultimo.setUTCMonth(ultimo.getUTCMonth() + 1);
+    ultimo.setUTCDate(0);
+    return { de: `${hoje.slice(0, 8)}01`, ate: ultimo.toISOString().slice(0, 10) };
+  });
+  const mudarPeriodo = (campo, valor) => { setPeriodo(p => ({ ...p, [campo]: valor })); setPagina(1); };
 
   // Espera parar de digitar para buscar, e volta para a primeira página.
   useEffect(() => {
@@ -8326,6 +8335,8 @@ function NotasFiscaisView({ onIrParaCte }) {
       setErro(null);
       const params = new URLSearchParams({ tipo: "NFe", pagina: String(pagina), porPagina: String(POR_PAGINA) });
       if (buscaAplicada) params.set("busca", buscaAplicada);
+      if (periodo.de) params.set("de", periodo.de);
+      if (periodo.ate) params.set("ate", periodo.ate);
       const dados = await apiRequest(`/documentos-fiscais?${params}`);
       // Excluiu a última nota da última página: volta uma página.
       if (!dados.documentos.length && pagina > 1) { setPagina(dados.paginas); return; }
@@ -8335,7 +8346,7 @@ function NotasFiscaisView({ onIrParaCte }) {
       setErro(e.message);
       setNotas([]);
     }
-  }, [pagina, buscaAplicada]);
+  }, [pagina, buscaAplicada, periodo]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -8580,13 +8591,27 @@ Detalhe: ${e.detalhe}` : ""}`);
         </div>
       </div>
 
-      <div className="search-bar">
-        <Search size={16} className="search-icon" />
-        <input
-          placeholder="Buscar por número, cliente ou chave…"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-        />
+      <div className="filtro-notas">
+        <div className="search-bar">
+          <Search size={16} className="search-icon" />
+          <input
+            placeholder="Buscar por número, cliente ou chave…"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+          />
+        </div>
+        {/* Rascunhos aparecem em qualquer período: no topo, para não
+            serem esquecidos. Datas em branco = sem limite. */}
+        <div className="filtro-periodo">
+          <label className="filtro-data">
+            Emissão de
+            <input type="date" value={periodo.de} onChange={e => mudarPeriodo("de", e.target.value)} />
+          </label>
+          <label className="filtro-data">
+            até
+            <input type="date" value={periodo.ate} onChange={e => mudarPeriodo("ate", e.target.value)} />
+          </label>
+        </div>
       </div>
 
       {erro && (
@@ -8596,10 +8621,13 @@ Detalhe: ${e.detalhe}` : ""}`);
         </div>
       )}
 
-      {notas.length === 0 && buscaAplicada ? (
+      {notas.length === 0 && (buscaAplicada || periodo.de || periodo.ate) ? (
         <div className="empty-state">
           <Search size={32} strokeWidth={1.5} />
-          <p>Nenhuma nota encontrada para "{buscaAplicada}".</p>
+          <p>
+            Nenhuma nota{buscaAplicada ? ` para "${buscaAplicada}"` : ""}
+            {periodo.de || periodo.ate ? " nesse período de emissão" : ""}.
+          </p>
         </div>
       ) : notas.length === 0 ? (
         <div className="empty-state">
@@ -10558,6 +10586,11 @@ function ErpBiomassa() {
         .paginacao-botoes { display: flex; align-items: center; gap: 6px; }
         .paginacao-botoes .btn { padding: 5px 10px; font-size: 13px; }
         .paginacao-atual { font-size: 13px; padding: 0 6px; white-space: nowrap; }
+        .filtro-notas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .filtro-notas .search-bar { flex: 1 1 280px; margin-bottom: 0; }
+        .filtro-periodo { display: flex; align-items: center; gap: 8px; }
+        .filtro-data { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary, #6b6b68); white-space: nowrap; }
+        .filtro-data input { width: 150px; }
         /* Na lista compacta o botão de ações não precisa de 70px: ele tem
            28px de largura e estava deixando um vão até a data. */
         .tabela-compacta .actions-col { width: 34px; padding-right: 4px; }

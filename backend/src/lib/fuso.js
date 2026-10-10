@@ -62,7 +62,10 @@ function intervaloNoFuso(de, ate) {
 // ignorar a jornada inteira.
 function diaDoCampo(valor) {
   if (!valor) return null;
-  if (valor instanceof Date) return valor.toISOString().slice(0, 10);
+  // Reconhece a data pelo tipo, não por instanceof: uma Date criada em
+  // outro contexto (ou um relógio simulado em teste) não passa no instanceof
+  // e cairia de novo no String(Date).
+  if (Object.prototype.toString.call(valor) === "[object Date]") return valor.toISOString().slice(0, 10);
   return String(valor).slice(0, 10);
 }
 

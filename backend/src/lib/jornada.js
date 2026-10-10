@@ -117,7 +117,7 @@ function minutosPrevistos(config) {
 /**
  * Apura um dia: casa as batidas em pares e compara com o previsto.
  */
-function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
+function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new Date() }) {
   const marcacoes = batidas
     .map((b) => ({ ...b, ...partesNoFuso(new Date(b.dataHora)) }))
     .sort((a, b) => a.minutos - b.minutos);
@@ -135,8 +135,19 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
   let intervalo = null;
   if (marcacoes.length >= 4) intervalo = marcacoes[2].minutos - marcacoes[1].minutos;
 
-  const previstoMin = previsto && !previsto.folga ? previsto.minutos : 0;
-  const diferenca = trabalhado - previstoMin;
+  // O dia de hoje, antes da saída prevista, ainda está acontecendo: sem
+  // batida às 10h não é falta de quem entra às 13h, e o saldo do dia só
+  // existe quando ele termina. Fica fora dos totais até lá. Turno que vira
+  // a noite (saída antes da entrada) fica em andamento o dia todo.
+  const agoraNoFuso = partesNoFuso(agora);
+  const saidaPrevista = previsto && !previsto.folga ? paraMinutos(previsto.saida) : null;
+  const entradaPrevistaMin = previsto && !previsto.folga ? paraMinutos(previsto.entrada) : null;
+  const viraANoite = saidaPrevista !== null && entradaPrevistaMin !== null && saidaPrevista <= entradaPrevistaMin;
+  const emAndamento = Boolean(previsto && !previsto.folga) && dia === agoraNoFuso.dia
+    && (viraANoite || saidaPrevista === null || agoraNoFuso.minutos < saidaPrevista);
+
+  const previstoMin = previsto && !previsto.folga && !emAndamento ? previsto.minutos : 0;
+  const diferenca = emAndamento ? 0 : trabalhado - previstoMin;
 
   // Tolerância legal: variações pequenas não viram crédito nem débito.
   const dentroDaTolerancia = Math.abs(diferenca) <= toleranciaMinutos;
@@ -144,6 +155,13 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
   const situacoes = [];
   if (previsto?.folga) {
     if (trabalhado > 0) situacoes.push("trabalho em folga");
+  } else if (emAndamento) {
+    situacoes.push("em andamento");
+    // O atraso já aconteceu se a entrada foi batida depois do horário.
+    const entradaPrevista = paraMinutos(previsto.entrada);
+    if (marcacoes.length && entradaPrevista !== null && marcacoes[0].minutos > entradaPrevista + toleranciaMinutos) {
+      situacoes.push("atraso");
+    }
   } else if (previsto) {
     if (!marcacoes.length) situacoes.push("falta");
     else {
@@ -160,7 +178,8 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
       }
     }
   }
-  if (inconsistente) situacoes.push("batida faltando");
+  // Batida ímpar no dia em andamento é só quem entrou e ainda não saiu.
+  if (inconsistente && !emAndamento) situacoes.push("batida faltando");
 
   return {
     dia,
@@ -184,7 +203,8 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10 }) {
     intervaloMinutos: intervalo,
     diferencaMinutos: dentroDaTolerancia ? 0 : diferenca,
     diferencaTexto: paraHora(dentroDaTolerancia ? 0 : diferenca),
-    inconsistente,
+    inconsistente: inconsistente && !emAndamento,
+    emAndamento,
     situacoes,
   };
 }

@@ -936,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.044";
+const VERSAO_SISTEMA = "1.045";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -4433,6 +4433,8 @@ function PontoEspelho() {
   const corDaSituacao = (situacoes) => {
     if (situacoes.includes("falta") || situacoes.includes("batida faltando")) return "#c62828";
     if (situacoes.includes("atraso") || situacoes.includes("intervalo abaixo de 1h")) return "#b57a12";
+    // Hoje, antes da saída prevista: nem falta nem saldo ainda.
+    if (situacoes.includes("em andamento")) return "#1565c0";
     if (situacoes.includes("hora extra") || situacoes.includes("trabalho em folga")) return "#1F3B57";
     return "#6b6b68";
   };

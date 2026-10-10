@@ -40,7 +40,7 @@ Variáveis essenciais no Render (serviço `erp-biomassa-backend`):
 | `FOCUS_AMBIENTE_NFE` / `_CTE` / `_MDFE` | `producao` ou `homologacao`, **por documento** |
 | `TZ_FISCAL` | `America/Cuiaba` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CONTATO` | notificações push |
-| `CRON_TOKEN` | protege a rota de lembretes |
+| `CRON_TOKEN` | protege `POST /lembretes`, chamada a cada 5 min pelo cron-job.org (job "Lembretes da Agenda", fuso America/Cuiaba) com o cabeçalho `x-cron-token` |
 
 Endereços: `erp-biomassa-backend.onrender.com` e
 `erp-biomassa-frontend.onrender.com`.
@@ -172,7 +172,6 @@ porquê.
 - AFD e AEJ do ponto (layout da Portaria 671/2021) — não implementados
 - Regularização REP-P: INPI, certificado ICP-Brasil, responsável técnico
 - E-mail do comprovante de ponto (SMTP configurado, falta testar no plano pago)
-- Agendador dos lembretes da agenda em serviço externo de cron
 - MDF-e com carga fracionada: caminho testado, mas pouco rodado
 
 ---

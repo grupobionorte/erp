@@ -1,3 +1,8 @@
+# Blueprint do ERP. Com Auto Sync ligado, o que está aqui sobrescreve o
+# painel do Render a cada sync: plano e variável com "value" têm que bater
+# com o que está em uso. Os planos são os pagos atuais (banco 0.1c-256mb,
+# servidor 0.5c-512mb) — "free" aqui tentaria rebaixar e o sync falha.
+# FOCUS_NFE_BASE_URL fica com sync: false: o valor vale o do painel.
 databases:
   - name: erp-biomassa-db
     plan: 0.1c-256mb

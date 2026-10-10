@@ -151,9 +151,15 @@ router.get("/", asyncHandler(async (req, res) => {
     // Paginado: número maior primeiro, como a tela sempre ordenou — a nota
     // recém-emitida é a que se procura, e o rascunho (sem número) fica no
     // topo, onde precisa estar para virar nota.
-    orderBy: paginado
-      ? [{ numero: { sort: "desc", nulls: "first" } }, { id: "desc" }]
-      : { dataEmissao: "desc" },
+    // O CT-e deixa ordenar pelo número clicando no cabeçalho ("ordem"):
+    // crescente com o rascunho primeiro, decrescente com o rascunho por último.
+    orderBy: !paginado
+      ? { dataEmissao: "desc" }
+      : req.query.ordem === "numeroAsc"
+        ? [{ numero: { sort: "asc", nulls: "first" } }, { id: "asc" }]
+        : req.query.ordem === "numeroDesc"
+          ? [{ numero: { sort: "desc", nulls: "last" } }, { id: "desc" }]
+          : [{ numero: { sort: "desc", nulls: "first" } }, { id: "desc" }],
     ...(paginado ? { skip: (pagina - 1) * porPagina, take: porPagina } : { take: limite }),
   });
 

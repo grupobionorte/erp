@@ -936,7 +936,7 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.043";
+const VERSAO_SISTEMA = "1.044";
 
 function modulosParaUsuario(usuario) {
   return Object.entries(MODULES).filter(([chave, cfg]) => {
@@ -2770,6 +2770,8 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
     } catch (e) { alert(e.message); }
   };
 
+  const pag = usePaginacaoLocal(dados?.viagens, `${operacaoId}|${descargaDe}|${descargaAte}`);
+
   if (!operacaoId) {
     return <p className="hint">Salve a operação primeiro para lançar as viagens.</p>;
   }
@@ -2855,7 +2857,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
             </tr>
           </thead>
           <tbody>
-            {dados.viagens.map(v => (
+            {pag.itens.map(v => (
               <tr key={v.id}>
                 <td>{dataBr(v.dataLancamento)}</td>
                 <td>{v.numeroNf || "—"}</td>
@@ -2889,6 +2891,7 @@ function ViagensAba({ operacaoId, precoMateriaPrima }) {
           </tbody>
         </table>
       </div>
+      {pag.controle}
 
       {editando && (
         <ViagemForm
@@ -2922,6 +2925,8 @@ function ViagensDoCliente({ pessoaId }) {
       .then(r => { setDados(r); setErro(""); })
       .catch(e => setErro(e.message));
   }, [pessoaId, descargaDe, descargaAte]);
+
+  const pag = usePaginacaoLocal(dados?.viagens, `${pessoaId}|${descargaDe}|${descargaAte}`);
 
   if (erro) return <p className="error-text">{erro}</p>;
   if (!dados) return <p className="hint">Carregando…</p>;
@@ -2973,7 +2978,7 @@ function ViagensDoCliente({ pessoaId }) {
             </tr>
           </thead>
           <tbody>
-            {dados.viagens.map(v => (
+            {pag.itens.map(v => (
               <tr key={v.id}>
                 <td>{dataBr(v.dataLancamento)}</td>
                 <td><div className="cortar" title={v.operacao?.descricao || ""}>{v.operacao?.codigo || "—"}</div></td>
@@ -2993,6 +2998,7 @@ function ViagensDoCliente({ pessoaId }) {
           </tbody>
         </table>
       </div>
+      {pag.controle}
       <p className="hint" style={{ marginTop: 10 }}>
         Aparecem as viagens em que este cliente foi escolhido como "Cliente (destino)" no carregamento.
         Para corrigir uma viagem, abra a operação dela.
@@ -3041,6 +3047,8 @@ function DespesasAba({ operacaoId }) {
       .then(([cats, ccs]) => { setCategorias(cats); setCentros(ccs); })
       .catch(() => { /* a tela funciona sem classificação */ });
   }, []);
+
+  const pag = usePaginacaoLocal(contas, operacaoId);
 
   if (!operacaoId) return <p className="hint">Salve a operação primeiro para lançar despesas.</p>;
   if (erro && !contas) return <p className="error-text" style={{ padding: "0 22px" }}>{erro}</p>;
@@ -3094,7 +3102,7 @@ function DespesasAba({ operacaoId }) {
             </tr>
           </thead>
           <tbody>
-            {contas.map(conta => {
+            {pag.itens.map(conta => {
               const s = situacaoConta(conta);
               return (
                 <tr key={conta.id}>
@@ -3121,6 +3129,7 @@ function DespesasAba({ operacaoId }) {
             {!contas.length && <tr><td colSpan={7}>Nenhuma despesa lançada para esta operação.</td></tr>}
           </tbody>
         </table>
+        {pag.controle}
       </section>
 
       {contaEmEdicao && (
@@ -3177,6 +3186,10 @@ function FaturasAba({ operacaoId }) {
 
   // Mudou o filtro, a prévia antiga não vale mais.
   useEffect(() => { if (!editando) setPrevia(null); }, [cliente, de, ate]);
+
+  // Só a lista de faturas geradas é paginada. A prévia não: "marcar todas"
+  // e o total precisam de todas as viagens.
+  const pag = usePaginacaoLocal(faturas, operacaoId);
 
   if (!operacaoId) return <p className="hint">Salve a operação primeiro para gerar faturas.</p>;
   if (!faturas) return <p className="hint">Carregando…</p>;
@@ -3473,7 +3486,7 @@ function FaturasAba({ operacaoId }) {
             </tr>
           </thead>
           <tbody>
-            {faturas.map(f => (
+            {pag.itens.map(f => (
               <tr key={f.id} style={f.canceladaEm ? { color: "#9A9A96", textDecoration: "line-through" } : undefined}>
                 <td>{f.numero}</td>
                 <td><div className="cortar" style={{ maxWidth: 320 }} title={f.cliente}>{f.cliente}</div></td>
@@ -3498,6 +3511,7 @@ function FaturasAba({ operacaoId }) {
             {!faturas.length && <tr><td colSpan={8}>Nenhuma fatura gerada nesta operação.</td></tr>}
           </tbody>
         </table>
+        {pag.controle}
       </section>
     </div>
   );
@@ -4271,6 +4285,8 @@ function PontoPessoas() {
     } catch (e) { alert(`Não foi possível: ${e.message}`); }
   };
 
+  const pag = usePaginacaoLocal(pessoas);
+
   if (pessoas === null) return <p className="hint">Carregando…</p>;
   if (erro) return <p className="error-text">{erro}</p>;
 
@@ -4293,7 +4309,7 @@ function PontoPessoas() {
           <tr><th>Colaborador</th><th>Cargo</th><th>PIN</th><th>Rosto</th><th></th></tr>
         </thead>
         <tbody>
-          {pessoas.map(p => (
+          {pag.itens.map(p => (
             <tr key={p.id}>
               <td><strong>{p.nome}</strong><span className="subtle" style={{ display: "block", fontSize: 11.5 }}>{p.cpf}</span></td>
               <td>{p.cargo || "—"}</td>
@@ -4317,6 +4333,7 @@ function PontoPessoas() {
           ))}
         </tbody>
       </table>
+      {pag.controle}
     </div>
   );
 }
@@ -4542,6 +4559,47 @@ function PontoEspelho() {
 }
 
 
+// ---------- Paginação ----------
+// Toda listagem mostra 50 registros por tela, com os mesmos botões e o
+// mesmo contador. A NF-e, o CT-e e o MDF-e paginam no servidor (crescem sem
+// parar); as demais paginam na tela, porque a mesma lista também alimenta
+// os campos de escolha dos formulários e precisa vir inteira.
+const POR_PAGINA = 50;
+
+function Paginacao({ pagina, paginas, total, naPagina, porPagina = POR_PAGINA, onMudar }) {
+  if (!paginas || paginas <= 1) return null;
+  const primeira = (pagina - 1) * porPagina + 1;
+  const ultima = (pagina - 1) * porPagina + naPagina;
+  return (
+    <div className="paginacao">
+      <span className="subtle">{primeira}–{ultima} de {total}</span>
+      <div className="paginacao-botoes">
+        <button className="btn" onClick={() => onMudar(1)} disabled={pagina <= 1} title="Primeira página">«</button>
+        <button className="btn" onClick={() => onMudar(Math.max(pagina - 1, 1))} disabled={pagina <= 1}>‹ Anterior</button>
+        <span className="paginacao-atual">Página {pagina} de {paginas}</span>
+        <button className="btn" onClick={() => onMudar(Math.min(pagina + 1, paginas))} disabled={pagina >= paginas}>Próxima ›</button>
+        <button className="btn" onClick={() => onMudar(paginas)} disabled={pagina >= paginas} title="Última página">»</button>
+      </div>
+    </div>
+  );
+}
+
+// Paginação na tela, para listas que já chegam inteiras. "reiniciar" é
+// qualquer valor que, ao mudar (um filtro, uma busca), volta para a página 1.
+function usePaginacaoLocal(lista, reiniciar) {
+  const [pagina, setPagina] = useState(1);
+  useEffect(() => { setPagina(1); }, [reiniciar]);
+  const todos = lista || [];
+  const paginas = Math.max(1, Math.ceil(todos.length / POR_PAGINA));
+  // Excluir o último registro da última página não deixa a tela vazia.
+  const atual = Math.min(pagina, paginas);
+  const itens = todos.slice((atual - 1) * POR_PAGINA, atual * POR_PAGINA);
+  const controle = (
+    <Paginacao pagina={atual} paginas={paginas} total={todos.length} naPagina={itens.length} onMudar={setPagina} />
+  );
+  return { itens, pagina: atual, paginas, total: todos.length, controle };
+}
+
 function ModuleView({ moduleKey }) {
   const config = MODULES[moduleKey];
   const Icon = config.icon;
@@ -4550,23 +4608,17 @@ function ModuleView({ moduleKey }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [pagina, setPagina] = useState(1);
-
-  if (items === null) {
-    return <div className="loading">Carregando {config.label.toLowerCase()}… (o servidor pode levar alguns segundos pra acordar)</div>;
-  }
-
-  const filtered = items.filter(it => {
+  const filtered = (items || []).filter(it => {
     if (!query) return true;
     const hay = JSON.stringify(it).toLowerCase();
     return hay.includes(query.toLowerCase());
   });
+  // Mudou a busca ou a opção de mostrar excluídos: volta para a página 1.
+  const { itens: visiveis, controle: paginacao } = usePaginacaoLocal(filtered, `${query}|${mostrarInativas}`);
 
-  // 50 por página: lista longa demais cansa de rolar e deixa a tela pesada.
-  const POR_PAGINA = 50;
-  const totalPaginas = Math.max(1, Math.ceil(filtered.length / POR_PAGINA));
-  const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = filtered.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  if (items === null) {
+    return <div className="loading">Carregando {config.label.toLowerCase()}… (o servidor pode levar alguns segundos pra acordar)</div>;
+  }
 
   const handleSave = async (data) => {
     if (data.id) {
@@ -4630,7 +4682,7 @@ function ModuleView({ moduleKey }) {
       <div className="search-bar">
         <Search size={16} className="search-icon" />
         <input placeholder={`Buscar em ${config.label.toLowerCase()}…`} value={query}
-          onChange={e => { setQuery(e.target.value); setPagina(1); }} />
+          onChange={e => setQuery(e.target.value)} />
       </div>
 
       {filtered.length === 0 ? (
@@ -4688,21 +4740,7 @@ function ModuleView({ moduleKey }) {
         </table>
       )}
 
-      {totalPaginas > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12, fontSize: 13 }}>
-          <button className="btn" style={{ padding: "5px 12px" }}
-            disabled={paginaAtual === 1} onClick={() => setPagina(paginaAtual - 1)}>
-            Anterior
-          </button>
-          <span className="subtle">
-            Página {paginaAtual} de {totalPaginas} · {filtered.length} registro{filtered.length !== 1 ? "s" : ""}
-          </span>
-          <button className="btn" style={{ padding: "5px 12px" }}
-            disabled={paginaAtual === totalPaginas} onClick={() => setPagina(paginaAtual + 1)}>
-            Próxima
-          </button>
-        </div>
-      )}
+      {paginacao}
 
       {showForm && (
         <RecordForm
@@ -5275,15 +5313,23 @@ function MdfeView() {
     return () => document.removeEventListener("click", fechar);
   }, []);
 
+  // 50 por tela, paginado no servidor como a NF-e e o CT-e.
+  const [pagina, setPagina] = useState(1);
+  const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
+
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      setMdfes(await apiRequest("/documentos-fiscais?tipo=MDFe"));
+      const params = new URLSearchParams({ tipo: "MDFe", pagina: String(pagina), porPagina: String(POR_PAGINA) });
+      const dados = await apiRequest(`/documentos-fiscais?${params}`);
+      if (!dados.documentos.length && pagina > 1) { setPagina(dados.paginas); return; }
+      setMdfes(dados.documentos);
+      setPaginacao({ total: dados.total, paginas: dados.paginas });
     } catch (e) {
       setErro(e.message);
       setMdfes([]);
     }
-  }, []);
+  }, [pagina]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -5393,7 +5439,7 @@ function MdfeView() {
           <div>
             <h2>MDFe</h2>
             <p className="subtle">
-              {mdfes ? `${mdfes.length} ${mdfes.length === 1 ? "manifesto" : "manifestos"}` : "Carregando…"}
+              {mdfes ? `${paginacao.total} ${paginacao.total === 1 ? "manifesto" : "manifestos"}` : "Carregando…"}
             </p>
           </div>
         </div>
@@ -5532,6 +5578,9 @@ function MdfeView() {
           </tbody>
         </table>
       )}
+
+      <Paginacao pagina={pagina} paginas={paginacao.paginas} total={paginacao.total}
+        naPagina={(mdfes || []).length} onMudar={setPagina} />
 
       {mostrarGerar && <GerarMdfeModal onGerar={gerar} onCancel={() => setMostrarGerar(false)} />}
     </div>
@@ -6762,6 +6811,8 @@ function AgendaView() {
     return String(b.data).slice(0, 10).localeCompare(String(a.data).slice(0, 10));
   });
 
+  const pag = usePaginacaoLocal(ordenados, JSON.stringify(filtro));
+
   const rotuloDia = (dia) => {
     const d = new Date(`${dia}T12:00:00Z`);
     const hojeData = new Date(`${hoje}T12:00:00Z`);
@@ -6823,7 +6874,7 @@ function AgendaView() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {ordenados.map(evento => {
+        {pag.itens.map(evento => {
           const dia = String(evento.data).slice(0, 10);
           const atrasado = dia < hoje && evento.status !== "concluido";
           return (
@@ -6872,6 +6923,7 @@ function AgendaView() {
           );
         })}
       </div>
+      {pag.controle}
 
       {editando && (
         <EventoForm
@@ -7258,6 +7310,10 @@ function ManutencaoView() {
   const [aba, setAba] = useState("equipamentos");
   const [dados, setDados] = useState(null);
   const [historico, setHistorico] = useState(null);
+  // A lista de equipamentos continua inteira em "dados": ela também
+  // alimenta a escolha de equipamento na ordem de manutenção.
+  const pagEquip = usePaginacaoLocal(dados?.equipamentos);
+  const pagOrdens = usePaginacaoLocal(historico?.ordens);
   const [erro, setErro] = useState("");
 
   const [equipamentoEmEdicao, setEquipamentoEmEdicao] = useState(null);
@@ -7386,7 +7442,7 @@ function ManutencaoView() {
             </tr>
           </thead>
           <tbody>
-            {dados.equipamentos.map(eq => (
+            {pagEquip.itens.map(eq => (
               <tr key={eq.id}>
                 <td>
                   {eq.nome}
@@ -7436,6 +7492,7 @@ function ManutencaoView() {
           </tbody>
         </table>
       )}
+      {aba === "equipamentos" && dados && pagEquip.controle}
 
       {aba === "historico" && historico && (
         <table className="data-table tabela-densa">
@@ -7451,7 +7508,7 @@ function ManutencaoView() {
             </tr>
           </thead>
           <tbody>
-            {historico.ordens.map(o => (
+            {pagOrdens.itens.map(o => (
               <tr key={o.id}>
                 <td>{dataBr(o.data)}</td>
                 <td>{o.equipamento?.nome}</td>
@@ -7480,6 +7537,7 @@ function ManutencaoView() {
           </tbody>
         </table>
       )}
+      {aba === "historico" && historico && pagOrdens.controle}
 
       {equipamentoEmEdicao && (
         <EquipamentoForm
@@ -8128,6 +8186,10 @@ function ContasPagarView() {
     janela.document.close();
   };
 
+  // 50 por tela; mudar o filtro volta para a página 1. O relatório usa a
+  // lista inteira (dados.contas), não só a página.
+  const pag = usePaginacaoLocal(dados?.contas, JSON.stringify(filtro));
+
   const T = dados?.totais;
 
   return (
@@ -8222,7 +8284,7 @@ function ContasPagarView() {
             </tr>
           </thead>
           <tbody>
-            {dados.contas.map(conta => {
+            {pag.itens.map(conta => {
               const s = situacao(conta);
               return (
                 <tr key={conta.id}>
@@ -8252,6 +8314,7 @@ function ContasPagarView() {
           </tbody>
         </table>
       )}
+      {dados && pag.controle}
 
       {contaEmEdicao && (
         <ContaPagarForm
@@ -8306,10 +8369,9 @@ function NotasFiscaisView({ onIrParaCte }) {
     return () => document.removeEventListener("click", fechar);
   }, []);
 
-  // 50 notas por tela. A página e a busca vão para o servidor: trazer
-  // todas de uma vez ficava lento, e a busca na tela só alcançava as notas
-  // já carregadas.
-  const POR_PAGINA = 50;
+  // 50 notas por tela (POR_PAGINA). A página e a busca vão para o servidor:
+  // trazer todas de uma vez ficava lento, e a busca na tela só alcançava as
+  // notas já carregadas.
   const [pagina, setPagina] = useState(1);
   const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
   const [busca, setBusca] = useState("");
@@ -8463,8 +8525,6 @@ function NotasFiscaisView({ onIrParaCte }) {
   // Busca (número, cliente ou chave) e ordem (número maior primeiro,
   // rascunho no topo) vêm prontas do servidor.
   const notasOrdenadas = notas || [];
-  const primeiraDaPagina = (pagina - 1) * POR_PAGINA + 1;
-  const ultimaDaPagina = (pagina - 1) * POR_PAGINA + notasOrdenadas.length;
 
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; } // ~45s, desiste e deixa o botão manual
@@ -8824,20 +8884,8 @@ Detalhe: ${e.detalhe}` : ""}`);
         </table>
       )}
 
-      {paginacao.paginas > 1 && (
-        <div className="paginacao">
-          <span className="subtle">
-            {primeiraDaPagina}–{ultimaDaPagina} de {paginacao.total}
-          </span>
-          <div className="paginacao-botoes">
-            <button className="btn" onClick={() => setPagina(1)} disabled={pagina <= 1} title="Primeira página">«</button>
-            <button className="btn" onClick={() => setPagina(p => Math.max(p - 1, 1))} disabled={pagina <= 1}>‹ Anterior</button>
-            <span className="paginacao-atual">Página {pagina} de {paginacao.paginas}</span>
-            <button className="btn" onClick={() => setPagina(p => Math.min(p + 1, paginacao.paginas))} disabled={pagina >= paginacao.paginas}>Próxima ›</button>
-            <button className="btn" onClick={() => setPagina(paginacao.paginas)} disabled={pagina >= paginacao.paginas} title="Última página">»</button>
-          </div>
-        </div>
-      )}
+      <Paginacao pagina={pagina} paginas={paginacao.paginas} total={paginacao.total}
+        naPagina={notasOrdenadas.length} onMudar={setPagina} />
 
       {mostrarForm && (
         <NotaFiscalForm
@@ -9885,16 +9933,29 @@ function CteView({ onIrParaMdfe }) {
     return () => document.removeEventListener("click", fechar);
   }, []);
 
+  // 50 por tela, paginado no servidor como a NF-e: antes vinham só os 300
+  // mais recentes, e os mais antigos sumiam da lista.
+  const [pagina, setPagina] = useState(1);
+  const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
+  // Ordem da lista. O padrão põe rascunho primeiro, porque é o que está
+  // esperando ação; clicando no cabeçalho, ordena por número. Quem ordena é
+  // o servidor, para valer em todas as páginas e não só na aberta.
+  const [ordem, setOrdem] = useState("padrao"); // padrao | numeroAsc | numeroDesc
+
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      const dados = await apiRequest("/documentos-fiscais?tipo=CTe");
-      setCtes(dados);
+      const params = new URLSearchParams({ tipo: "CTe", pagina: String(pagina), porPagina: String(POR_PAGINA) });
+      if (ordem !== "padrao") params.set("ordem", ordem);
+      const dados = await apiRequest(`/documentos-fiscais?${params}`);
+      if (!dados.documentos.length && pagina > 1) { setPagina(dados.paginas); return; }
+      setCtes(dados.documentos);
+      setPaginacao({ total: dados.total, paginas: dados.paginas });
     } catch (e) {
       setErro(e.message);
       setCtes([]);
     }
-  }, []);
+  }, [pagina, ordem]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -9961,23 +10022,12 @@ function CteView({ onIrParaMdfe }) {
 
   // Igual à NFe: depois de emitir, o CTe fica "enviado" enquanto a SEFAZ
   // processa — consulta sozinho de tempos em tempos até resolver.
-  // Ordem da lista. O padrão põe rascunho primeiro, porque é o que está
-  // esperando ação; clicando no cabeçalho, ordena por número.
-  const [ordem, setOrdem] = useState("padrao"); // padrao | numeroAsc | numeroDesc
-
-  const alternarOrdemNumero = () =>
+  const alternarOrdemNumero = () => {
     setOrdem(atual => (atual === "numeroDesc" ? "numeroAsc" : atual === "numeroAsc" ? "padrao" : "numeroDesc"));
+    setPagina(1);
+  };
 
-  const ctesOrdenados = (ctes || []).slice().sort((a, b) => {
-    if (ordem === "padrao") {
-      const peso = (c) => (c.status === "rascunho" ? 0 : 1);
-      return peso(a) - peso(b);
-    }
-    // Rascunho ainda não tem número; fica no fim quando se ordena por ele.
-    const numero = (c) => (c.numero == null ? -Infinity : Number(c.numero));
-    const diferenca = numero(a) - numero(b);
-    return ordem === "numeroAsc" ? diferenca : -diferenca;
-  });
+  const ctesOrdenados = ctes || [];
 
   const consultarAteResolver = async (id, tentativa = 0, aba = null) => {
     if (tentativa >= 15) { setProcessando(null); fecharAba(aba); return; }
@@ -10129,7 +10179,7 @@ function CteView({ onIrParaMdfe }) {
           </div>
           <div>
             <h2>CTe</h2>
-            <p className="subtle">{ctes.length} conhecimento{ctes.length !== 1 ? "s" : ""} de transporte</p>
+            <p className="subtle">{paginacao.total} conhecimento{paginacao.total !== 1 ? "s" : ""} de transporte</p>
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => { setEditando(null); setMostrarForm(true); }}>
@@ -10312,6 +10362,9 @@ function CteView({ onIrParaMdfe }) {
           </tbody>
         </table>
       )}
+
+      <Paginacao pagina={pagina} paginas={paginacao.paginas} total={paginacao.total}
+        naPagina={ctesOrdenados.length} onMudar={setPagina} />
 
       {mostrarForm && (
         <CteForm
@@ -10951,7 +11004,9 @@ function ErpBiomassa() {
         {view === "manutencao" && <ManutencaoView />}
         {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}
-        {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView moduleKey={view} />}
+        {/* key: cada cadastro é uma tela nova — sem isso a busca, a página e o
+            "mostrar excluídos" de um cadastro continuavam valendo no outro. */}
+        {modulosParaUsuario(usuario).some(([key]) => key === view) && <ModuleView key={view} moduleKey={view} />}
       </div>
     </div>
   );

@@ -936,12 +936,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.046";
+const VERSAO_SISTEMA = "1.047";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.047", texto: "Tela de entrada com fundo verde claro no formulário" },
   { versao: "1.046", texto: "Nova tela de entrada, com o ambiente de emissão e as novidades" },
   { versao: "1.045", texto: "Espelho de ponto: o dia de hoje aparece \"em andamento\"" },
   { versao: "1.044", texto: "Todas as listas mostram 50 registros por tela" },
@@ -3835,7 +3836,9 @@ function LoginScreen({ onLogin }) {
         .login-novidades ul { margin: 0; padding: 0; }
         .login-novidades .versao { color: #8fb0d1; font-size: 12px; margin-right: 6px; font-variant-numeric: tabular-nums; }
 
-        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #fff; border: 1.5px solid #00923F; box-sizing: border-box; }
+        /* Verde bem claro, do mesmo verde do botão; os campos continuam brancos
+           para se destacarem. */
+        .login-form-side { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; background: #F1F7EC; border: 1.5px solid #00923F; box-sizing: border-box; }
         .login-card { width: 340px; max-width: 100%; }
         .login-heading { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; color: #1F3B57; }
         .login-subtitle { font-size: 13.5px; color: #6b6b68; margin: 0 0 28px; line-height: 1.5; }

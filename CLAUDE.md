@@ -187,6 +187,15 @@ mantenha esse padrão.
 Terceiro dígito para correção, segundo para recurso novo. Atualize a cada
 entrega.
 
+**Toda listagem mostra 50 por tela**, com o componente `Paginacao` (mesmo
+visual e contador em todas). Dado que cresce sem parar — NF-e, CT-e, MDF-e —
+pagina no servidor: `/documentos-fiscais?pagina=&porPagina=&busca=&de=&ate=`
+devolve `{ documentos, total, paginas }`; sem `pagina`, continua a lista
+simples que o CT-e e o MDF-e usam para escolher documentos. As demais usam
+`usePaginacaoLocal(lista, reiniciar)`, porque a mesma lista alimenta selects
+e contadores e precisa vir inteira. Não pagine listas de seleção ("marcar
+todas", totais) nem o que vai para impressão.
+
 **Exclusão é lógica** em cadastros (`ativo: false`): registro citado em
 documento fiscal precisa continuar existindo.
 

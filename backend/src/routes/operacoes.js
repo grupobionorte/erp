@@ -10,13 +10,18 @@ const router = express.Router();
 const dataDoDia = (valor) =>
   valor ? new Date(`${String(valor).slice(0, 10)}T12:00:00-04:00`) : null;
 
+// A listagem mostra o nome do fornecedor. Criar e editar devolvem a operação
+// com ele também: sem isso a linha recém-salva aparecia com "—" no lugar do
+// fornecedor, como se ele tivesse sido apagado, até a tela ser recarregada.
+const incluirFornecedor = { fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } };
+
 router.get("/", asyncHandler(async (req, res) => {
   res.json(await prisma.operacao.findMany({
     where: {
       empresaId: req.usuario.empresaId || undefined,
       ativo: req.query.inativas === "1" ? undefined : true,
     },
-    include: { fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } },
+    include: incluirFornecedor,
     orderBy: [{ dataInicio: "desc" }, { codigo: "asc" }],
   }));
 }));
@@ -56,6 +61,7 @@ router.post("/", asyncHandler(async (req, res) => {
       servicos: servicosValidos(servicos),
       empresaId: req.usuario.empresaId || undefined,
     },
+    include: incluirFornecedor,
   }));
 }));
 
@@ -82,6 +88,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
         : (umidade !== undefined ? Number(umidade) : undefined),
       servicos: servicosValidos(servicos),
     },
+    include: incluirFornecedor,
   }));
 }));
 

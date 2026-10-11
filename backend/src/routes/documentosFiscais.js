@@ -839,11 +839,14 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   }
 
   // Tudo que identifica o documento original fica de fora: numeração,
-  // chave, protocolo, status e o vínculo com um MDFe. O resto é o que vale
-  // a pena aproveitar.
+  // chave, protocolo, status e o vínculo com um MDFe. A Guia Florestal
+  // também: cada nota tem a sua, e a copiada fazia a nota nova parecer já
+  // ter guia — com o número e os prazos da outra. O resto é o que vale a
+  // pena aproveitar.
   const {
     id, numero, serie, chaveAcesso, status, protocoloAutorizacao, dataEmissao, dataAutorizacao,
     xmlUrl, pdfUrl, motivoRejeicao, tentativaEnvio, justificativaCancelamento, mdfeId,
+    gfNumero, gfDataEmissao, gfValidade, gfDataRecebimento, gfObservacao,
     documentosTransportados, itens, ...dados
   } = origem;
 

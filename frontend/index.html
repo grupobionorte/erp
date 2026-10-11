@@ -647,9 +647,9 @@ const MODULES = {
       { key: "descricao", label: "Descrição", type: "text", required: true, secao: "Identificação", largura: 3 },
       { key: "dataInicioContrato", label: "Início do contrato", type: "date", secao: "Período", largura: 1 },
       { key: "dataFimContrato", label: "Fim do contrato", type: "date", secao: "Período", largura: 1 },
-      { key: "hectaresContrato", label: "Total de hectares do contrato", type: "moeda", casas: 2, secao: "Período", largura: 1 },
-      { key: "previsaoToneladas", label: "Previsão de toneladas", type: "moeda", casas: 2, secao: "Período", largura: 1 },
-      { key: "previsaoM3", label: "Previsão de m³", type: "moeda", casas: 2, secao: "Período", largura: 1 },
+      { key: "hectaresContrato", label: "Total de hectares do contrato", type: "moeda", casas: 3, secao: "Período", largura: 1 },
+      { key: "previsaoToneladas", label: "Previsão de toneladas", type: "moeda", casas: 3, secao: "Período", largura: 1 },
+      { key: "previsaoM3", label: "Previsão de m³", type: "moeda", casas: 3, secao: "Período", largura: 1 },
       { key: "dataInicio", label: "Início do serviço", type: "date", secao: "Período", largura: 1 },
       { key: "dataFim", label: "Fim do serviço", type: "date", secao: "Período", largura: 1 },
       { key: "servicoPausado", label: "Situação do serviço", type: "check", textoCheck: "Serviço pausado", secao: "Período", largura: 1 },
@@ -966,12 +966,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.063";
+const VERSAO_SISTEMA = "1.064";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.064", texto: "Operação: hectares, toneladas e m³ do contrato com 3 casas decimais" },
   { versao: "1.063", texto: "Operação: período do contrato, serviço pausado, hectares e previsão de t e m³" },
   { versao: "1.062", texto: "Operação: unidade e valor só aparecem no serviço marcado" },
   { versao: "1.061", texto: "Operação: cada serviço com unidade (m³, kg, ha, alq) e valor" },

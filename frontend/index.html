@@ -636,27 +636,27 @@ const MODULES = {
     color: "blue",
     apiPath: "/operacoes",
     // Grade de 4 colunas: "largura" é quantas delas o campo ocupa.
-    // Desenho combinado com o Leandro (1.058).
+    // Desenho combinado com o Leandro (1.059).
     colunas: 4,
     // Frente de trabalho: contrato de colheita, obra, safra.
     fields: [
       { key: "codigo", label: "Código", type: "text", required: true, secao: "Identificação", largura: 1 },
       { key: "descricao", label: "Descrição", type: "text", required: true, secao: "Identificação", largura: 3 },
+      { key: "dataInicio", label: "Data de início", type: "date", secao: "Período e valores", largura: 1 },
+      { key: "dataFim", label: "Data de término", type: "date", secao: "Período e valores", largura: 1 },
       {
         key: "fornecedorId", label: "Fornecedor da matéria-prima", type: "vinculo",
         fonte: "/pessoas?papel=fornecedor", vazio: "Nenhum",
         cadastroModulo: "fornecedores",
         // Nome com o documento, como nas demais listas de pessoa.
         rotulo: (f) => rotuloPessoa({ nome: f.nomeRazaoSocial, documento: f.documento }),
-        secao: "Identificação", largura: 4,
+        secao: "Produto e Serviços", largura: 2,
       },
-      { key: "dataInicio", label: "Data de início", type: "date", secao: "Período e valores", largura: 1 },
-      { key: "dataFim", label: "Data de término", type: "date", secao: "Período e valores", largura: 1 },
       // Base do custo de cada viagem: multiplicado pela quantidade
       // descarregada.
-      { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda", secao: "Período e valores", largura: 1 },
-      { key: "umidade", label: "Umidade (%)", type: "number", secao: "Período e valores", largura: 1 },
-      { key: "servicos", label: "Marque os serviços e quem executa cada um", type: "servicos-operacao", secao: "Serviços", largura: 4 },
+      { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda", secao: "Produto e Serviços", largura: 1 },
+      { key: "umidade", label: "Umidade (%)", type: "number", secao: "Produto e Serviços", largura: 1 },
+      { key: "servicos", label: "Marque os serviços e quem executa cada um", type: "servicos-operacao", secao: "Produto e Serviços", largura: 4 },
     ],
     columns: ["codigo", "descricao", "fornecedorNome", "periodo"],
     toApi: (data) => ({
@@ -945,13 +945,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.058";
+const VERSAO_SISTEMA = "1.059";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
-  { versao: "1.058", texto: "Operação: nova arrumação da aba Dados, em seções" },
+  { versao: "1.059", texto: "Operação: nova arrumação da aba Dados, em seções" },
   { versao: "1.057", texto: "Operação: o fornecedor da matéria-prima continua na lista depois de salvar" },
   { versao: "1.056", texto: "Operação: serviço terceirizado indica o fornecedor que presta o serviço" },
   { versao: "1.055", texto: "Operação: serviços (corte, picagem, transporte…), cada um próprio ou terceirizado" },

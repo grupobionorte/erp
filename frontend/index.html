@@ -250,6 +250,51 @@ function moedaParaNumero(texto) {
   return Number(String(texto).replace(/\./g, "").replace(",", ".")) || 0;
 }
 
+// Setas, Page Up/Down, Home e End rolam a janela que está aberta. Nas
+// janelas (cadastro, edição, baixa) quem rola é o corpo da janela, mas o
+// navegador manda as teclas para a página de trás, que fica parada — e as
+// setas não faziam nada. A própria página também parava de rolar depois de
+// fechar uma janela, até alguém clicar nela. Em campo de digitação ou lista
+// de escolha as teclas continuam sendo do campo.
+(function rolarJanelaComTeclado() {
+  const TECLAS = ["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End"];
+  const rola = (el) => /(auto|scroll)/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight + 1;
+
+  document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey || !TECLAS.includes(e.key)) return;
+    const alvo = e.target;
+    if (alvo instanceof Element && (alvo.closest("input, select, textarea, [contenteditable=''], [contenteditable='true'], [role='listbox'], [role='menu']"))) return;
+
+    // A janela de cima é a última aberta; sem janela, a tela de entrada ou
+    // a própria página.
+    const janelas = document.querySelectorAll(".modal-backdrop");
+    const janela = janelas[janelas.length - 1] || document.querySelector(".erp-login");
+    const dentro = janela || document.body;
+
+    // Prefere a área de rolagem onde está o foco; senão, a maior da janela,
+    // ou a página.
+    let area = null;
+    for (let el = alvo instanceof Element ? alvo : null; el && dentro.contains(el); el = el.parentElement) {
+      if (rola(el)) { area = el; break; }
+    }
+    if (!area && janela) {
+      const candidatas = [janela, ...janela.querySelectorAll("*")].filter(rola);
+      area = candidatas.sort((a, b) => b.clientHeight - a.clientHeight)[0];
+    }
+    if (!area && !janela) {
+      const pagina = document.scrollingElement;
+      if (pagina && pagina.scrollHeight > pagina.clientHeight + 1) area = pagina;
+    }
+    if (!area) return;
+
+    e.preventDefault();
+    const pagina = Math.max(40, area.clientHeight * 0.9);
+    const passo = { ArrowDown: 40, ArrowUp: -40, PageDown: pagina, PageUp: -pagina }[e.key];
+    if (passo !== undefined) area.scrollBy({ top: passo });
+    else area.scrollTop = e.key === "Home" ? 0 : area.scrollHeight;
+  });
+})();
+
 // Campo de digitação de valor: o usuário digita só números e o valor vai se
 // formando da direita pra esquerda (centavos primeiro), como em caixa de
 // supermercado. onChange devolve o número como string com ponto decimal,
@@ -966,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.064";
+const VERSAO_SISTEMA = "1.065";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.065", texto: "Setas do teclado rolam as janelas de cadastro e edição" },
   { versao: "1.064", texto: "Operação: hectares, toneladas e m³ do contrato com 3 casas decimais" },
   { versao: "1.063", texto: "Operação: período do contrato, serviço pausado, hectares e previsão de t e m³" },
   { versao: "1.062", texto: "Operação: unidade e valor só aparecem no serviço marcado" },

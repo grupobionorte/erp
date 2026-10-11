@@ -21,8 +21,20 @@ router.get("/", asyncHandler(async (req, res) => {
   }));
 }));
 
+// Lista fechada: a tela mostra estes seis, e um tipo desconhecido gravado
+// ficaria invisível e impossível de desmarcar.
+const TIPOS_SERVICO = ["corte", "enleiramento", "tracamento", "arraste", "picagem", "transporte"];
+
+function servicosValidos(lista) {
+  if (!Array.isArray(lista)) return undefined;
+  const vistos = new Set();
+  return lista
+    .filter(s => s && TIPOS_SERVICO.includes(s.tipo) && !vistos.has(s.tipo) && vistos.add(s.tipo))
+    .map(s => ({ tipo: s.tipo, execucao: s.execucao === "terceirizado" ? "terceirizado" : "proprio" }));
+}
+
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -37,13 +49,14 @@ router.post("/", asyncHandler(async (req, res) => {
         ? Number(valorUnitarioMateriaPrima) : undefined,
       fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
       umidade: umidade !== undefined && umidade !== "" ? Number(umidade) : undefined,
+      servicos: servicosValidos(servicos),
       empresaId: req.usuario.empresaId || undefined,
     },
   }));
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
+  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -63,6 +76,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       umidade: umidade === "" || umidade === null
         ? null
         : (umidade !== undefined ? Number(umidade) : undefined),
+      servicos: servicosValidos(servicos),
     },
   }));
 }));

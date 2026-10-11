@@ -1266,6 +1266,10 @@ model Operacao {
   // porque é condição do contrato, não de cada viagem.
   umidade Float?
 
+  // Serviços que a operação abrange e quem executa cada um:
+  // [{ tipo: "corte", execucao: "proprio" | "terceirizado" }].
+  servicos Json @default("[]")
+
   // De quem vem a matéria-prima desta operação.
   fornecedorId Int?    @map("fornecedor_id")
   fornecedor   Pessoa? @relation("OperacoesFornecedor", fields: [fornecedorId], references: [id])

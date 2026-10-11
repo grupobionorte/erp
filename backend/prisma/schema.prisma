@@ -194,6 +194,7 @@ model Empresa {
   motoristas Motorista[]
   categoriasDespesa CategoriaDespesa[]
   centrosCusto      CentroCusto[]
+  contasBancarias   ContaBancaria[]
   contasPagar       ContaPagar[]
   eventos Evento[]
   equipamentos     Equipamento[]
@@ -923,6 +924,27 @@ model CategoriaDespesa {
 
 // Centro de custo: onde a despesa foi consumida. Pode apontar para um
 // veículo — é como a operação pensa custo de frota.
+// De onde saiu o dinheiro de um pagamento: conta do banco, caixa da
+// empresa, cartão. O nome é o apelido que aparece nas listas.
+model ContaBancaria {
+  id      Int     @id @default(autoincrement())
+  nome    String
+  banco   String?
+  agencia String?
+  numero  String?
+  ativo   Boolean @default(true)
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  pagamentos ContaPagar[]
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, nome])
+  @@map("contas_bancarias")
+}
+
 model CentroCusto {
   id     Int     @id @default(autoincrement())
   nome   String
@@ -960,6 +982,10 @@ model ContaPagar {
   jurosMulta     Float?    @map("juros_multa")
   desconto       Float?
   formaPagamento String?   @map("forma_pagamento")
+
+  // Conta de onde saiu o dinheiro do pagamento.
+  contaBancariaId Int?           @map("conta_bancaria_id")
+  contaBancaria   ContaBancaria? @relation(fields: [contaBancariaId], references: [id])
 
   // Número do boleto, da nota de compra ou do recibo.
   documento  String?

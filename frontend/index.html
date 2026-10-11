@@ -938,12 +938,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.052";
+const VERSAO_SISTEMA = "1.053";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.053", texto: "Contas a pagar: cadastro de contas bancárias; o pagamento informa a conta e a forma" },
   { versao: "1.052", texto: "Operação: a descrição aparece no título da janela de edição" },
   { versao: "1.050", texto: "Contas a pagar: + em categoria e centro de custo, e nomes editáveis" },
   { versao: "1.049", texto: "Contas a pagar: botão + para cadastrar o fornecedor na hora" },
@@ -3129,7 +3130,9 @@ function DespesasAba({ operacaoId }) {
                   <td>{conta.fornecedor?.nomeRazaoSocial || "—"}</td>
                   <td>{conta.categoria?.nome || "—"}</td>
                   <td style={{ textAlign: "right", color: COR_DEBITO }}>{money(conta.valor)}</td>
-                  <td style={{ color: s.cor }}>{s.texto}</td>
+                  <td style={{ color: s.cor }} title={s.detalhe || undefined}>
+                    {s.texto}{s.detalhe && <span className="subtle" style={{ fontSize: 12 }}> · {s.detalhe}</span>}
+                  </td>
                   <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
                     {conta.status === "aberta" ? (
                       <>
@@ -7727,7 +7730,10 @@ function LeituraModal({ equipamento, onFechar, onSalvo }) {
 // Situação pelo vencimento: é o que decide a cor da linha. Usada no Contas
 // a pagar e na aba Despesas da operação.
 function situacaoConta(conta) {
-  if (conta.status === "paga") return { texto: "paga", cor: "#00732F" };
+  if (conta.status === "paga") {
+    const detalhe = [conta.formaPagamento, conta.contaBancaria?.nome].filter(Boolean).join(" · ");
+    return { texto: "paga", cor: "#00732F", detalhe };
+  }
   if (conta.status === "cancelada") return { texto: "cancelada", cor: "#8a887f" };
   // De meio-dia a meio-dia, pelo dia de Cuiabá: não depende do fuso do
   // aparelho nem da hora em que a tela é aberta.
@@ -7777,6 +7783,8 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
     repeticao: "unica",
     quantidade: 2,
     dataPagamento: conta?.dataPagamento ? String(conta.dataPagamento).slice(0, 10) : "",
+    contaBancariaId: conta?.contaBancariaId ? String(conta.contaBancariaId) : "",
+    formaPagamento: conta?.formaPagamento || "",
     valorPago: conta?.valorPago ?? "",
     jurosMulta: conta?.jurosMulta ?? "",
     desconto: conta?.desconto ?? "",
@@ -7823,6 +7831,8 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
       setErro("Preencha descrição, valor e vencimento.");
       return;
     }
+    const falta = dados.dataPagamento && faltaNoPagamento(dados);
+    if (falta) { setErro(falta); return; }
     setSalvando(true); setErro("");
     try {
       if (editando) {
@@ -7999,6 +8009,11 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
               </div>
             </div>
             {dados.dataPagamento && (
+              <div className="nf-grid-4">
+                <CamposPagamentoConta dados={dados} set={set} />
+              </div>
+            )}
+            {dados.dataPagamento && (
               <p className="hint">
                 A conta será gravada como paga
                 {vezes > 1 && dados.repeticao !== "unica" ? " — só a primeira parcela; as demais ficam em aberto." : "."}
@@ -8044,6 +8059,193 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
   );
 }
 
+// Formas de pagamento da baixa. A mesma lista fechada do servidor.
+const FORMAS_PAGAMENTO_CONTA = ["PIX", "Débito", "Crédito", "Boleto", "Transferência"];
+
+// Contas de onde sai o dinheiro do pagamento.
+function useContasBancarias() {
+  const [contas, setContas] = useState([]);
+  const recarregar = useCallback(() => {
+    apiRequest("/contas-pagar/contas-bancarias").then(setContas).catch(() => {});
+  }, []);
+  useEffect(() => { recarregar(); }, [recarregar]);
+  return { contasBancarias: contas, recarregarContasBancarias: recarregar };
+}
+
+function rotuloContaBancaria(c) {
+  const detalhe = [c.banco, c.agencia && `ag. ${c.agencia}`, c.numero && `c/c ${c.numero}`].filter(Boolean).join(" · ");
+  return detalhe ? `${c.nome} (${detalhe})` : c.nome;
+}
+
+// Cadastro e edição de uma conta bancária. Abre pelo "+" da baixa e pela
+// janela de gerenciar.
+function ContaBancariaForm({ conta, onFechar, onSalvo }) {
+  const [dados, setDados] = useState({
+    nome: conta?.nome || "", banco: conta?.banco || "", agencia: conta?.agencia || "", numero: conta?.numero || "",
+  });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
+
+  const salvar = async () => {
+    if (!dados.nome.trim()) { setErro("Informe o nome da conta."); return; }
+    setSalvando(true); setErro("");
+    try {
+      const salvo = await apiRequest(conta?.id ? `/contas-pagar/contas-bancarias/${conta.id}` : "/contas-pagar/contas-bancarias", {
+        method: conta?.id ? "PUT" : "POST",
+        body: JSON.stringify(dados),
+      });
+      onSalvo(salvo);
+    } catch (e) { setErro(e.message); setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3>{conta?.id ? "Editar conta bancária" : "Nova conta bancária"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field-group">
+            <label className="field-label">Nome<span className="req">*</span></label>
+            <input autoFocus value={dados.nome} onChange={e => set("nome", e.target.value)}
+              placeholder="Sicredi PJ, Caixa da empresa, Cartão Bradesco…" />
+          </div>
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Banco</label>
+              <input value={dados.banco} onChange={e => set("banco", e.target.value)} placeholder="Sicredi" />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Agência</label>
+              <input value={dados.agencia} onChange={e => set("agencia", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Conta</label>
+              <input value={dados.numero} onChange={e => set("numero", e.target.value)} />
+            </div>
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContasBancariasModal({ onFechar }) {
+  const { contasBancarias, recarregarContasBancarias } = useContasBancarias();
+  const [emEdicao, setEmEdicao] = useState(null); // {} = nova
+  const [erro, setErro] = useState("");
+
+  const desativar = async (c) => {
+    if (!window.confirm(`Desativar a conta "${c.nome}"? Ela some das listas, mas os pagamentos já feitos continuam mostrando de onde saíram.`)) return;
+    try {
+      await apiRequest(`/contas-pagar/contas-bancarias/${c.id}`, { method: "DELETE" });
+      recarregarContasBancarias();
+    } catch (e) { setErro(e.message); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 720 }}>
+        <div className="modal-header">
+          <h3>Contas bancárias</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <p className="hint" style={{ margin: 0 }}>De onde sai o dinheiro dos pagamentos.</p>
+            <button className="btn btn-primary" onClick={() => setEmEdicao({})}><Plus size={14} /> Nova conta</button>
+          </div>
+          <table className="data-table tabela-densa">
+            <thead><tr><th>Nome</th><th>Banco</th><th>Agência</th><th>Conta</th><th></th></tr></thead>
+            <tbody>
+              {contasBancarias.map(c => (
+                <tr key={c.id}>
+                  <td>{c.nome}</td>
+                  <td>{c.banco || "—"}</td>
+                  <td>{c.agencia || "—"}</td>
+                  <td>{c.numero || "—"}</td>
+                  <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                    <button className="icon-btn" title="Alterar" onClick={() => setEmEdicao(c)}><Pencil size={14} /></button>
+                    <button className="icon-btn icon-btn-danger" title="Desativar" onClick={() => desativar(c)}><Trash2 size={14} /></button>
+                  </td>
+                </tr>
+              ))}
+              {!contasBancarias.length && <tr><td colSpan={5}>Nenhuma conta cadastrada ainda.</td></tr>}
+            </tbody>
+          </table>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-primary" onClick={onFechar}>Fechar</button>
+        </div>
+      </div>
+      {emEdicao && (
+        <ContaBancariaForm
+          conta={emEdicao.id ? emEdicao : null}
+          onFechar={() => setEmEdicao(null)}
+          onSalvo={() => { setEmEdicao(null); recarregarContasBancarias(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Campos "de onde saiu" e "como", usados na baixa e no pagamento informado
+// pela edição da conta. O "+" cadastra a conta bancária sem sair dali.
+function CamposPagamentoConta({ dados, set, obrigatorio = true }) {
+  const { contasBancarias, recarregarContasBancarias } = useContasBancarias();
+  const [cadastrando, setCadastrando] = useState(false);
+  const [novas, setNovas] = useState([]);
+  const lista = [...contasBancarias, ...novas.filter(n => !contasBancarias.some(c => c.id === n.id))];
+  const req = obrigatorio ? <span className="req">*</span> : null;
+
+  return (
+    <>
+      <div className="field-group" style={{ gridColumn: "span 2" }}>
+        <label className="field-label">Conta de saída{req}</label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <select value={dados.contaBancariaId} onChange={e => set("contaBancariaId", e.target.value)} style={{ flex: 1, minWidth: 0 }}>
+            <option value="">Selecione…</option>
+            {lista.map(c => <option key={c.id} value={c.id}>{rotuloContaBancaria(c)}</option>)}
+          </select>
+          <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar conta bancária nova" onClick={() => setCadastrando(true)}><Plus size={14} /></button>
+        </div>
+      </div>
+      <div className="field-group">
+        <label className="field-label">Forma{req}</label>
+        <select value={dados.formaPagamento} onChange={e => set("formaPagamento", e.target.value)}>
+          <option value="">Selecione…</option>
+          {FORMAS_PAGAMENTO_CONTA.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
+      {cadastrando && (
+        <ContaBancariaForm
+          onFechar={() => setCadastrando(false)}
+          onSalvo={(nova) => {
+            setNovas(l => [...l, nova]);
+            set("contaBancariaId", String(nova.id));
+            setCadastrando(false);
+            recarregarContasBancarias();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function faltaNoPagamento(dados) {
+  if (!dados.contaBancariaId) return "Informe a conta de onde saiu o pagamento.";
+  if (!dados.formaPagamento) return "Informe a forma de pagamento.";
+  return null;
+}
+
 // Baixa do pagamento. Valor pago separado do valor da conta porque juros e
 // desconto são a regra, não a exceção.
 function BaixaContaModal({ conta, onFechar, onSalvo }) {
@@ -8054,6 +8256,7 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
     jurosMulta: "",
     desconto: "",
     formaPagamento: "",
+    contaBancariaId: "",
   });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -8061,6 +8264,8 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
 
   const salvar = async () => {
+    const falta = faltaNoPagamento(dados);
+    if (falta) { setErro(falta); return; }
     setSalvando(true); setErro("");
     try {
       await apiRequest(`/contas-pagar/${conta.id}/pagar`, { method: "POST", body: JSON.stringify(dados) });
@@ -8083,6 +8288,9 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
             {" "}· R$ {formatarMoeda(conta.valor)}
           </p>
           <div className="nf-grid-3">
+            <CamposPagamentoConta dados={dados} set={set} />
+          </div>
+          <div className="nf-grid-4">
             <div className="field-group">
               <label className="field-label">Data do pagamento</label>
               <input type="date" value={dados.dataPagamento} onChange={e => set("dataPagamento", e.target.value)} />
@@ -8091,19 +8299,6 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
               <label className="field-label">Valor pago</label>
               <InputMoeda value={dados.valorPago} onChange={v => set("valorPago", v)} />
             </div>
-            <div className="field-group">
-              <label className="field-label">Forma</label>
-              <select value={dados.formaPagamento} onChange={e => set("formaPagamento", e.target.value)}>
-                <option value="">Não informar</option>
-                <option value="PIX">PIX</option>
-                <option value="Boleto">Boleto</option>
-                <option value="Transferência">Transferência</option>
-                <option value="Dinheiro">Dinheiro</option>
-                <option value="Cartão">Cartão</option>
-              </select>
-            </div>
-          </div>
-          <div className="nf-grid-3">
             <div className="field-group">
               <label className="field-label">Juros / multa</label>
               <InputMoeda value={dados.jurosMulta} onChange={v => set("jurosMulta", v)} />
@@ -8126,8 +8321,6 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
   );
 }
 
-// Categorias e centros de custo ficam aqui, e não no menu de cadastros:
-// são listas curtas que só existem para classificar despesa.
 // Cadastro rápido de categoria ou centro de custo, aberto pelo "+" da conta.
 function NovoApoioContaModal({ tipo, onFechar, onCriado }) {
   const ehCentro = tipo === "centro";
@@ -8183,6 +8376,8 @@ function NovoApoioContaModal({ tipo, onFechar, onCriado }) {
   );
 }
 
+// Categorias e centros de custo ficam aqui, e não no menu de cadastros:
+// são listas curtas que só existem para classificar despesa.
 function CategoriasECentrosModal({ categorias, centros, onFechar, onMudou }) {
   const { items: veiculos } = useApiCollection("veiculos");
   const [novaCategoria, setNovaCategoria] = useState("");
@@ -8363,6 +8558,7 @@ function ContasPagarView() {
   const [contaEmEdicao, setContaEmEdicao] = useState(null);
   const [contaParaBaixa, setContaParaBaixa] = useState(null);
   const [gerenciarCadastros, setGerenciarCadastros] = useState(false);
+  const [gerenciarContasBancarias, setGerenciarContasBancarias] = useState(false);
 
   const carregarApoio = useCallback(async () => {
     try {
@@ -8414,7 +8610,7 @@ function ContasPagarView() {
         <td>${escaparHtml(c.fornecedor?.nomeRazaoSocial || "—")}</td>
         <td>${escaparHtml(c.operacao ? c.operacao.codigo : "—")}</td>
         <td>${escaparHtml(c.categoria?.nome || "—")}</td>
-        <td>${escaparHtml(situacao(c).texto)}</td>
+        <td>${escaparHtml([situacao(c).texto, situacao(c).detalhe].filter(Boolean).join(" · "))}</td>
         <td class="num">R$ ${formatarMoeda(c.valor)}</td>
       </tr>`).join("");
     janela.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Contas a pagar</title>
@@ -8470,6 +8666,9 @@ function ContasPagarView() {
           </button>
           <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setGerenciarCadastros(true)}>
             Categorias e centros
+          </button>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setGerenciarContasBancarias(true)}>
+            Contas bancárias
           </button>
           <button className="btn btn-primary" onClick={() => setContaEmEdicao({})}>
             <Plus size={16} /> Nova conta
@@ -8555,7 +8754,9 @@ function ContasPagarView() {
                   <td>{conta.centroCusto?.nome || "—"}</td>
                   <td title={conta.operacao?.descricao || ""}>{conta.operacao?.codigo || "—"}</td>
                   <td style={{ textAlign: "right" }}>R$ {formatarMoeda(conta.valor)}</td>
-                  <td style={{ color: s.cor }}>{s.texto}</td>
+                  <td style={{ color: s.cor }} title={s.detalhe || undefined}>
+                    {s.texto}{s.detalhe && <span className="subtle" style={{ fontSize: 12 }}> · {s.detalhe}</span>}
+                  </td>
                   <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
                     {conta.status === "aberta" ? (
                       <>
@@ -8596,6 +8797,10 @@ function ContasPagarView() {
           onFechar={() => setContaParaBaixa(null)}
           onSalvo={() => { setContaParaBaixa(null); carregar(); }}
         />
+      )}
+
+      {gerenciarContasBancarias && (
+        <ContasBancariasModal onFechar={() => { setGerenciarContasBancarias(false); carregar(); }} />
       )}
 
       {gerenciarCadastros && (

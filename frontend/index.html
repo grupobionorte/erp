@@ -945,12 +945,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.061";
+const VERSAO_SISTEMA = "1.062";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.062", texto: "Operação: unidade e valor só aparecem no serviço marcado" },
   { versao: "1.061", texto: "Operação: cada serviço com unidade (m³, kg, ha, alq) e valor" },
   { versao: "1.060", texto: "NF-e: a nota clonada vem com a Guia Florestal em branco" },
   { versao: "1.059", texto: "Operação: nova arrumação da aba Dados, em seções" },
@@ -1682,15 +1683,20 @@ function Field({ field, value, onChange, disabled, dados }) {
                     </>
                   )}
                 </div>
-                <select className="servico-unidade" aria-label={`Unidade: ${rotulo}`} value={atual?.unidade || ""}
-                  disabled={!atual || disabled} onChange={e => alterar(tipo, { unidade: e.target.value || null })}>
-                  <option value="">Unid.</option>
-                  {UNIDADES_SERVICO.map(u => <option key={u.valor} value={u.valor}>{u.rotulo}</option>)}
-                </select>
-                <div className="servico-valor">
-                  <InputMoeda value={atual?.valor ?? ""} disabled={!atual || disabled} aria-label={`Valor: ${rotulo}`}
-                    placeholder="Valor" onChange={v => alterar(tipo, { valor: v === "" ? null : Number(v) })} />
-                </div>
+                {/* Unidade e valor só aparecem com o serviço marcado. */}
+                {atual && (
+                  <>
+                    <select className="servico-unidade" aria-label={`Unidade: ${rotulo}`} value={atual.unidade || ""}
+                      disabled={disabled} onChange={e => alterar(tipo, { unidade: e.target.value || null })}>
+                      <option value="">Unid.</option>
+                      {UNIDADES_SERVICO.map(u => <option key={u.valor} value={u.valor}>{u.rotulo}</option>)}
+                    </select>
+                    <div className="servico-valor">
+                      <InputMoeda value={atual.valor ?? ""} disabled={disabled} aria-label={`Valor: ${rotulo}`}
+                        placeholder="Valor" onChange={v => alterar(tipo, { valor: v === "" ? null : Number(v) })} />
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}

@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.068";
+const VERSAO_SISTEMA = "1.069";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.069", texto: "Visão geral: faturamento por cliente no topo, agenda logo abaixo" },
   { versao: "1.068", texto: "Menu: Equipamentos e Manutenção logo abaixo de Operações" },
   { versao: "1.067", texto: "Equipamentos com menu próprio e código (ex.: BN-1001)" },
   { versao: "1.066", texto: "Operação: aba Equipamentos, com os equipamentos alocados" },
@@ -5605,8 +5606,8 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
         </div>
       </div>
 
-      <AgendaDoPainel onNavigate={onNavigate} />
       <ClientesDoMes />
+      <AgendaDoPainel onNavigate={onNavigate} />
 
       <div className="dash-grid">
         {cards.map(({ key, cfg, count }) => {

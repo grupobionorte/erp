@@ -938,12 +938,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.053";
+const VERSAO_SISTEMA = "1.054";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.054", texto: "Contas a pagar: conta e forma já no lançamento, e baixa pelo próprio cadastro" },
   { versao: "1.053", texto: "Contas a pagar: cadastro de contas bancárias; o pagamento informa a conta e a forma" },
   { versao: "1.052", texto: "Operação: a descrição aparece no título da janela de edição" },
   { versao: "1.050", texto: "Contas a pagar: + em categoria e centro de custo, e nomes editáveis" },
@@ -7826,19 +7827,26 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
   const editando = Boolean(conta?.id);
 
-  const salvar = async () => {
+  // "Salvar e dar baixa" é o mesmo salvar com a data de hoje e o valor da
+  // conta, quando não foram digitados.
+  const salvar = async (comBaixa = false) => {
     if (!dados.descricao || !dados.valor || !dados.vencimento) {
       setErro("Preencha descrição, valor e vencimento.");
       return;
     }
-    const falta = dados.dataPagamento && faltaNoPagamento(dados);
+    const envio = comBaixa ? {
+      ...dados,
+      dataPagamento: dados.dataPagamento || hoje,
+      valorPago: dados.valorPago !== "" && dados.valorPago !== null ? dados.valorPago : dados.valor,
+    } : dados;
+    const falta = envio.dataPagamento && faltaNoPagamento(envio);
     if (falta) { setErro(falta); return; }
     setSalvando(true); setErro("");
     try {
       if (editando) {
-        await apiRequest(`/contas-pagar/${conta.id}`, { method: "PUT", body: JSON.stringify(dados) });
+        await apiRequest(`/contas-pagar/${conta.id}`, { method: "PUT", body: JSON.stringify(envio) });
       } else {
-        await apiRequest("/contas-pagar", { method: "POST", body: JSON.stringify(dados) });
+        await apiRequest("/contas-pagar", { method: "POST", body: JSON.stringify(envio) });
       }
       onSalvo();
     } catch (e) {
@@ -7986,9 +7994,12 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
             <h4 className="pf-secao-titulo">
               Pagamento
               <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
-                preencha só se a conta já foi paga
+                conta e forma podem ficar escolhidas desde já; a data do pagamento dá a baixa
               </span>
             </h4>
+            <div className="nf-grid-4">
+              <CamposPagamentoConta dados={dados} set={set} obrigatorio={!!dados.dataPagamento} />
+            </div>
             <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Data do pagamento</label>
@@ -8008,11 +8019,6 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
                 <InputMoeda value={dados.desconto} onChange={v => set("desconto", v)} />
               </div>
             </div>
-            {dados.dataPagamento && (
-              <div className="nf-grid-4">
-                <CamposPagamentoConta dados={dados} set={set} />
-              </div>
-            )}
             {dados.dataPagamento && (
               <p className="hint">
                 A conta será gravada como paga
@@ -8036,7 +8042,13 @@ function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, c
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onFechar} disabled={salvando}>Cancelar</button>
-          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>
+          {/* Com a data já preenchida, o Salvar comum já dá a baixa. */}
+          {!dados.dataPagamento && conta?.status !== "paga" && conta?.status !== "cancelada" && (
+            <button className="btn" onClick={() => salvar(true)} disabled={salvando}>
+              ✓ Salvar e dar baixa
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => salvar()} disabled={salvando}>
             {salvando ? "Salvando…" : "Salvar"}
           </button>
         </div>
@@ -8255,8 +8267,8 @@ function BaixaContaModal({ conta, onFechar, onSalvo }) {
     valorPago: conta.valor,
     jurosMulta: "",
     desconto: "",
-    formaPagamento: "",
-    contaBancariaId: "",
+    formaPagamento: conta.formaPagamento || "",
+    contaBancariaId: conta.contaBancariaId ? String(conta.contaBancariaId) : "",
   });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");

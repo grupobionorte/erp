@@ -38,6 +38,17 @@ async function conferirPagamento({ contaBancariaId, formaPagamento }, empresaId)
   return null;
 }
 
+// Conta em aberto pode já trazer a conta e a forma previstas para o
+// pagamento; aí são opcionais, mas, se vierem, têm de valer.
+async function conferirPrevisto({ contaBancariaId, formaPagamento }, empresaId) {
+  if (formaPagamento && !FORMAS_PAGAMENTO.includes(formaPagamento)) return "Forma de pagamento inválida";
+  if (contaBancariaId) {
+    const conta = await prisma.contaBancaria.findFirst({ where: { id: Number(contaBancariaId), empresaId: empresaId || undefined } });
+    if (!conta) return "Conta bancária não encontrada";
+  }
+  return null;
+}
+
 // "sem" = despesas gerais, sem operação; número = só daquela operação.
 function filtroOperacao(operacaoId) {
   if (operacaoId === "sem") return { operacaoId: null };
@@ -246,8 +257,9 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!descricao || !valor || !vencimento) {
     return res.status(400).json({ erro: "Informe descrição, valor e vencimento" });
   }
-  if (dataPagamento) {
-    const problema = await conferirPagamento({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
+  {
+    const conferir = dataPagamento ? conferirPagamento : conferirPrevisto;
+    const problema = await conferir({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
     if (problema) return res.status(400).json({ erro: problema });
   }
 
@@ -274,6 +286,9 @@ router.post("/", asyncHandler(async (req, res) => {
     operacaoId: operacaoId ? Number(operacaoId) : undefined,
     documento: documento || undefined,
     observacao: observacao || undefined,
+    // Previstas: valem para todas as parcelas, e a baixa já vem com elas.
+    formaPagamento: formaPagamento || undefined,
+    contaBancariaId: contaBancariaId ? Number(contaBancariaId) : undefined,
     empresaId: req.usuario.empresaId || undefined,
     grupo,
   };
@@ -286,8 +301,6 @@ router.post("/", asyncHandler(async (req, res) => {
     valorPago: valorPago !== undefined && valorPago !== "" ? Number(valorPago) : undefined,
     jurosMulta: jurosMulta ? Number(jurosMulta) : undefined,
     desconto: desconto ? Number(desconto) : undefined,
-    formaPagamento,
-    contaBancariaId: Number(contaBancariaId),
   } : {};
 
   const registros = Array.from({ length: vezes }, (_, i) => ({
@@ -330,11 +343,13 @@ router.put("/:id", asyncHandler(async (req, res) => {
   // Informar a data de pagamento aqui equivale a dar baixa; limpar a data
   // devolve a conta para em aberto.
   const statusPeloPagamento = dataPagamento ? "paga" : (dataPagamento === "" || dataPagamento === null ? "aberta" : undefined);
-  if (dataPagamento) {
-    const problema = await conferirPagamento({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
+  {
+    const conferir = dataPagamento ? conferirPagamento : conferirPrevisto;
+    const problema = await conferir({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
     if (problema) return res.status(400).json({ erro: problema });
   }
-  const limpaPagamento = dataPagamento === "" || dataPagamento === null;
+  // Vazio limpa; ausente não mexe.
+  const opcional = (v, conv) => (v === "" || v === null ? null : (v !== undefined ? conv(v) : undefined));
 
   res.json(await prisma.contaPagar.update({
     where: { id: Number(req.params.id) },
@@ -348,8 +363,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorPago: valorPago === "" || valorPago === null ? null : (valorPago !== undefined ? Number(valorPago) : undefined),
       jurosMulta: jurosMulta === "" || jurosMulta === null ? null : (jurosMulta !== undefined ? Number(jurosMulta) : undefined),
       desconto: desconto === "" || desconto === null ? null : (desconto !== undefined ? Number(desconto) : undefined),
-      formaPagamento: limpaPagamento ? null : (dataPagamento ? formaPagamento : undefined),
-      contaBancariaId: limpaPagamento ? null : (dataPagamento ? Number(contaBancariaId) : undefined),
+      formaPagamento: opcional(formaPagamento, String),
+      contaBancariaId: opcional(contaBancariaId, Number),
       fornecedorId: fornecedorId === null || fornecedorId === "" ? null : (fornecedorId ? Number(fornecedorId) : undefined),
       categoriaId: categoriaId === null || categoriaId === "" ? null : (categoriaId ? Number(categoriaId) : undefined),
       centroCustoId: centroCustoId === null || centroCustoId === "" ? null : (centroCustoId ? Number(centroCustoId) : undefined),
@@ -393,7 +408,7 @@ router.post("/:id/estornar", asyncHandler(async (req, res) => {
     where: { id: Number(req.params.id) },
     data: {
       status: "aberta",
-      dataPagamento: null, valorPago: null, jurosMulta: null, desconto: null, formaPagamento: null, contaBancariaId: null,
+      dataPagamento: null, valorPago: null, jurosMulta: null, desconto: null,
     },
     include: incluir,
   }));

@@ -1125,6 +1125,26 @@ model EventoItem {
 // fiscal — placa, RNTRC, tara. Equipamento existe para a manutenção, e boa
 // parte do maquinário não tem placa nenhuma. Quando os dois descrevem a
 // mesma máquina, o vínculo liga os cadastros sem duplicar o controle.
+// Equipamento alocado numa operação. Entrada e saída guardam o histórico:
+// o mesmo picador passa por várias frentes ao longo do ano. Sem saída, está
+// na operação agora.
+model OperacaoEquipamento {
+  id            Int         @id @default(autoincrement())
+  operacaoId    Int         @map("operacao_id")
+  operacao      Operacao    @relation(fields: [operacaoId], references: [id])
+  equipamentoId Int         @map("equipamento_id")
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id])
+  dataEntrada   DateTime?   @map("data_entrada")
+  dataSaida     DateTime?   @map("data_saida")
+  observacao    String?
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([operacaoId])
+  @@index([equipamentoId])
+  @@map("operacao_equipamentos")
+}
+
 model Equipamento {
   id    Int     @id @default(autoincrement())
   nome  String
@@ -1155,6 +1175,7 @@ model Equipamento {
 
   planos PlanoManutencao[]
   ordens OrdemManutencao[]
+  alocacoes OperacaoEquipamento[]
 
   @@index([empresaId, nome])
   @@map("equipamentos")
@@ -1303,6 +1324,7 @@ model Operacao {
   viagens ViagemOperacao[]
   faturas FaturaOperacao[]
   contasPagar ContaPagar[]
+  equipamentos OperacaoEquipamento[]
 }
 
 // Menus liberados para um usuário DENTRO de uma empresa.

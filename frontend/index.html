@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.065";
+const VERSAO_SISTEMA = "1.066";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.066", texto: "Operação: aba Equipamentos, com os equipamentos alocados" },
   { versao: "1.065", texto: "Setas do teclado rolam as janelas de cadastro e edição" },
   { versao: "1.064", texto: "Operação: hectares, toneladas e m³ do contrato com 3 casas decimais" },
   { versao: "1.063", texto: "Operação: período do contrato, serviço pausado, hectares e previsão de t e m³" },
@@ -3381,6 +3382,189 @@ function DespesasAba({ operacaoId }) {
   );
 }
 
+// Equipamentos alocados na operação, puxados do cadastro da Manutenção.
+// Entrada e saída formam o histórico; sem saída, o equipamento está na
+// operação agora.
+function rotuloEquipamento(e) {
+  const tipo = TIPOS_EQUIPAMENTO.find(t => t.valor === e.tipo)?.rotulo;
+  const extra = [tipo, e.veiculo?.placa || e.identificacao].filter(Boolean).join(" · ");
+  return extra ? `${e.nome} (${extra})` : e.nome;
+}
+
+function EquipamentosAba({ operacaoId }) {
+  const hoje = hojeNoFuso();
+  const [alocacoes, setAlocacoes] = useState(null);
+  const [disponiveis, setDisponiveis] = useState([]);
+  const [novo, setNovo] = useState({ equipamentoId: "", dataEntrada: hoje, observacao: "" });
+  const [emEdicao, setEmEdicao] = useState(null);
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = useCallback(async () => {
+    if (!operacaoId) return;
+    try {
+      const [lista, equips] = await Promise.all([
+        apiRequest(`/operacoes/${operacaoId}/equipamentos`),
+        apiRequest("/operacoes/equipamentos-disponiveis"),
+      ]);
+      setAlocacoes(lista);
+      setDisponiveis(equips);
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  }, [operacaoId]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const pag = usePaginacaoLocal(alocacoes, operacaoId);
+
+  if (!operacaoId) return <p className="hint" style={{ padding: "0 22px" }}>Salve a operação primeiro para alocar equipamentos.</p>;
+  if (!alocacoes) return <p className="hint" style={{ padding: "0 22px" }}>{erro || "Carregando…"}</p>;
+
+  const dataBr = (iso) => (iso ? new Date(String(iso).slice(0, 10) + "T12:00:00Z").toLocaleDateString("pt-BR") : "—");
+  const naOperacao = new Set(alocacoes.filter(a => !a.dataSaida).map(a => a.equipamentoId));
+
+  const alocar = async () => {
+    if (!novo.equipamentoId) { setErro("Escolha o equipamento."); return; }
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/operacoes/${operacaoId}/equipamentos`, { method: "POST", body: JSON.stringify(novo) });
+      setNovo({ equipamentoId: "", dataEntrada: hoje, observacao: "" });
+      await carregar();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+    finally { setSalvando(false); }
+  };
+
+  const salvarEdicao = async () => {
+    setErro("");
+    try {
+      await apiRequest(`/operacoes/${operacaoId}/equipamentos/${emEdicao.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ dataEntrada: emEdicao.dataEntrada, dataSaida: emEdicao.dataSaida, observacao: emEdicao.observacao }),
+      });
+      setEmEdicao(null);
+      await carregar();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  };
+
+  const excluir = async (a) => {
+    if (!window.confirm(`Excluir a alocação de ${a.equipamento.nome}?\n\nUse só para lançamento errado. Se o equipamento saiu da operação, edite e informe a data de saída.`)) return;
+    try {
+      await apiRequest(`/operacoes/${operacaoId}/equipamentos/${a.id}`, { method: "DELETE" });
+      await carregar();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  };
+
+  const agora = alocacoes.filter(a => !a.dataSaida).length;
+
+  return (
+    <div style={{ padding: "0 22px 18px" }}>
+      <section className="pf-secao" style={{ paddingTop: 6 }}>
+        <h4 className="pf-secao-titulo">Alocar equipamento</h4>
+        <div className="equip-alocar">
+          <div className="field-group">
+            <label className="field-label">Equipamento<span className="req">*</span></label>
+            <select value={novo.equipamentoId} onChange={e => setNovo(n => ({ ...n, equipamentoId: e.target.value }))}>
+              <option value="">Selecione…</option>
+              {disponiveis.filter(e => !naOperacao.has(e.id)).map(e => {
+                const outra = e.alocacoes.find(a => a.operacaoId !== operacaoId);
+                return (
+                  <option key={e.id} value={e.id}>
+                    {rotuloEquipamento(e)}{outra ? ` — em ${outra.operacao.codigo}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Entrada</label>
+            <input type="date" value={novo.dataEntrada} onChange={e => setNovo(n => ({ ...n, dataEntrada: e.target.value }))} />
+          </div>
+          <div className="field-group">
+            <label className="field-label">Observação</label>
+            <input value={novo.observacao} onChange={e => setNovo(n => ({ ...n, observacao: e.target.value }))}
+              placeholder="Operador, frente, turno…" />
+          </div>
+          <button className="btn btn-primary" onClick={alocar} disabled={salvando}><Plus size={14} /> Alocar</button>
+        </div>
+        {!disponiveis.length && <p className="hint">Nenhum equipamento cadastrado. Cadastre em Manutenção › Equipamentos.</p>}
+        {erro && <p className="error-text">{erro}</p>}
+      </section>
+
+      <section className="pf-secao">
+        <h4 className="pf-secao-titulo">
+          Equipamentos da operação
+          <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+            {agora} na operação agora
+          </span>
+        </h4>
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th>Equipamento</th>
+              <th style={{ width: 100 }}>Entrada</th>
+              <th style={{ width: 100 }}>Saída</th>
+              <th>Observação</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pag.itens.map(a => (
+              <tr key={a.id}>
+                <td>{rotuloEquipamento(a.equipamento)}</td>
+                <td>{dataBr(a.dataEntrada)}</td>
+                <td>{a.dataSaida ? dataBr(a.dataSaida) : <span style={{ color: "#00732F", fontWeight: 500 }}>na operação</span>}</td>
+                <td>{a.observacao || "—"}</td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  <button className="icon-btn" title="Editar" onClick={() => setEmEdicao({
+                    id: a.id, nome: a.equipamento.nome,
+                    dataEntrada: a.dataEntrada ? String(a.dataEntrada).slice(0, 10) : "",
+                    dataSaida: a.dataSaida ? String(a.dataSaida).slice(0, 10) : "",
+                    observacao: a.observacao || "",
+                  })}><Pencil size={14} /></button>
+                  <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(a)}><Trash2 size={14} /></button>
+                </td>
+              </tr>
+            ))}
+            {!alocacoes.length && <tr><td colSpan={5}>Nenhum equipamento alocado nesta operação.</td></tr>}
+          </tbody>
+        </table>
+        {pag.controle}
+      </section>
+
+      {emEdicao && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <h3>{emEdicao.nome}</h3>
+              <button className="icon-btn" onClick={() => setEmEdicao(null)} aria-label="Fechar"><X size={18} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Entrada</label>
+                  <input type="date" value={emEdicao.dataEntrada} onChange={e => setEmEdicao(x => ({ ...x, dataEntrada: e.target.value }))} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Saída</label>
+                  <input type="date" value={emEdicao.dataSaida} onChange={e => setEmEdicao(x => ({ ...x, dataSaida: e.target.value }))} />
+                </div>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Observação</label>
+                <input value={emEdicao.observacao} onChange={e => setEmEdicao(x => ({ ...x, observacao: e.target.value }))} />
+              </div>
+              <p className="hint">Com a data de saída, o equipamento fica no histórico e pode ser alocado em outra operação.</p>
+              {erro && <p className="error-text">{erro}</p>}
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setEmEdicao(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvarEdicao}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FaturasAba({ operacaoId }) {
   const [faturas, setFaturas] = useState(null);
   const [clientes, setClientes] = useState([]);
@@ -3825,6 +4009,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
             <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
             {temViagens && (
+              <button type="button" className="cte-aba" aria-selected={aba === "equipamentos"} onClick={() => setAba("equipamentos")}>
+                Equipamentos
+              </button>
+            )}
+            {temViagens && (
               <button type="button" className="cte-aba" aria-selected={aba === "viagens"} onClick={() => setAba("viagens")}>
                 Viagens
               </button>
@@ -3862,6 +4051,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           )}
           {temViagens && aba === "faturas" && <FaturasAba operacaoId={record?.id} />}
           {temViagens && aba === "despesas" && <DespesasAba operacaoId={record?.id} />}
+          {temViagens && aba === "equipamentos" && <EquipamentosAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
             <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
@@ -11595,6 +11785,9 @@ function ErpBiomassa() {
         .tab { padding: 8px 14px; border: none; background: none; font-size: 13px; cursor: pointer; color: var(--text-secondary, #6b6b68); border-bottom: 2px solid transparent; margin-bottom: -1px; }
         .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
         .emissao-form { max-width: 420px; }
+        .equip-alocar { display: grid; grid-template-columns: minmax(0, 2fr) 160px minmax(0, 2fr) auto; gap: 12px; align-items: end; }
+        .equip-alocar .field-group { margin-bottom: 0; }
+        @media (max-width: 640px) { .equip-alocar { grid-template-columns: 1fr; } }
         .campo-check { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 14px; cursor: pointer; }
         .campo-check input { width: 16px; height: 16px; margin: 0; accent-color: #00923F; }
         .servicos-operacao { display: flex; flex-direction: column; gap: 6px; }

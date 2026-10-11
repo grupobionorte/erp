@@ -285,6 +285,137 @@ router.get("/viagens-por-cliente/:pessoaId", asyncHandler(async (req, res) => {
   res.json({ viagens, totais: totaisDasViagens(viagens) });
 }));
 
+/* ---------------------------------------------------------------------------
+   Equipamentos alocados na operação.
+
+   A lista de equipamentos para escolher vem por aqui, e não por
+   /manutencao/equipamentos, para seguir a permissão do menu Operações:
+   quem aloca equipamento na operação nem sempre mexe na manutenção.
+--------------------------------------------------------------------------- */
+const incluirEquipamento = {
+  equipamento: {
+    select: { id: true, nome: true, tipo: true, identificacao: true, veiculo: { select: { placa: true } } },
+  },
+};
+
+async function operacaoDaEmpresa(id, req) {
+  return prisma.operacao.findFirst({
+    where: { id: Number(id), empresaId: req.usuario.empresaId || undefined },
+    select: { id: true },
+  });
+}
+
+// Alocação aberta do mesmo equipamento em outra operação: um equipamento
+// não está em duas frentes ao mesmo tempo.
+async function alocacaoAbertaEmOutra(equipamentoId, operacaoId, ignorarId) {
+  return prisma.operacaoEquipamento.findFirst({
+    where: {
+      equipamentoId: Number(equipamentoId),
+      dataSaida: null,
+      operacaoId: { not: Number(operacaoId) },
+      id: ignorarId ? { not: Number(ignorarId) } : undefined,
+    },
+    include: { operacao: { select: { codigo: true, descricao: true } } },
+  });
+}
+
+router.get("/equipamentos-disponiveis", asyncHandler(async (req, res) => {
+  const equipamentos = await prisma.equipamento.findMany({
+    where: { empresaId: req.usuario.empresaId || undefined, ativo: true },
+    select: {
+      id: true, nome: true, tipo: true, identificacao: true,
+      veiculo: { select: { placa: true } },
+      alocacoes: {
+        where: { dataSaida: null },
+        select: { operacaoId: true, operacao: { select: { codigo: true, descricao: true } } },
+      },
+    },
+    orderBy: { nome: "asc" },
+  });
+  res.json(equipamentos);
+}));
+
+router.get("/:id/equipamentos", asyncHandler(async (req, res) => {
+  if (!(await operacaoDaEmpresa(req.params.id, req))) return res.status(404).json({ erro: "Operação não encontrada" });
+  res.json(await prisma.operacaoEquipamento.findMany({
+    where: { operacaoId: Number(req.params.id) },
+    include: incluirEquipamento,
+    // Os que estão na operação agora primeiro; depois o histórico.
+    orderBy: [{ dataSaida: { sort: "desc", nulls: "first" } }, { dataEntrada: "desc" }, { id: "desc" }],
+  }));
+}));
+
+router.post("/:id/equipamentos", asyncHandler(async (req, res) => {
+  const operacaoId = Number(req.params.id);
+  if (!(await operacaoDaEmpresa(operacaoId, req))) return res.status(404).json({ erro: "Operação não encontrada" });
+  const { equipamentoId, dataEntrada, dataSaida, observacao } = req.body;
+  const equipamento = equipamentoId && await prisma.equipamento.findFirst({
+    where: { id: Number(equipamentoId), empresaId: req.usuario.empresaId || undefined },
+  });
+  if (!equipamento) return res.status(400).json({ erro: "Escolha o equipamento" });
+
+  if (!dataSaida) {
+    const outra = await alocacaoAbertaEmOutra(equipamento.id, operacaoId);
+    if (outra) {
+      return res.status(409).json({
+        erro: `${equipamento.nome} já está na operação ${outra.operacao.codigo} — ${outra.operacao.descricao}`,
+        detalhe: "Informe a data de saída dele lá antes de alocar aqui.",
+      });
+    }
+  }
+
+  res.status(201).json(await prisma.operacaoEquipamento.create({
+    data: {
+      operacaoId,
+      equipamentoId: equipamento.id,
+      dataEntrada: dataDoDia(dataEntrada) || undefined,
+      dataSaida: dataDoDia(dataSaida) || undefined,
+      observacao: String(observacao || "").trim() || undefined,
+    },
+    include: incluirEquipamento,
+  }));
+}));
+
+router.put("/:id/equipamentos/:alocacaoId", asyncHandler(async (req, res) => {
+  const operacaoId = Number(req.params.id);
+  const alocacao = await prisma.operacaoEquipamento.findFirst({
+    where: { id: Number(req.params.alocacaoId), operacaoId, operacao: { empresaId: req.usuario.empresaId || undefined } },
+  });
+  if (!alocacao) return res.status(404).json({ erro: "Alocação não encontrada" });
+  const { dataEntrada, dataSaida, observacao } = req.body;
+
+  // Reabrir (apagar a saída) só se o equipamento não estiver em outra frente.
+  if (dataSaida === "" || dataSaida === null) {
+    const outra = await alocacaoAbertaEmOutra(alocacao.equipamentoId, operacaoId, alocacao.id);
+    if (outra) {
+      return res.status(409).json({
+        erro: `Esse equipamento está na operação ${outra.operacao.codigo} — ${outra.operacao.descricao}`,
+        detalhe: "Informe a saída dele lá antes de deixar esta alocação em aberto.",
+      });
+    }
+  }
+
+  res.json(await prisma.operacaoEquipamento.update({
+    where: { id: alocacao.id },
+    data: {
+      dataEntrada: dataEntrada === "" || dataEntrada === null ? null : (dataEntrada ? dataDoDia(dataEntrada) : undefined),
+      dataSaida: dataSaida === "" || dataSaida === null ? null : (dataSaida ? dataDoDia(dataSaida) : undefined),
+      observacao: observacao !== undefined ? (String(observacao || "").trim() || null) : undefined,
+    },
+    include: incluirEquipamento,
+  }));
+}));
+
+// Excluir é para lançamento errado; equipamento que saiu ganha data de saída.
+router.delete("/:id/equipamentos/:alocacaoId", asyncHandler(async (req, res) => {
+  const alocacao = await prisma.operacaoEquipamento.findFirst({
+    where: { id: Number(req.params.alocacaoId), operacaoId: Number(req.params.id), operacao: { empresaId: req.usuario.empresaId || undefined } },
+  });
+  if (!alocacao) return res.status(404).json({ erro: "Alocação não encontrada" });
+  await prisma.operacaoEquipamento.delete({ where: { id: alocacao.id } });
+  res.status(204).send();
+}));
+
 router.get("/:id/viagens", asyncHandler(async (req, res) => {
   const viagens = await prisma.viagemOperacao.findMany({
     where: { operacaoId: Number(req.params.id), ...filtroDescarga(req.query) },

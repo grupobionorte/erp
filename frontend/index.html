@@ -630,6 +630,8 @@ const MODULES = {
   operacoes: {
     label: "Operações",
     singular: "Operação", feminino: true,
+    // Com várias abas, o título é o que lembra qual operação está aberta.
+    tituloRegistro: (r) => [r.codigo, r.descricao].filter(Boolean).join(" · "),
     icon: Building2,
     color: "blue",
     apiPath: "/operacoes",
@@ -936,12 +938,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.050";
+const VERSAO_SISTEMA = "1.051";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.051", texto: "Operação: o nome aparece no título da janela de edição" },
   { versao: "1.050", texto: "Contas a pagar: + em categoria e centro de custo, e nomes editáveis" },
   { versao: "1.049", texto: "Contas a pagar: botão + para cadastrar o fornecedor na hora" },
   { versao: "1.048", texto: "Tela de entrada ocupa a tela inteira, em qualquer resolução" },
@@ -3604,7 +3607,10 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
         <div className="modal-header">
           {/* Singular e gênero vêm do MODULES: tirar o "s" do nome do menu
               dava "Editar Operaçõe" e "Novo Transportadora". */}
-          <h3>{editando ? "Editar" : config.feminino ? "Nova" : "Novo"} {config.singular}</h3>
+          <h3 style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {editando ? "Editar" : config.feminino ? "Nova" : "Novo"} {config.singular}
+            {editando && config.tituloRegistro?.(record) ? ` - ${config.tituloRegistro(record)}` : ""}
+          </h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 

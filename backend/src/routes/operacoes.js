@@ -51,8 +51,16 @@ function servicosValidos(lista) {
     });
 }
 
+// Número opcional: vazio limpa, ausente não mexe.
+const numeroOpcional = (v) => (v === "" || v === null ? null : (v !== undefined ? Number(v) : undefined));
+// Data opcional, mesma regra.
+const dataOpcional = (v) => (v === "" || v === null ? null : (v ? dataDoDia(v) : undefined));
+
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos } = req.body;
+  const {
+    codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos,
+    dataInicioContrato, dataFimContrato, servicoPausado, hectaresContrato, previsaoToneladas, previsaoM3,
+  } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -68,6 +76,12 @@ router.post("/", asyncHandler(async (req, res) => {
       fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
       umidade: umidade !== undefined && umidade !== "" ? Number(umidade) : undefined,
       servicos: servicosValidos(servicos),
+      dataInicioContrato: dataOpcional(dataInicioContrato) || undefined,
+      dataFimContrato: dataOpcional(dataFimContrato) || undefined,
+      servicoPausado: servicoPausado === true,
+      hectaresContrato: numeroOpcional(hectaresContrato) ?? undefined,
+      previsaoToneladas: numeroOpcional(previsaoToneladas) ?? undefined,
+      previsaoM3: numeroOpcional(previsaoM3) ?? undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
     include: incluirFornecedor,
@@ -75,7 +89,10 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos } = req.body;
+  const {
+    codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos,
+    dataInicioContrato, dataFimContrato, servicoPausado, hectaresContrato, previsaoToneladas, previsaoM3,
+  } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -96,6 +113,12 @@ router.put("/:id", asyncHandler(async (req, res) => {
         ? null
         : (umidade !== undefined ? Number(umidade) : undefined),
       servicos: servicosValidos(servicos),
+      dataInicioContrato: dataOpcional(dataInicioContrato),
+      dataFimContrato: dataOpcional(dataFimContrato),
+      servicoPausado: typeof servicoPausado === "boolean" ? servicoPausado : undefined,
+      hectaresContrato: numeroOpcional(hectaresContrato),
+      previsaoToneladas: numeroOpcional(previsaoToneladas),
+      previsaoM3: numeroOpcional(previsaoM3),
     },
     include: incluirFornecedor,
   }));

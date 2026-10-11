@@ -638,12 +638,21 @@ const MODULES = {
     // Grade de 4 colunas: "largura" é quantas delas o campo ocupa.
     // Desenho combinado com o Leandro (1.059).
     colunas: 4,
+    // Período tem cinco por linha: as duas datas do contrato e as três
+    // quantidades dele lado a lado.
+    colunasPorSecao: { "Período": 5 },
     // Frente de trabalho: contrato de colheita, obra, safra.
     fields: [
       { key: "codigo", label: "Código", type: "text", required: true, secao: "Identificação", largura: 1 },
       { key: "descricao", label: "Descrição", type: "text", required: true, secao: "Identificação", largura: 3 },
-      { key: "dataInicio", label: "Data de início", type: "date", secao: "Período e valores", largura: 1 },
-      { key: "dataFim", label: "Data de término", type: "date", secao: "Período e valores", largura: 1 },
+      { key: "dataInicioContrato", label: "Início do contrato", type: "date", secao: "Período", largura: 1 },
+      { key: "dataFimContrato", label: "Fim do contrato", type: "date", secao: "Período", largura: 1 },
+      { key: "hectaresContrato", label: "Total de hectares do contrato", type: "moeda", casas: 2, secao: "Período", largura: 1 },
+      { key: "previsaoToneladas", label: "Previsão de toneladas", type: "moeda", casas: 2, secao: "Período", largura: 1 },
+      { key: "previsaoM3", label: "Previsão de m³", type: "moeda", casas: 2, secao: "Período", largura: 1 },
+      { key: "dataInicio", label: "Início do serviço", type: "date", secao: "Período", largura: 1 },
+      { key: "dataFim", label: "Fim do serviço", type: "date", secao: "Período", largura: 1 },
+      { key: "servicoPausado", label: "Situação do serviço", type: "check", textoCheck: "Serviço pausado", secao: "Período", largura: 1 },
       {
         key: "fornecedorId", label: "Fornecedor da matéria-prima", type: "vinculo",
         fonte: "/pessoas?papel=fornecedor", vazio: "Nenhum",
@@ -668,6 +677,12 @@ const MODULES = {
       fornecedorId: data.fornecedorId ?? null,
       umidade: data.umidade === "" ? null : data.umidade,
       servicos: data.servicos || [],
+      dataInicioContrato: data.dataInicioContrato || null,
+      dataFimContrato: data.dataFimContrato || null,
+      servicoPausado: !!data.servicoPausado,
+      hectaresContrato: data.hectaresContrato === "" ? null : data.hectaresContrato,
+      previsaoToneladas: data.previsaoToneladas === "" ? null : data.previsaoToneladas,
+      previsaoM3: data.previsaoM3 === "" ? null : data.previsaoM3,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -680,11 +695,17 @@ const MODULES = {
       fornecedorNome: r.fornecedor?.nomeRazaoSocial || "—",
       umidade: r.umidade ?? "",
       servicos: Array.isArray(r.servicos) ? r.servicos : [],
+      dataInicioContrato: r.dataInicioContrato ? String(r.dataInicioContrato).slice(0, 10) : "",
+      dataFimContrato: r.dataFimContrato ? String(r.dataFimContrato).slice(0, 10) : "",
+      servicoPausado: !!r.servicoPausado,
+      hectaresContrato: r.hectaresContrato ?? "",
+      previsaoToneladas: r.previsaoToneladas ?? "",
+      previsaoM3: r.previsaoM3 ?? "",
       // Coluna só de leitura, para a listagem mostrar o período numa linha.
       periodo: [
         r.dataInicio ? new Date(r.dataInicio).toLocaleDateString("pt-BR") : "—",
         r.dataFim ? new Date(r.dataFim).toLocaleDateString("pt-BR") : "em aberto",
-      ].join(" a "),
+      ].join(" a ") + (r.servicoPausado ? " · pausado" : ""),
     }),
   },
   motoristas: {
@@ -945,12 +966,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.062";
+const VERSAO_SISTEMA = "1.063";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.063", texto: "Operação: período do contrato, serviço pausado, hectares e previsão de t e m³" },
   { versao: "1.062", texto: "Operação: unidade e valor só aparecem no serviço marcado" },
   { versao: "1.061", texto: "Operação: cada serviço com unidade (m³, kg, ha, alq) e valor" },
   { versao: "1.060", texto: "NF-e: a nota clonada vem com a Guia Florestal em branco" },
@@ -1894,6 +1916,18 @@ function Field({ field, value, onChange, disabled, dados }) {
     );
   }
 
+  if (field.type === "check") {
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <label className="campo-check">
+          <input type="checkbox" checked={!!value} disabled={disabled} onChange={e => onChange(e.target.checked)} />
+          {field.textoCheck || field.label}
+        </label>
+      </div>
+    );
+  }
+
   if (field.type === "ncm-busca") {
     return (
       <div className="field-group">
@@ -2476,7 +2510,7 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
 
 // Campos agrupados por seção. Sem isso, cadastro grande vira uma lista
 // corrida onde identificação, banco e configuração fiscal se misturam.
-function CamposEmSecoes({ campos, data, setField, editando, colunas }) {
+function CamposEmSecoes({ campos, data, setField, editando, colunas, colunasPorSecao }) {
   const secoes = [];
   for (const campo of campos) {
     const titulo = campo.secao || "";
@@ -2487,11 +2521,11 @@ function CamposEmSecoes({ campos, data, setField, editando, colunas }) {
 
   return (
     <>
-      {secoes.map((secao, i) => (
+      {secoes.map((secao, i) => { const cols = colunasPorSecao?.[secao.titulo] || colunas; return (
         <section key={secao.titulo || i} className="pf-secao">
           {secao.titulo && <h4 className="pf-secao-titulo">{secao.titulo}</h4>}
-          <div className={`cadastro-fields-grid${colunas ? " grade-colunas" : ""}`}
-            style={colunas ? { gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` } : undefined}>
+          <div className={`cadastro-fields-grid${cols ? " grade-colunas" : ""}`}
+            style={cols ? { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` } : undefined}>
             {/* O rótulo é responsabilidade do próprio Field — aqui só o
                 agrupamento e a largura de cada campo. */}
             {secao.campos.map(f => (
@@ -2513,7 +2547,7 @@ function CamposEmSecoes({ campos, data, setField, editando, colunas }) {
             ))}
           </div>
         </section>
-      ))}
+      ); })}
     </>
   );
 }
@@ -3783,11 +3817,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           {temViagens && aba === "despesas" && <DespesasAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
-            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} />
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
           )}
 
           <div hidden={(temJornada || temAbaFiscal || temViagens) && aba !== "dados"}>
-            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} />
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
           </div>
           {error && <p className="error-text">{error}</p>}
         </div>
@@ -11514,6 +11548,8 @@ function ErpBiomassa() {
         .tab { padding: 8px 14px; border: none; background: none; font-size: 13px; cursor: pointer; color: var(--text-secondary, #6b6b68); border-bottom: 2px solid transparent; margin-bottom: -1px; }
         .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
         .emissao-form { max-width: 420px; }
+        .campo-check { display: flex; align-items: center; gap: 8px; min-height: 36px; font-size: 14px; cursor: pointer; }
+        .campo-check input { width: 16px; height: 16px; margin: 0; accent-color: #00923F; }
         .servicos-operacao { display: flex; flex-direction: column; gap: 6px; }
         .servico-linha { display: grid; grid-template-columns: 150px 200px minmax(0, 1fr) 80px 120px; align-items: center; gap: 12px; min-height: 34px; padding: 6px 10px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; }
         .servico-fornecedor { display: flex; gap: 6px; min-width: 0; }

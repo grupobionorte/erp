@@ -1255,8 +1255,23 @@ model Operacao {
   id        Int       @id @default(autoincrement())
   codigo    String
   descricao String
+  // Período do serviço (quando a frente de trabalho roda de fato).
   dataInicio DateTime? @map("data_inicio")
   dataFim    DateTime? @map("data_fim")
+
+  // Período do contrato, que pode começar antes e terminar depois do
+  // serviço.
+  dataInicioContrato DateTime? @map("data_inicio_contrato")
+  dataFimContrato    DateTime? @map("data_fim_contrato")
+
+  // Serviço parado temporariamente (chuva, licença, entressafra), sem
+  // encerrar a operação.
+  servicoPausado Boolean @default(false) @map("servico_pausado")
+
+  // Tamanho do contrato: área total e previsão de produção.
+  hectaresContrato  Float? @map("hectares_contrato")
+  previsaoToneladas Float? @map("previsao_toneladas")
+  previsaoM3        Float? @map("previsao_m3")
 
   // Quanto custa a matéria-prima por unidade nesta operação. É o que
   // transforma a quantidade descarregada em custo, viagem a viagem.

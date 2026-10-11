@@ -53,15 +53,23 @@ router.get("/categorias", asyncHandler(async (req, res) => {
 }));
 
 router.post("/categorias", asyncHandler(async (req, res) => {
-  if (!req.body.nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
   res.status(201).json(await prisma.categoriaDespesa.create({
-    data: { nome: req.body.nome, empresaId: req.usuario.empresaId || undefined },
+    data: { nome, empresaId: req.usuario.empresaId || undefined },
   }));
 }));
 
+// Só o nome muda: a tela agora permite renomear, e repassar o corpo inteiro
+// deixaria trocar a empresa ou reativar pelo caminho errado. As contas
+// apontam para o id, então o nome novo vale também para as já lançadas.
 router.put("/categorias/:id", asyncHandler(async (req, res) => {
-  const { empresaId, ...dados } = req.body;
-  res.json(await prisma.categoriaDespesa.update({ where: { id: Number(req.params.id) }, data: dados }));
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
+  const id = Number(req.params.id);
+  const existe = await prisma.categoriaDespesa.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Categoria não encontrada" });
+  res.json(await prisma.categoriaDespesa.update({ where: { id }, data: { nome } }));
 }));
 
 router.delete("/categorias/:id", asyncHandler(async (req, res) => {
@@ -94,11 +102,16 @@ router.post("/centros-custo", asyncHandler(async (req, res) => {
 }));
 
 router.put("/centros-custo/:id", asyncHandler(async (req, res) => {
-  const { empresaId, veiculoId, ...dados } = req.body;
+  const { veiculoId } = req.body;
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome do centro de custo" });
+  const id = Number(req.params.id);
+  const existe = await prisma.centroCusto.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Centro de custo não encontrado" });
   res.json(await prisma.centroCusto.update({
-    where: { id: Number(req.params.id) },
+    where: { id },
     data: {
-      ...dados,
+      nome,
       veiculoId: veiculoId === null || veiculoId === "" ? null : (veiculoId ? Number(veiculoId) : undefined),
     },
     include: { veiculo: { select: { id: true, placa: true } } },

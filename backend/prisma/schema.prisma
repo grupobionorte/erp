@@ -1267,7 +1267,8 @@ model Operacao {
   umidade Float?
 
   // Serviços que a operação abrange e quem executa cada um:
-  // [{ tipo: "corte", execucao: "proprio" | "terceirizado", fornecedorId }].
+  // [{ tipo: "corte", execucao: "proprio" | "terceirizado", fornecedorId,
+  //    unidade: "m3" | "kg" | "ha" | "alq", valor }].
   // O fornecedor só existe no terceirizado: é quem presta o serviço.
   servicos Json @default("[]")
 

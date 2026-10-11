@@ -29,6 +29,8 @@ router.get("/", asyncHandler(async (req, res) => {
 // Lista fechada: a tela mostra estes seis, e um tipo desconhecido gravado
 // ficaria invisível e impossível de desmarcar.
 const TIPOS_SERVICO = ["corte", "enleiramento", "tracamento", "arraste", "picagem", "transporte"];
+// Unidade em que o serviço é cobrado: metro cúbico, quilo, hectare, alqueire.
+const UNIDADES_SERVICO = ["m3", "kg", "ha", "alq"];
 
 function servicosValidos(lista) {
   if (!Array.isArray(lista)) return undefined;
@@ -38,7 +40,14 @@ function servicosValidos(lista) {
     .map(s => {
       const terceirizado = s.execucao === "terceirizado";
       const fornecedorId = terceirizado && Number(s.fornecedorId) > 0 ? Number(s.fornecedorId) : null;
-      return { tipo: s.tipo, execucao: terceirizado ? "terceirizado" : "proprio", fornecedorId };
+      const valor = s.valor === "" || s.valor === null || s.valor === undefined ? null : Number(s.valor);
+      return {
+        tipo: s.tipo,
+        execucao: terceirizado ? "terceirizado" : "proprio",
+        fornecedorId,
+        unidade: UNIDADES_SERVICO.includes(s.unidade) ? s.unidade : null,
+        valor: Number.isFinite(valor) && valor >= 0 ? valor : null,
+      };
     });
 }
 

@@ -945,12 +945,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.060";
+const VERSAO_SISTEMA = "1.061";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.061", texto: "Operação: cada serviço com unidade (m³, kg, ha, alq) e valor" },
   { versao: "1.060", texto: "NF-e: a nota clonada vem com a Guia Florestal em branco" },
   { versao: "1.059", texto: "Operação: nova arrumação da aba Dados, em seções" },
   { versao: "1.057", texto: "Operação: o fornecedor da matéria-prima continua na lista depois de salvar" },
@@ -1430,6 +1431,14 @@ const SERVICOS_OPERACAO = [
   { tipo: "transporte", rotulo: "Transporte" },
 ];
 
+// Unidade de cobrança de cada serviço. A chave é a mesma do servidor.
+const UNIDADES_SERVICO = [
+  { valor: "m3", rotulo: "m³" },
+  { valor: "kg", rotulo: "kg" },
+  { valor: "ha", rotulo: "ha" },
+  { valor: "alq", rotulo: "alq" },
+];
+
 function Field({ field, value, onChange, disabled, dados }) {
   // Campo que puxa outro cadastro para vincular (usuário <-> colaborador).
   // A lista vem da própria API, então o que aparece aqui é sempre o que
@@ -1627,7 +1636,7 @@ function Field({ field, value, onChange, disabled, dados }) {
     const doTipo = (tipo) => lista.find(s => s.tipo === tipo);
     const marcar = (tipo) => onChange(doTipo(tipo)
       ? lista.filter(s => s.tipo !== tipo)
-      : [...lista, { tipo, execucao: "proprio", fornecedorId: null }]);
+      : [...lista, { tipo, execucao: "proprio", fornecedorId: null, unidade: null, valor: null }]);
     const alterar = (tipo, mudanca) => onChange(lista.map(s => (s.tipo === tipo ? { ...s, ...mudanca } : s)));
     const execucao = (tipo, valor) => alterar(tipo, { execucao: valor, fornecedorId: valor === "terceirizado" ? doTipo(tipo)?.fornecedorId ?? null : null });
 
@@ -1672,6 +1681,15 @@ function Field({ field, value, onChange, disabled, dados }) {
                         onClick={() => setCadastrandoPara(tipo)} disabled={disabled}><Plus size={14} /></button>
                     </>
                   )}
+                </div>
+                <select className="servico-unidade" aria-label={`Unidade: ${rotulo}`} value={atual?.unidade || ""}
+                  disabled={!atual || disabled} onChange={e => alterar(tipo, { unidade: e.target.value || null })}>
+                  <option value="">Unid.</option>
+                  {UNIDADES_SERVICO.map(u => <option key={u.valor} value={u.valor}>{u.rotulo}</option>)}
+                </select>
+                <div className="servico-valor">
+                  <InputMoeda value={atual?.valor ?? ""} disabled={!atual || disabled} aria-label={`Valor: ${rotulo}`}
+                    placeholder="Valor" onChange={v => alterar(tipo, { valor: v === "" ? null : Number(v) })} />
                 </div>
               </div>
             );
@@ -11491,11 +11509,13 @@ function ErpBiomassa() {
         .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
         .emissao-form { max-width: 420px; }
         .servicos-operacao { display: flex; flex-direction: column; gap: 6px; }
-        .servico-linha { display: grid; grid-template-columns: 160px 220px 1fr; align-items: center; gap: 12px; min-height: 34px; padding: 6px 10px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; }
+        .servico-linha { display: grid; grid-template-columns: 150px 200px minmax(0, 1fr) 80px 120px; align-items: center; gap: 12px; min-height: 34px; padding: 6px 10px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; }
         .servico-fornecedor { display: flex; gap: 6px; min-width: 0; }
+        .servico-unidade { width: 100%; }
+        .servico-valor input { width: 100%; text-align: right; }
         .servico-fornecedor select { flex: 1; min-width: 0; }
         @media (max-width: 640px) {
-          .servico-linha { grid-template-columns: 1fr auto; }
+          .servico-linha { grid-template-columns: 1fr 1fr; }
           .servico-fornecedor { grid-column: 1 / -1; }
           .servico-fornecedor:empty { display: none; }
         }

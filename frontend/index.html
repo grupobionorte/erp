@@ -631,7 +631,7 @@ const MODULES = {
     label: "Operações",
     singular: "Operação", feminino: true,
     // Com várias abas, o título é o que lembra qual operação está aberta.
-    tituloRegistro: (r) => [r.codigo, r.descricao].filter(Boolean).join(" · "),
+    tituloRegistro: (r) => r.descricao,
     icon: Building2,
     color: "blue",
     apiPath: "/operacoes",
@@ -938,13 +938,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.051";
+const VERSAO_SISTEMA = "1.052";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
-  { versao: "1.051", texto: "Operação: o nome aparece no título da janela de edição" },
+  { versao: "1.052", texto: "Operação: a descrição aparece no título da janela de edição" },
   { versao: "1.050", texto: "Contas a pagar: + em categoria e centro de custo, e nomes editáveis" },
   { versao: "1.049", texto: "Contas a pagar: botão + para cadastrar o fornecedor na hora" },
   { versao: "1.048", texto: "Tela de entrada ocupa a tela inteira, em qualquer resolução" },

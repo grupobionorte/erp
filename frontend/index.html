@@ -635,24 +635,28 @@ const MODULES = {
     icon: Building2,
     color: "blue",
     apiPath: "/operacoes",
+    // Grade de 4 colunas: "largura" é quantas delas o campo ocupa.
+    // Desenho combinado com o Leandro (1.058).
+    colunas: 4,
     // Frente de trabalho: contrato de colheita, obra, safra.
     fields: [
-      { key: "codigo", label: "Código", type: "text", required: true },
+      { key: "codigo", label: "Código", type: "text", required: true, secao: "Identificação", largura: 1 },
+      { key: "descricao", label: "Descrição", type: "text", required: true, secao: "Identificação", largura: 3 },
       {
         key: "fornecedorId", label: "Fornecedor da matéria-prima", type: "vinculo",
         fonte: "/pessoas?papel=fornecedor", vazio: "Nenhum",
         cadastroModulo: "fornecedores",
         // Nome com o documento, como nas demais listas de pessoa.
         rotulo: (f) => rotuloPessoa({ nome: f.nomeRazaoSocial, documento: f.documento }),
+        secao: "Identificação", largura: 4,
       },
-      { key: "descricao", label: "Descrição", type: "text", required: true },
-      { key: "dataInicio", label: "Data de início", type: "date" },
-      { key: "dataFim", label: "Data de término", type: "date" },
+      { key: "dataInicio", label: "Data de início", type: "date", secao: "Período e valores", largura: 1 },
+      { key: "dataFim", label: "Data de término", type: "date", secao: "Período e valores", largura: 1 },
       // Base do custo de cada viagem: multiplicado pela quantidade
       // descarregada.
-      { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda" },
-      { key: "umidade", label: "Umidade (%)", type: "number" },
-      { key: "servicos", label: "Serviços da operação", type: "servicos-operacao", secao: "Serviços" },
+      { key: "valorUnitarioMateriaPrima", label: "Valor unitário da matéria-prima", type: "moeda", secao: "Período e valores", largura: 1 },
+      { key: "umidade", label: "Umidade (%)", type: "number", secao: "Período e valores", largura: 1 },
+      { key: "servicos", label: "Marque os serviços e quem executa cada um", type: "servicos-operacao", secao: "Serviços", largura: 4 },
     ],
     columns: ["codigo", "descricao", "fornecedorNome", "periodo"],
     toApi: (data) => ({
@@ -941,12 +945,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.057";
+const VERSAO_SISTEMA = "1.058";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.058", texto: "Operação: nova arrumação da aba Dados, em seções" },
   { versao: "1.057", texto: "Operação: o fornecedor da matéria-prima continua na lista depois de salvar" },
   { versao: "1.056", texto: "Operação: serviço terceirizado indica o fornecedor que presta o serviço" },
   { versao: "1.055", texto: "Operação: serviços (corte, picagem, transporte…), cada um próprio ou terceirizado" },
@@ -2446,7 +2451,7 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
 
 // Campos agrupados por seção. Sem isso, cadastro grande vira uma lista
 // corrida onde identificação, banco e configuração fiscal se misturam.
-function CamposEmSecoes({ campos, data, setField, editando }) {
+function CamposEmSecoes({ campos, data, setField, editando, colunas }) {
   const secoes = [];
   for (const campo of campos) {
     const titulo = campo.secao || "";
@@ -2460,14 +2465,17 @@ function CamposEmSecoes({ campos, data, setField, editando }) {
       {secoes.map((secao, i) => (
         <section key={secao.titulo || i} className="pf-secao">
           {secao.titulo && <h4 className="pf-secao-titulo">{secao.titulo}</h4>}
-          <div className="cadastro-fields-grid">
+          <div className={`cadastro-fields-grid${colunas ? " grade-colunas" : ""}`}
+            style={colunas ? { gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))` } : undefined}>
             {/* O rótulo é responsabilidade do próprio Field — aqui só o
                 agrupamento e a largura de cada campo. */}
             {secao.campos.map(f => (
               <div
                 key={f.key}
-                style={["endereco", "empresas-multiselect", "imagem-upload", "texto-longo", "servicos-operacao"].includes(f.type)
-                  ? { gridColumn: "1 / -1" } : undefined}
+                style={f.largura
+                  ? { gridColumn: `span ${f.largura}` }
+                  : ["endereco", "empresas-multiselect", "imagem-upload", "texto-longo", "servicos-operacao"].includes(f.type)
+                    ? { gridColumn: "1 / -1" } : undefined}
               >
                 <Field
                   field={f}
@@ -3750,11 +3758,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           {temViagens && aba === "despesas" && <DespesasAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
-            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} />
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} />
           )}
 
           <div hidden={(temJornada || temAbaFiscal || temViagens) && aba !== "dados"}>
-            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} />
+            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} />
           </div>
           {error && <p className="error-text">{error}</p>}
         </div>
@@ -11393,7 +11401,11 @@ function ErpBiomassa() {
         .form-compacto .hint { font-size: 11px; margin-top: 2px; }
         .form-compacto .nf-grid-3, .form-compacto .nf-grid-4 { gap: 6px; }
         .cadastro-fields-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-        @media (max-width: 640px) { .cadastro-fields-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 640px) {
+          .cadastro-fields-grid { grid-template-columns: 1fr; }
+          .cadastro-fields-grid.grade-colunas { grid-template-columns: 1fr !important; }
+          .cadastro-fields-grid.grade-colunas > * { grid-column: 1 / -1 !important; }
+        }
         .field-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary, #6b6b68); margin-bottom: 4px; }
         .req { color: #a32d2d; margin-left: 2px; }
         .field-group input, .field-group select {

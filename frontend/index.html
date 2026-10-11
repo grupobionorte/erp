@@ -936,12 +936,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.048";
+const VERSAO_SISTEMA = "1.049";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.049", texto: "Contas a pagar: botão + para cadastrar o fornecedor na hora" },
   { versao: "1.048", texto: "Tela de entrada ocupa a tela inteira, em qualquer resolução" },
   { versao: "1.047", texto: "Tela de entrada com fundo verde claro no formulário" },
   { versao: "1.046", texto: "Nova tela de entrada, com o ambiente de emissão e as novidades" },
@@ -3031,7 +3032,7 @@ const escaparHtml = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp
 // receitas e despesas. A conta é a mesma do Contas a pagar — lançada aqui,
 // aparece lá também, com a operação preenchida.
 function DespesasAba({ operacaoId }) {
-  const { items: fornecedores } = useApiCollection("fornecedores");
+  const { items: fornecedores, recarregar: recarregarFornecedores } = useApiCollection("fornecedores");
   const [contas, setContas] = useState(null);
   const [resumo, setResumo] = useState(null);
   const [categorias, setCategorias] = useState([]);
@@ -3148,6 +3149,7 @@ function DespesasAba({ operacaoId }) {
         <ContaPagarForm
           conta={contaEmEdicao.id ? contaEmEdicao : null}
           fornecedores={fornecedores}
+          onFornecedorCriado={recarregarFornecedores}
           categorias={categorias}
           centros={centros}
           operacaoFixa={operacaoId}
@@ -7751,7 +7753,7 @@ async function estornarConta(conta, depois) {
 
 // Operação fixa: lançada de dentro da aba Despesas da operação, a conta já
 // nasce dela e o campo não muda ali.
-function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, operacaoFixa, onFechar, onSalvo }) {
+function ContaPagarForm({ conta, fornecedores, onFornecedorCriado, categorias, centros, operacoes, operacaoFixa, onFechar, onSalvo }) {
   const hoje = hojeNoFuso();
   const [dados, setDados] = useState(() => ({
     descricao: conta?.descricao || "",
@@ -7772,6 +7774,23 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, o
   }));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  // Fornecedor cadastrado pelo "+" entra na lista na hora, sem esperar a
+  // tela de trás recarregar a dela.
+  const [cadastrandoFornecedor, setCadastrandoFornecedor] = useState(false);
+  const [fornecedoresNovos, setFornecedoresNovos] = useState([]);
+  const listaFornecedores = [
+    ...(fornecedores || []),
+    ...fornecedoresNovos.filter(n => !(fornecedores || []).some(f => f.id === n.id)),
+  ];
+  const fornecedorCriado = (novo) => {
+    setFornecedoresNovos(l => [...l, novo]);
+    set("fornecedorId", String(novo.id));
+    setCadastrandoFornecedor(false);
+    // A tela de trás precisa conhecê-lo: senão, ao reabrir esta conta, o
+    // campo apareceria vazio e salvar apagaria o fornecedor.
+    onFornecedorCriado?.();
+  };
 
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
   const editando = Boolean(conta?.id);
@@ -7813,10 +7832,13 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, o
                   costuma ser o primeiro dado que se tem em mãos. */}
               <div className="field-group" style={{ gridColumn: "span 3" }}>
                 <label className="field-label">Fornecedor</label>
-                <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
-                  <option value="">Nenhum</option>
-                  {(fornecedores || []).map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={dados.fornecedorId} onChange={e => set("fornecedorId", e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {listaFornecedores.map(f => <option key={f.id} value={f.id}>{rotuloPessoa(f)}</option>)}
+                  </select>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar fornecedor novo" onClick={() => setCadastrandoFornecedor(true)}><Plus size={14} /></button>
+                </div>
               </div>
               <div className="field-group">
                 <label className="field-label">Documento</label>
@@ -7975,6 +7997,13 @@ function ContaPagarForm({ conta, fornecedores, categorias, centros, operacoes, o
           </button>
         </div>
       </div>
+      {cadastrandoFornecedor && (
+        <CadastroDeOutroModulo
+          moduleKey="fornecedores"
+          onFechar={() => setCadastrandoFornecedor(false)}
+          onCriado={fornecedorCriado}
+        />
+      )}
     </div>
   );
 }
@@ -8175,7 +8204,7 @@ function ContasPagarView() {
     return d.toISOString().slice(0, 10);
   })();
 
-  const { items: fornecedores } = useApiCollection("fornecedores");
+  const { items: fornecedores, recarregar: recarregarFornecedores } = useApiCollection("fornecedores");
   const { items: operacoes } = useApiCollection("operacoes");
 
   // operacaoId: "" = todas, "sem" = só as gerais, número = só daquela operação.
@@ -8407,6 +8436,7 @@ function ContasPagarView() {
         <ContaPagarForm
           conta={contaEmEdicao.id ? contaEmEdicao : null}
           fornecedores={fornecedores}
+          onFornecedorCriado={recarregarFornecedores}
           categorias={categorias}
           centros={centros}
           operacoes={operacoes}

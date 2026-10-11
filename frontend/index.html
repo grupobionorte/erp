@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.067";
+const VERSAO_SISTEMA = "1.068";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.068", texto: "Menu: Equipamentos e Manutenção logo abaixo de Operações" },
   { versao: "1.067", texto: "Equipamentos com menu próprio e código (ex.: BN-1001)" },
   { versao: "1.066", texto: "Operação: aba Equipamentos, com os equipamentos alocados" },
   { versao: "1.065", texto: "Setas do teclado rolam as janelas de cadastro e edição" },
@@ -11448,14 +11449,15 @@ function ErpBiomassa() {
     { divider: true },
     ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores"]),
     { divider: true },
-    // Operações abre o grupo do movimento, junto das notas e conhecimentos.
+    // Operações abre o grupo do movimento: logo abaixo, o que trabalha nela
+    // (equipamentos e a manutenção deles) e depois as notas e conhecimentos.
     ...cadastroNaOrdem(["operacoes"]),
+    ...(liberado("equipamentos") || liberado("manutencao") ? [{ key: "equipamentos", label: "Equipamentos", icon: Settings }] : []),
+    ...(liberado("manutencao") ? [{ key: "manutencao", label: "Manutenção", icon: Car }] : []),
     ...(liberado("notasFiscais") ? [{ key: "notasFiscais", label: "Vendas/NFe", icon: FileText }] : []),
     ...(liberado("cte") ? [{ key: "cte", label: "CTe", icon: Truck }] : []),
     ...(liberado("emissao") ? [{ key: "emissao", label: "MDFe", icon: Truck }] : []),
     { divider: true },
-    ...(liberado("equipamentos") || liberado("manutencao") ? [{ key: "equipamentos", label: "Equipamentos", icon: Settings }] : []),
-    ...(liberado("manutencao") ? [{ key: "manutencao", label: "Manutenção", icon: Car }] : []),
     ...(liberado("contasPagar") ? [{ key: "contasPagar", label: "Contas a pagar", icon: FileText }] : []),
     { divider: true },
     ...(liberado("ponto") ? [{ key: "ponto", label: "Ponto", icon: Clock }] : []),

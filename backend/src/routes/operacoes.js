@@ -294,7 +294,7 @@ router.get("/viagens-por-cliente/:pessoaId", asyncHandler(async (req, res) => {
 --------------------------------------------------------------------------- */
 const incluirEquipamento = {
   equipamento: {
-    select: { id: true, nome: true, tipo: true, identificacao: true, veiculo: { select: { placa: true } } },
+    select: { id: true, codigo: true, nome: true, tipo: true, identificacao: true, veiculo: { select: { placa: true } } },
   },
 };
 
@@ -323,14 +323,14 @@ router.get("/equipamentos-disponiveis", asyncHandler(async (req, res) => {
   const equipamentos = await prisma.equipamento.findMany({
     where: { empresaId: req.usuario.empresaId || undefined, ativo: true },
     select: {
-      id: true, nome: true, tipo: true, identificacao: true,
+      id: true, codigo: true, nome: true, tipo: true, identificacao: true,
       veiculo: { select: { placa: true } },
       alocacoes: {
         where: { dataSaida: null },
         select: { operacaoId: true, operacao: { select: { codigo: true, descricao: true } } },
       },
     },
-    orderBy: { nome: "asc" },
+    orderBy: [{ codigo: { sort: "asc", nulls: "last" } }, { nome: "asc" }],
   });
   res.json(equipamentos);
 }));

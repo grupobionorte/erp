@@ -19,7 +19,25 @@ const UNIDADE = { horimetro: "h", hodometro: "km", prazo: "meses" };
 const incluirEquipamento = {
   planos: { where: { ativo: true }, orderBy: { descricao: "asc" } },
   veiculo: { select: { id: true, placa: true } },
+  // Operação em que o equipamento está agora (alocação sem saída).
+  alocacoes: { where: { dataSaida: null }, select: { operacao: { select: { id: true, codigo: true, descricao: true } } } },
 };
+
+// Código é opcional, mas não se repete na empresa: é por ele que o
+// equipamento é chamado no dia a dia.
+async function codigoEmUso(codigo, empresaId, ignorarId) {
+  if (!codigo) return null;
+  return prisma.equipamento.findFirst({
+    where: {
+      codigo: { equals: codigo, mode: "insensitive" },
+      empresaId: empresaId || undefined,
+      ativo: true,
+      id: ignorarId ? { not: ignorarId } : undefined,
+    },
+    select: { nome: true },
+  });
+}
+const limparCodigo = (v) => (v === undefined ? undefined : (String(v || "").trim().toUpperCase() || null));
 
 /**
  * Situação de um plano: quanto falta para vencer, e se já passou.
@@ -100,7 +118,7 @@ router.get("/equipamentos", asyncHandler(async (req, res) => {
       ativo: req.query.inativos === "1" ? undefined : true,
     },
     include: incluirEquipamento,
-    orderBy: { nome: "asc" },
+    orderBy: [{ codigo: { sort: "asc", nulls: "last" } }, { nome: "asc" }],
   });
 
   const comAlerta = equipamentos.map(comSituacao);
@@ -116,8 +134,11 @@ router.get("/equipamentos", asyncHandler(async (req, res) => {
 }));
 
 router.post("/equipamentos", asyncHandler(async (req, res) => {
-  const { nome, planos, veiculoId, leituraAtual, ...dados } = req.body;
+  const { nome, planos, veiculoId, leituraAtual, alocacoes, codigo: codigoBruto, ...dados } = req.body;
   if (!nome) return res.status(400).json({ erro: "Informe o nome do equipamento" });
+  const codigo = limparCodigo(codigoBruto);
+  const repetido = await codigoEmUso(codigo, req.usuario.empresaId);
+  if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
 
   const temLeitura = leituraAtual !== undefined && leituraAtual !== "" && leituraAtual !== null;
 
@@ -125,6 +146,7 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
     data: {
       ...dados,
       nome,
+      codigo: codigo || undefined,
       ano: dados.ano ? Number(dados.ano) : undefined,
       leituraAtual: temLeitura ? Number(leituraAtual) : undefined,
       leituraAtualizada: temLeitura ? new Date() : undefined,
@@ -139,8 +161,11 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
 }));
 
 router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
-  const { planos, veiculoId, empresaId, leituraAtual, ...dados } = req.body;
+  const { planos, veiculoId, empresaId, leituraAtual, alocacoes, codigo: codigoBruto, ...dados } = req.body;
   const id = Number(req.params.id);
+  const codigo = limparCodigo(codigoBruto);
+  const repetido = await codigoEmUso(codigo, req.usuario.empresaId, id);
+  if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
 
   // Planos são substituídos por inteiro quando informados, como em outros
   // conjuntos do sistema: é mais previsível do que casar o que mudou.
@@ -154,6 +179,7 @@ router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
     where: { id },
     data: {
       ...dados,
+      codigo,
       ano: dados.ano ? Number(dados.ano) : undefined,
       leituraAtual: temLeitura ? Number(leituraAtual) : undefined,
       leituraAtualizada: temLeitura ? new Date() : undefined,

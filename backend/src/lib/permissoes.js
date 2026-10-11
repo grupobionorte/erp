@@ -21,6 +21,7 @@ const MENUS = {
   notasFiscais: { rotulo: "Vendas / NF-e", rotas: [] },
   cte: { rotulo: "CT-e", rotas: [] },
   emissao: { rotulo: "MDF-e", rotas: [] },
+  equipamentos: { rotulo: "Equipamentos", rotas: [] },
   manutencao: { rotulo: "Manutenção", rotas: ["/manutencao/equipamentos", "/manutencao/ordens"] },
   contasPagar: { rotulo: "Contas a pagar", rotas: ["/contas-pagar"] },
   ponto: { rotulo: "Ponto", rotas: ["/ponto"] },
@@ -33,6 +34,9 @@ const MENUS = {
 // menus para a rota liberar — separar por tipo de documento exigiria
 // inspecionar o corpo de cada requisição, e o ganho não compensa.
 const ROTAS_COMPARTILHADAS = [
+  // O cadastro de equipamentos tem menu próprio, mas a Manutenção usa a
+  // mesma lista.
+  { prefixo: "/manutencao/equipamentos", menus: ["equipamentos", "manutencao"] },
   { prefixo: "/pessoas", menus: ["clientes", "fornecedores"] },
   { prefixo: "/documentos-fiscais", menus: ["notasFiscais", "cte", "emissao"] },
   { prefixo: "/relatorios", menus: ["notasFiscais", "cte", "emissao"] },

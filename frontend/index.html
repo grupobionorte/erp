@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.066";
+const VERSAO_SISTEMA = "1.067";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.067", texto: "Equipamentos com menu próprio e código (ex.: BN-1001)" },
   { versao: "1.066", texto: "Operação: aba Equipamentos, com os equipamentos alocados" },
   { versao: "1.065", texto: "Setas do teclado rolam as janelas de cadastro e edição" },
   { versao: "1.064", texto: "Operação: hectares, toneladas e m³ do contrato com 3 casas decimais" },
@@ -3388,7 +3389,8 @@ function DespesasAba({ operacaoId }) {
 function rotuloEquipamento(e) {
   const tipo = TIPOS_EQUIPAMENTO.find(t => t.valor === e.tipo)?.rotulo;
   const extra = [tipo, e.veiculo?.placa || e.identificacao].filter(Boolean).join(" · ");
-  return extra ? `${e.nome} (${extra})` : e.nome;
+  const nome = e.codigo ? `${e.codigo} — ${e.nome}` : e.nome;
+  return extra ? `${nome} (${extra})` : nome;
 }
 
 function EquipamentosAba({ operacaoId }) {
@@ -7454,6 +7456,7 @@ const unidadeDoControle = (c) => (c === "hodometro" ? "km" : c === "prazo" ? "me
 
 function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
   const [dados, setDados] = useState(() => ({
+    codigo: equipamento?.codigo || "",
     nome: equipamento?.nome || "",
     tipo: equipamento?.tipo || "picador",
     marca: equipamento?.marca || "",
@@ -7507,6 +7510,11 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
           <section className="pf-secao" style={{ paddingTop: 0 }}>
             <h4 className="pf-secao-titulo">Identificação</h4>
             <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Código</label>
+                <input value={dados.codigo} onChange={e => set("codigo", e.target.value.toUpperCase())}
+                  placeholder="Ex.: BN-1001" />
+              </div>
               <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Nome<span className="req">*</span></label>
                 <input value={dados.nome} onChange={e => set("nome", e.target.value)}
@@ -7517,10 +7525,6 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
                 <select value={dados.tipo} onChange={e => set("tipo", e.target.value)}>
                   {TIPOS_EQUIPAMENTO.map(t => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
                 </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Ano</label>
-                <input type="number" value={dados.ano} onChange={e => set("ano", e.target.value)} />
               </div>
             </div>
             <div className="nf-grid-4">
@@ -7533,9 +7537,15 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
                 <input value={dados.modelo} onChange={e => set("modelo", e.target.value)} />
               </div>
               <div className="field-group">
+                <label className="field-label">Ano</label>
+                <input type="number" value={dados.ano} onChange={e => set("ano", e.target.value)} />
+              </div>
+              <div className="field-group">
                 <label className="field-label">Chassi / série</label>
                 <input value={dados.identificacao} onChange={e => set("identificacao", e.target.value)} />
               </div>
+            </div>
+            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Veículo vinculado</label>
                 <select value={dados.veiculoId} onChange={e => set("veiculoId", e.target.value)}>
@@ -7798,6 +7808,108 @@ function OrdemManutencaoForm({ ordem, equipamentos, colaboradores, onFechar, onS
   );
 }
 
+// Cadastro de equipamentos, com menu próprio. A mesma lista alimenta a
+// Manutenção (planos e leituras) e a aba Equipamentos da operação.
+function EquipamentosView() {
+  const { items: veiculos } = useApiCollection("veiculos");
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState("");
+  const [busca, setBusca] = useState("");
+  const [emEdicao, setEmEdicao] = useState(null);
+
+  const carregar = useCallback(async () => {
+    setErro("");
+    try { setDados(await apiRequest("/manutencao/equipamentos")); }
+    catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  }, []);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const termo = textoDeBusca(busca);
+  const lista = (dados?.equipamentos || []).filter(e => !termo
+    || textoDeBusca([e.codigo, e.nome, e.marca, e.modelo, e.identificacao, e.veiculo?.placa].filter(Boolean).join(" ")).includes(termo));
+  const pag = usePaginacaoLocal(lista, busca);
+
+  const desativar = async (eq) => {
+    if (!window.confirm(`Desativar "${eq.nome}"? O histórico continua guardado.`)) return;
+    try {
+      await apiRequest(`/manutencao/equipamentos/${eq.id}`, { method: "DELETE" });
+      carregar();
+    } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#eef3fb", color: "#1F3B57" }}>
+            <Settings size={20} />
+          </div>
+          <div>
+            <h2>Equipamentos</h2>
+            <p className="subtle">{dados ? `${dados.equipamentos.length} equipamento${dados.equipamentos.length !== 1 ? "s" : ""}` : "—"}</p>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={() => setEmEdicao({})}>
+          <Plus size={16} /> Novo equipamento
+        </button>
+      </div>
+
+      <div className="search-bar">
+        <Search size={16} className="search-icon" />
+        <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar por código, nome, marca, série ou placa" />
+      </div>
+
+      {erro && <p className="error-text">{erro}</p>}
+
+      {dados && (
+        <table className="data-table tabela-densa">
+          <thead>
+            <tr>
+              <th style={{ width: 110 }}>Código</th>
+              <th>Equipamento</th>
+              <th style={{ width: 150 }}>Tipo</th>
+              <th>Marca / modelo</th>
+              <th style={{ width: 150 }}>Série / placa</th>
+              <th>Onde está</th>
+              <th className="actions-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pag.itens.map(eq => {
+              const agora = eq.alocacoes?.[0]?.operacao;
+              return (
+                <tr key={eq.id}>
+                  <td style={{ fontWeight: 500 }}>{eq.codigo || "—"}</td>
+                  <td>{eq.nome}</td>
+                  <td className="subtle">{TIPOS_EQUIPAMENTO.find(t => t.valor === eq.tipo)?.rotulo || eq.tipo}</td>
+                  <td>{[eq.marca, eq.modelo, eq.ano].filter(Boolean).join(" ") || "—"}</td>
+                  <td>{eq.veiculo?.placa || eq.identificacao || "—"}</td>
+                  <td>{agora ? `${agora.codigo} — ${agora.descricao}` : <span className="subtle">sem operação</span>}</td>
+                  <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                    <button className="icon-btn" title="Editar" onClick={() => setEmEdicao(eq)}><Pencil size={14} /></button>
+                    <button className="icon-btn icon-btn-danger" title="Desativar" onClick={() => desativar(eq)}><Trash2 size={14} /></button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!lista.length && <tr><td colSpan={7}>{busca ? "Nenhum equipamento encontrado." : "Nenhum equipamento cadastrado ainda."}</td></tr>}
+          </tbody>
+        </table>
+      )}
+      {dados && pag.controle}
+
+      {emEdicao && (
+        <EquipamentoForm
+          equipamento={emEdicao.id ? emEdicao : null}
+          veiculos={veiculos}
+          onFechar={() => setEmEdicao(null)}
+          onSalvo={() => { setEmEdicao(null); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function ManutencaoView() {
   const { items: veiculos } = useApiCollection("veiculos");
   const { items: colaboradores } = useApiCollection("colaboradores");
@@ -7940,6 +8052,7 @@ function ManutencaoView() {
             {pagEquip.itens.map(eq => (
               <tr key={eq.id}>
                 <td>
+                  {eq.codigo && <strong style={{ fontWeight: 500 }}>{eq.codigo} — </strong>}
                   {eq.nome}
                   {eq.veiculo?.placa && <span className="subtle"> · {eq.veiculo.placa}</span>}
                 </td>
@@ -11333,12 +11446,15 @@ function ErpBiomassa() {
     { key: "dashboard", label: "Visão geral", icon: LayoutDashboard },
     ...(liberado("agenda") ? [{ key: "agenda", label: "Agenda", icon: Clock }] : []),
     { divider: true },
-    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores", "operacoes"]),
+    ...cadastroNaOrdem(["clientes", "fornecedores", "produtos", "transportadoras", "veiculos", "motoristas", "colaboradores"]),
     { divider: true },
+    // Operações abre o grupo do movimento, junto das notas e conhecimentos.
+    ...cadastroNaOrdem(["operacoes"]),
     ...(liberado("notasFiscais") ? [{ key: "notasFiscais", label: "Vendas/NFe", icon: FileText }] : []),
     ...(liberado("cte") ? [{ key: "cte", label: "CTe", icon: Truck }] : []),
     ...(liberado("emissao") ? [{ key: "emissao", label: "MDFe", icon: Truck }] : []),
     { divider: true },
+    ...(liberado("equipamentos") || liberado("manutencao") ? [{ key: "equipamentos", label: "Equipamentos", icon: Settings }] : []),
     ...(liberado("manutencao") ? [{ key: "manutencao", label: "Manutenção", icon: Car }] : []),
     ...(liberado("contasPagar") ? [{ key: "contasPagar", label: "Contas a pagar", icon: FileText }] : []),
     { divider: true },
@@ -11903,6 +12019,7 @@ function ErpBiomassa() {
         {view === "cte" && <CteView onIrParaMdfe={() => setView("emissao")} />}
         {view === "emissao" && <MdfeView />}
         {view === "agenda" && <AgendaView />}
+        {view === "equipamentos" && <EquipamentosView />}
         {view === "manutencao" && <ManutencaoView />}
         {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}

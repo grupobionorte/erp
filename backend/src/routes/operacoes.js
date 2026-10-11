@@ -30,7 +30,11 @@ function servicosValidos(lista) {
   const vistos = new Set();
   return lista
     .filter(s => s && TIPOS_SERVICO.includes(s.tipo) && !vistos.has(s.tipo) && vistos.add(s.tipo))
-    .map(s => ({ tipo: s.tipo, execucao: s.execucao === "terceirizado" ? "terceirizado" : "proprio" }));
+    .map(s => {
+      const terceirizado = s.execucao === "terceirizado";
+      const fornecedorId = terceirizado && Number(s.fornecedorId) > 0 ? Number(s.fornecedorId) : null;
+      return { tipo: s.tipo, execucao: terceirizado ? "terceirizado" : "proprio", fornecedorId };
+    });
 }
 
 router.post("/", asyncHandler(async (req, res) => {

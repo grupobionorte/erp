@@ -941,12 +941,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.055";
+const VERSAO_SISTEMA = "1.056";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.056", texto: "Operação: serviço terceirizado indica o fornecedor que presta o serviço" },
   { versao: "1.055", texto: "Operação: serviços (corte, picagem, transporte…), cada um próprio ou terceirizado" },
   { versao: "1.054", texto: "Contas a pagar: conta e forma já no lançamento, e baixa pelo próprio cadastro" },
   { versao: "1.053", texto: "Contas a pagar: cadastro de contas bancárias; o pagamento informa a conta e a forma" },
@@ -1612,14 +1613,23 @@ function Field({ field, value, onChange, disabled, dados }) {
     );
   }
 
-  // Marcar o serviço o inclui como próprio; ao lado, escolhe-se quem executa.
+  // Marcar o serviço o inclui como próprio; ao lado, escolhe-se quem executa
+  // e, no terceirizado, o fornecedor que presta o serviço.
   if (field.type === "servicos-operacao") {
     const lista = value || [];
     const doTipo = (tipo) => lista.find(s => s.tipo === tipo);
     const marcar = (tipo) => onChange(doTipo(tipo)
       ? lista.filter(s => s.tipo !== tipo)
-      : [...lista, { tipo, execucao: "proprio" }]);
-    const execucao = (tipo, valor) => onChange(lista.map(s => (s.tipo === tipo ? { ...s, execucao: valor } : s)));
+      : [...lista, { tipo, execucao: "proprio", fornecedorId: null }]);
+    const alterar = (tipo, mudanca) => onChange(lista.map(s => (s.tipo === tipo ? { ...s, ...mudanca } : s)));
+    const execucao = (tipo, valor) => alterar(tipo, { execucao: valor, fornecedorId: valor === "terceirizado" ? doTipo(tipo)?.fornecedorId ?? null : null });
+
+    const [fornecedores, setFornecedores] = useState([]);
+    const carregarFornecedores = useCallback(() => {
+      apiRequest("/pessoas?papel=fornecedor").then(setFornecedores).catch(() => setFornecedores([]));
+    }, []);
+    useEffect(() => { carregarFornecedores(); }, [carregarFornecedores]);
+    const [cadastrandoPara, setCadastrandoPara] = useState(null); // tipo do serviço
     return (
       <div className="field-group">
         <label className="field-label">{field.label}</label>
@@ -1641,10 +1651,36 @@ function Field({ field, value, onChange, disabled, dados }) {
                     </label>
                   ))}
                 </div>
+                <div className="servico-fornecedor">
+                  {atual?.execucao === "terceirizado" && (
+                    <>
+                      <select value={atual.fornecedorId ?? ""} disabled={disabled}
+                        onChange={e => alterar(tipo, { fornecedorId: e.target.value ? Number(e.target.value) : null })}>
+                        <option value="">Fornecedor do serviço…</option>
+                        {fornecedores.map(f => (
+                          <option key={f.id} value={f.id}>{rotuloPessoa({ nome: f.nomeRazaoSocial, documento: f.documento })}</option>
+                        ))}
+                      </select>
+                      <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar fornecedor novo"
+                        onClick={() => setCadastrandoPara(tipo)} disabled={disabled}><Plus size={14} /></button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
+        {cadastrandoPara && (
+          <CadastroDeOutroModulo
+            moduleKey="fornecedores"
+            onFechar={() => setCadastrandoPara(null)}
+            onCriado={(novo) => {
+              alterar(cadastrandoPara, { fornecedorId: novo.id });
+              setCadastrandoPara(null);
+              carregarFornecedores();
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -11440,8 +11476,15 @@ function ErpBiomassa() {
         .tab { padding: 8px 14px; border: none; background: none; font-size: 13px; cursor: pointer; color: var(--text-secondary, #6b6b68); border-bottom: 2px solid transparent; margin-bottom: -1px; }
         .tab-active { color: var(--erp-azul); font-weight: 500; border-bottom-color: var(--erp-verde); }
         .emissao-form { max-width: 420px; }
-        .servicos-operacao { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
-        .servico-linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; }
+        .servicos-operacao { display: flex; flex-direction: column; gap: 6px; }
+        .servico-linha { display: grid; grid-template-columns: 160px 220px 1fr; align-items: center; gap: 12px; min-height: 34px; padding: 6px 10px; border: 0.5px solid var(--border, #e5e3da); border-radius: 8px; }
+        .servico-fornecedor { display: flex; gap: 6px; min-width: 0; }
+        .servico-fornecedor select { flex: 1; min-width: 0; }
+        @media (max-width: 640px) {
+          .servico-linha { grid-template-columns: 1fr auto; }
+          .servico-fornecedor { grid-column: 1 / -1; }
+          .servico-fornecedor:empty { display: none; }
+        }
         .servico-linha.ativo { border-color: #00923F; background: #F1F7EC; }
         .servico-check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
         .servico-check input { width: 16px; height: 16px; accent-color: #00923F; margin: 0; }

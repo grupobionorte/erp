@@ -438,6 +438,7 @@ const MODULES = {
       observacaoPadrao: data.observacaoPadrao || undefined,
       ccsema: (data.ccsema || "").replace(/\D/g, "") || null,
       memorialDescritivoGf: data.memorialDescritivoGf || null,
+      observacaoIcmsGf: data.observacaoIcmsGf || null,
       endereco: data.endereco || undefined,
     }),
     fromApi: (r) => ({
@@ -454,6 +455,7 @@ const MODULES = {
       observacaoPadrao: r.observacaoPadrao,
       ccsema: r.ccsema || "",
       memorialDescritivoGf: r.memorialDescritivoGf || "",
+      observacaoIcmsGf: r.observacaoIcmsGf || "",
     }),
   },
   fornecedores: {
@@ -1031,12 +1033,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.079";
+const VERSAO_SISTEMA = "1.080";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.080", texto: "Clientes: observação do ICMS da GF, preenchida pela extensão do SISFLORA" },
   { versao: "1.079", texto: "Clientes: CC-SEMA e memorial descritivo, preenchidos na GF pela extensão do SISFLORA" },
   { versao: "1.078", texto: "NF-e: copiar os dados da nota para preencher a GF no SISFLORA" },
   { versao: "1.077", texto: "Operação: tela de cadastro mais compacta, como a NF-e" },
@@ -2560,6 +2563,17 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
                     style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
                   />
                   <p className="pf-ajuda">Vai no campo "Memorial descritivo" de toda GF para esse cliente.</p>
+                </label>
+                <label className="pf-campo pf-c12">
+                  <span className="field-label">Observação do ICMS</span>
+                  <textarea
+                    rows={2}
+                    maxLength={1000}
+                    value={data.observacaoIcmsGf || ""}
+                    onChange={e => set("observacaoIcmsGf", e.target.value)}
+                    style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+                  />
+                  <p className="pf-ajuda">Preenchida, a extensão marca o ICMS da GF como "Outros" e coloca este texto na observação.</p>
                 </label>
               </div>
             </section>
@@ -9625,6 +9639,7 @@ function NotasFiscaisView({ onIrParaCte }) {
           municipio: end.cidade || "", uf: end.uf || "",
           ccsema: d.destinatario?.ccsema || "",
           memorial: d.destinatario?.memorialDescritivoGf || "",
+          observacaoIcms: d.destinatario?.observacaoIcmsGf || "",
         },
         // Cavalo e reboques, na ordem em que a GF pede as placas.
         placas: [d.veiculo, d.veiculoReboque, d.veiculoReboque2, d.veiculoReboque3]

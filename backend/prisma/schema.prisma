@@ -235,6 +235,8 @@ model Pessoa {
   // SISFLORA usa os dois para preencher o destino e o memorial.
   ccsema               String? @map("ccsema")
   memorialDescritivoGf String? @map("memorial_descritivo_gf")
+  // Observação do ICMS na GF (forma de recolhimento "Outros").
+  observacaoIcmsGf     String? @map("observacao_icms_gf")
 
   enderecoId Int?     @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])

@@ -4,7 +4,8 @@ O que faz
   Na tela "Emitir GF" do SISFLORA, mostra um painel do ERP que preenche:
   1. NF-e: marca "Nota Fiscal Eletrônica", chave de acesso e protocolo;
   2. Destino: o empreendimento do CC-SEMA (pelo código no cadastro do
-     cliente no ERP, conferindo o CNPJ/CPF) e o memorial descritivo;
+     cliente no ERP, conferindo o CNPJ/CPF), o memorial descritivo e, se
+     houver no cadastro, a observação do ICMS (forma "Outros");
   3. Transporte: tipo Rodoviário, UF e município de destino, placa do cavalo
      e dos reboques (até 3);
   4. Produto: preço total do item (e o volume, se a nota estiver em m³ ou st).

@@ -64,7 +64,7 @@
     botoes.append(
       el("button", { style: ESTILO_BOTAO, onclick: () => enviar("nfe") }, "1. Preencher NF-e (chave e protocolo)"),
       el("button", { style: ESTILO_BOTAO, onclick: () => enviar("destino") },
-        `2. Destino (CC-SEMA ${c.ccsema || "—"}) e memorial`),
+        `2. Destino (CC-SEMA ${c.ccsema || "—"}), memorial e ICMS`),
       el("button", { style: ESTILO_BOTAO, onclick: () => enviar("transporte") }, "3. Preencher transporte (destino e placas)"),
     );
     (dados.itens || []).forEach((it, i) => {

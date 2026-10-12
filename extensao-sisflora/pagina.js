@@ -106,6 +106,24 @@
     const memorial = String(d.destinatario.memorial || "").slice(0, 4000);
     if (memorial) aplicar(s, () => { s.entidade.MemorialDescritivo = memorial; });
     else avisos.push("O cliente está sem memorial descritivo no cadastro do ERP.");
+
+    // Observação do ICMS: só existe na forma de recolhimento "Outros".
+    // Sem observação no cadastro, a forma de recolhimento fica como está.
+    const obsIcms = String(d.destinatario.observacaoIcms || "").slice(0, 1000);
+    if (obsIcms) {
+      const outros = (s.tela.formasRecolhimentosICMS || []).find((f) => f.Chave === "[OUTROS]");
+      if (!outros && (s.tela.formasRecolhimentosICMS || []).length) {
+        avisos.push("A tela não tem a forma de ICMS \"Outros\"; não preenchi a observação do ICMS.");
+      } else {
+        aplicar(s, () => {
+          if (s.entidade.IcmsTipo !== "[OUTROS]") {
+            s.entidade.IcmsTipo = "[OUTROS]";
+            s.alterarFormaRecolhimentoICMS && s.alterarFormaRecolhimentoICMS();
+          }
+          s.entidade.IcmsObservacao = obsIcms;
+        });
+      }
+    }
   }
 
   // ---- Trecho rodoviário: destino e placas.

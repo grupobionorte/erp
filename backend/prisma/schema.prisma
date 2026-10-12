@@ -241,6 +241,7 @@ model Pessoa {
 
   documentosComoDestinatario DocumentoFiscal[]
   documentosComoRemetente    DocumentoFiscal[] @relation("CteRemetente")
+  documentosComoRetirada     DocumentoFiscal[] @relation("NfeLocalRetirada")
   documentosComoExpedidor    DocumentoFiscal[] @relation("CteExpedidor")
   documentosComoRecebedor    DocumentoFiscal[] @relation("CteRecebedor")
 
@@ -537,6 +538,12 @@ model DocumentoFiscal {
   // definição do tomador é "Outros"/o próprio destinatário).
   remetenteId Int?    @map("remetente_id")
   remetente   Pessoa? @relation("CteRemetente", fields: [remetenteId], references: [id])
+
+  // NF-e — local de retirada (grupo "retirada" do XML), quando a mercadoria
+  // sai de um lugar diferente do endereço do emitente: a fazenda do
+  // produtor, o pátio de terceiro. Vazio = sai do próprio emitente.
+  localRetiradaId Int?    @map("local_retirada_id")
+  localRetirada   Pessoa? @relation("NfeLocalRetirada", fields: [localRetiradaId], references: [id])
   expedidorId Int?    @map("expedidor_id")
   expedidor   Pessoa? @relation("CteExpedidor", fields: [expedidorId], references: [id])
   recebedorId Int?    @map("recebedor_id")

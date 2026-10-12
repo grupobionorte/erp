@@ -210,6 +210,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
       veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
       colaboradorResponsavel: true, itens: { include: { produto: true } },
       documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
+      localRetirada: { include: { endereco: true } },
     },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
@@ -228,7 +229,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
     naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     finalidadeOperacao, chaveNfeReferenciada, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
-    dataEmissao, colaboradorResponsavelId,
+    dataEmissao, colaboradorResponsavelId, localRetiradaId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
   } = req.body;
 
@@ -287,6 +288,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       veiculoReboqueId: veiculoReboqueId || undefined,
       veiculoReboque2Id: veiculoReboque2Id || undefined,
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
+      localRetiradaId: localRetiradaId ? Number(localRetiradaId) : undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
       dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
@@ -935,6 +937,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       veiculoReboque: true,
       veiculoReboque2: true,
       veiculoReboque3: true,
+      localRetirada: { include: { endereco: true } },
       documentosTransportados: { include: { notaFiscal: true } },
       // Os contratantes do MDF-e saem do tomador de cada CT-e vinculado, e
       // os CEPs de carga lotação saem dos endereços dessas pessoas.
@@ -970,6 +973,18 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     });
   }
 
+  // Local de retirada incompleto não vai para a SEFAZ: completar o
+  // cadastro é melhor do que inventar endereço.
+  if (documento.tipo === "NFe" && documento.localRetirada) {
+    const falta = focusNfe.faltaNoLocalRetirada(documento.localRetirada);
+    if (falta.length) {
+      return res.status(400).json({
+        erro: `O local de retirada (${documento.localRetirada.nomeRazaoSocial}) está sem ${falta.join(", ")}`,
+        detalhe: "Complete o cadastro dele antes de emitir, ou deixe a nota sem local de retirada se a mercadoria sai do endereço da empresa.",
+      });
+    }
+  }
+
   // Cada tipo de documento tem um payload diferente — NFe leva itens de
   // produto, CTe leva o tomador do frete, MDFe leva veículo/motorista e as
   // chaves de acesso dos documentos que está transportando.
@@ -982,6 +997,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
           documento,
           transportadora: documento.transportadora,
           veiculo: documento.veiculo,
+          localRetirada: documento.localRetirada,
         })
       : documento.tipo === "CTe"
       ? focusNfe.montarPayloadCte({
@@ -1234,7 +1250,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
     finalidadeOperacao, chaveNfeReferenciada, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
-    dataEmissao, colaboradorResponsavelId,
+    dataEmissao, colaboradorResponsavelId, localRetiradaId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
     veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
     produtoPredominante, valorTotalCarga, unidadeMedidaCarga, volumeM3Total,
@@ -1365,6 +1381,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorIpi: valorIpi ?? undefined,
       dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
       colaboradorResponsavelId: colaboradorResponsavelId === null ? null : colaboradorResponsavelId || undefined,
+      // null tira o local de retirada; ausente (CT-e, MDF-e) não mexe.
+      localRetiradaId: localRetiradaId === null || localRetiradaId === "" ? null : (localRetiradaId ? Number(localRetiradaId) : undefined),
       valorTotal,
       ...dadosItens,
     },

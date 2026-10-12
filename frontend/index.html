@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.069";
+const VERSAO_SISTEMA = "1.070";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.070", texto: "NF-e: local de retirada da mercadoria, escolhido do cadastro" },
   { versao: "1.069", texto: "Visão geral: faturamento por cliente no topo, agenda logo abaixo" },
   { versao: "1.068", texto: "Menu: Equipamentos e Manutenção logo abaixo de Operações" },
   { versao: "1.067", texto: "Equipamentos com menu próprio e código (ex.: BN-1001)" },
@@ -6095,6 +6096,17 @@ const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"]
 const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
 const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
 
+// Endereço numa linha, para conferir o local de retirada escolhido.
+function enderecoDaRetirada(p) {
+  const e = p.endereco || {};
+  const linha = [
+    [e.logradouro, e.numero].filter(Boolean).join(", "),
+    e.bairro,
+    [e.cidade, e.uf].filter(Boolean).join("/"),
+  ].filter(Boolean).join(" · ");
+  return linha || "sem endereço no cadastro";
+}
+
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? diaDoInstante(nota.dataEmissao) : hoje);
@@ -6106,6 +6118,22 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(nota?.veiculoReboqueId ? String(nota.veiculoReboqueId) : "");
   const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(nota?.veiculoReboque2Id ? String(nota.veiculoReboque2Id) : "");
+
+  // Local de retirada: de onde a mercadoria sai, quando não é o endereço da
+  // empresa (fazenda do produtor, pátio de terceiro). Pode ser cliente ou
+  // fornecedor cadastrado — o cadastro traz CNPJ/CPF, IE e o município com
+  // código IBGE, que a SEFAZ confere.
+  const [localRetiradaId, setLocalRetiradaId] = useState(nota?.localRetiradaId ? String(nota.localRetiradaId) : "");
+  const [fornecedoresRetirada, setFornecedoresRetirada] = useState([]);
+  useEffect(() => {
+    apiRequest("/pessoas?papel=fornecedor").then(setFornecedoresRetirada).catch(() => {});
+  }, []);
+  const opcoesRetirada = [
+    ...(clientes || []).map(c => ({ ...c, grupo: "Clientes" })),
+    ...fornecedoresRetirada.map(f => ({ ...f, nome: f.nomeRazaoSocial, grupo: "Fornecedores" })),
+  ];
+  const localRetirada = opcoesRetirada.find(p => String(p.id) === String(localRetiradaId))
+    || (nota?.localRetirada && String(nota.localRetirada.id) === String(localRetiradaId) ? nota.localRetirada : null);
   const [destinatarioId, setDestinatarioId] = useState(nota?.destinatarioId ? String(nota.destinatarioId) : "");
   const [transportadoraId, setTransportadoraId] = useState(nota?.transportadoraId ? String(nota.transportadoraId) : "");
   const [quickAdd, setQuickAdd] = useState(null); // { tipo: 'clientes'|'transportadoras'|'veiculos'|'colaboradores', setter }
@@ -6205,6 +6233,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         veiculoId: veiculoId ? Number(veiculoId) : null,
         veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : null,
         veiculoReboque2Id: veiculoReboque2Id ? Number(veiculoReboque2Id) : null,
+        localRetiradaId: localRetiradaId ? Number(localRetiradaId) : null,
         colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
         dataEmissao: dataEmissao || undefined,
         naturezaOperacao,
@@ -6350,6 +6379,32 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <input value={clienteSelecionado?.contribuinte || ""} disabled placeholder="Selecione o cliente" />
               </div>
             </div>
+          </div>
+
+          <div className="nf-section">
+            <h4 className="nf-section-title">Local de retirada</h4>
+            <div className="endereco-grid">
+              <div className="field-group">
+                <label className="field-label">Retirada em</label>
+                <select value={localRetiradaId} onChange={e => setLocalRetiradaId(e.target.value)}>
+                  <option value="">Endereço da própria empresa (não informar)</option>
+                  {["Clientes", "Fornecedores"].map(grupo => {
+                    const doGrupo = opcoesRetirada.filter(p => p.grupo === grupo);
+                    return doGrupo.length ? (
+                      <optgroup key={grupo} label={grupo}>
+                        {doGrupo.map(p => <option key={`${grupo}-${p.id}`} value={p.id}>{rotuloPessoa(p)}</option>)}
+                      </optgroup>
+                    ) : null;
+                  })}
+                </select>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Endereço da retirada</label>
+                <input disabled value={localRetirada ? enderecoDaRetirada(localRetirada) : ""}
+                  placeholder="Escolha só quando a mercadoria sai de outro endereço" />
+              </div>
+            </div>
+            <p className="hint">Vai na NF-e como "local de retirada", com CNPJ/CPF, IE e endereço do cadastro escolhido.</p>
           </div>
 
           <div className="nf-section">

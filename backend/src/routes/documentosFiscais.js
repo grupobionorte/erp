@@ -205,7 +205,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
     // Documento completo: é daqui que a tela de edição se abastece, já que
     // a listagem passou a trazer só o resumo.
     include: {
-      destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
+      destinatario: { include: { endereco: true } }, remetente: true, expedidor: true, recebedor: true, transportadora: true,
       veiculo: { include: { motorista: true } },
       veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
       colaboradorResponsavel: true, itens: { include: { produto: true } },

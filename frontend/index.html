@@ -1027,12 +1027,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.077";
+const VERSAO_SISTEMA = "1.078";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.078", texto: "NF-e: copiar os dados da nota para preencher a GF no SISFLORA" },
   { versao: "1.077", texto: "Operação: tela de cadastro mais compacta, como a NF-e" },
   { versao: "1.076", texto: "Veículos: motorista não é obrigatório no tipo de rodado Outros (reboque)" },
   { versao: "1.075", texto: "Veículos: cavalo mecânico com aba Reboques; na NF-e os reboques vêm junto com o cavalo" },
@@ -9568,6 +9569,49 @@ function NotasFiscaisView({ onIrParaCte }) {
   // Clonar: venda que se repete — mesmo cliente, mesmo produto — não
   // precisa ser redigitada. Os itens vêm junto, ao contrário do CT-e, onde
   // cada viagem carrega notas diferentes.
+  // Dados da nota para a extensão do SISFLORA preencher a GF. Vão pela
+  // área de transferência: a pessoa cola no painel da extensão, já logada
+  // no SISFLORA com o certificado da empresa. Nada é enviado à SEMA daqui.
+  const copiarParaGf = async (nota) => {
+    try {
+      const d = await apiRequest(`/documentos-fiscais/${nota.id}`);
+      if (!d.chaveAcesso || !d.protocoloAutorizacao) {
+        alert("Essa nota ainda não tem chave e protocolo de autorização. Só nota autorizada pode ir para a GF.");
+        return;
+      }
+      const end = d.destinatario?.endereco || {};
+      const dados = {
+        origem: "erp-biomassa", tipo: "gf", versao: 1,
+        nota: {
+          numero: d.numero, serie: d.serie,
+          chave: String(d.chaveAcesso).replace(/\D/g, ""),
+          protocolo: String(d.protocoloAutorizacao).replace(/\D/g, ""),
+          emissao: d.dataEmissao,
+        },
+        destinatario: {
+          nome: d.destinatario?.nomeRazaoSocial || "",
+          cpfCnpj: d.destinatario?.documento || "",
+          ie: d.destinatario?.ie || "",
+          municipio: end.cidade || "", uf: end.uf || "",
+        },
+        // Cavalo e reboques, na ordem em que a GF pede as placas.
+        placas: [d.veiculo, d.veiculoReboque, d.veiculoReboque2, d.veiculoReboque3]
+          .filter(v => v?.placa).map(v => v.placa.toUpperCase()),
+        itens: (d.itens || []).map(i => ({
+          descricao: i.produto?.descricao || "",
+          unidade: i.produto?.unidade || "",
+          quantidade: Number(i.quantidade) || 0,
+          valorUnitario: Number(i.valorUnitario) || 0,
+          valorTotal: Number(i.valorTotal) || 0,
+        })),
+      };
+      await navigator.clipboard.writeText(JSON.stringify(dados));
+      alert(`Dados da NF-e ${d.numero} copiados.\n\nNo SISFLORA, na tela "Emitir GF", cole no painel do ERP (Ctrl+V) e use os botões de preencher.`);
+    } catch (e) {
+      alert(`Não foi possível copiar: ${e.message}`);
+    }
+  };
+
   const clonarNota = async (nota) => {
     try {
       const nova = await apiRequest(`/documentos-fiscais/${nota.id}/clonar`, {
@@ -9916,6 +9960,11 @@ Detalhe: ${e.detalhe}` : ""}`);
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); gerarCte(nota); }}>
                             <Truck size={14} /> Gerar CT-e
                           </button>
+                          {nota.status === "autorizado" && (
+                            <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); copiarParaGf(nota); }}>
+                              <FileText size={14} /> Copiar para a GF (SISFLORA)
+                            </button>
+                          )}
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setNotaParaGuia(nota); }}>
                             <FileText size={14} /> {nota.gfNumero ? "Guia Florestal" : "Registrar Guia Florestal"}
                           </button>

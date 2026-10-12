@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "ERP Biomassa — preencher GF no SISFLORA",
+  "version": "1.0.0",
+  "description": "Preenche a tela Emitir GF do SISFLORA com os dados de uma NF-e copiada do ERP Biomassa. Não emite nada: quem confere e emite é a pessoa.",
+  "content_scripts": [
+    {
+      "matches": ["https://sisflora.sema.mt.gov.br/sisflora.app/*"],
+      "js": ["painel.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://sisflora.sema.mt.gov.br/sisflora.app/*"],
+      "js": ["pagina.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}

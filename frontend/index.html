@@ -1027,12 +1027,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.076";
+const VERSAO_SISTEMA = "1.077";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.077", texto: "Operação: tela de cadastro mais compacta, como a NF-e" },
   { versao: "1.076", texto: "Veículos: motorista não é obrigatório no tipo de rodado Outros (reboque)" },
   { versao: "1.075", texto: "Veículos: cavalo mecânico com aba Reboques; na NF-e os reboques vêm junto com o cavalo" },
   { versao: "1.074", texto: "NF-e: campo do 3º reboque" },
@@ -4030,7 +4031,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
       {/* Operação abre grande nas duas abas: a planilha de viagens precisa
           da largura, e trocar de aba não deveria fazer a janela mudar de
           tamanho embaixo do cursor. */}
-      <div className={`modal modal-cadastro${temViagens ? " modal-planilha" : ""}`}>
+      <div className={`modal modal-cadastro${temViagens ? " modal-planilha modal-compacta" : ""}`}>
         <div className="modal-header">
           {/* Singular e gênero vêm do MODULES: tirar o "s" do nome do menu
               dava "Editar Operaçõe" e "Novo Transportadora". */}
@@ -11876,6 +11877,20 @@ function ErpBiomassa() {
           content: ""; width: 3px; height: 15px; border-radius: 2px;
           background: var(--erp-verde); flex-shrink: 0;
         }
+        /* Cadastro compacto (operação): o mesmo ajuste da NF-e — sem linhas
+           entre as seções, menos respiro e campos mais baixos. */
+        .modal-compacta .pf-secao { padding: 6px 0; border-bottom: none; }
+        .modal-compacta .pf-secao:first-child { padding-top: 2px; }
+        .modal-compacta .pf-secao-titulo { margin-bottom: 6px; }
+        .modal-compacta .field-group { margin-bottom: 4px; }
+        .modal-compacta .field-label { margin-bottom: 1px; font-size: 11.5px; }
+        .modal-compacta .field-group input, .modal-compacta .field-group select, .modal-compacta .field-group textarea { padding: 3px 8px; }
+        .modal-compacta .hint { margin: 1px 0 0; font-size: 11px; }
+        .modal-compacta .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }
+        .modal-compacta .servicos-operacao { gap: 4px; }
+        .modal-compacta .servico-linha { min-height: 28px; padding: 3px 8px; }
+        .modal-compacta .servico-linha select, .modal-compacta .servico-linha input:not([type=checkbox]):not([type=radio]) { padding: 3px 8px; }
+        .modal-compacta .campo-check { min-height: 24px; }
         .pf-grade { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px 14px; }
         .pf-c2 { grid-column: span 2; } .pf-c3 { grid-column: span 3; }
         .pf-c4 { grid-column: span 4; } .pf-c5 { grid-column: span 5; }

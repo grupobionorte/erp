@@ -5,6 +5,50 @@ const { exigirAdmin } = require("../middleware/auth");
 const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
 
+const CAVALO = "Cavalo Mecânico";
+
+/**
+ * Reboques do cavalo: até três, sem repetir, nenhum sendo o próprio cavalo
+ * e nenhum já atrelado a outro cavalo — o mesmo reboque não puxa duas
+ * carretas. Veículo que não é cavalo fica sem reboques.
+ * Devolve { dados } para gravar ou { erro, status }.
+ */
+async function prepararReboques(corpo, id, req) {
+  const { reboque1Id, reboque2Id, reboque3Id, tipoRodado } = corpo;
+  const informou = [reboque1Id, reboque2Id, reboque3Id].some(v => v !== undefined);
+  if (tipoRodado !== undefined && tipoRodado !== CAVALO) {
+    return { dados: { reboque1Id: null, reboque2Id: null, reboque3Id: null } };
+  }
+  if (!informou) return { dados: {} };
+
+  const ids = [reboque1Id, reboque2Id, reboque3Id].map(v => (v ? Number(v) : null));
+  const usados = ids.filter(Boolean);
+  if (new Set(usados).size !== usados.length) return { erro: "O mesmo reboque foi escolhido duas vezes", status: 400 };
+  if (id && usados.includes(id)) return { erro: "O cavalo não pode ser reboque dele mesmo", status: 400 };
+
+  if (usados.length) {
+    const reboques = await prisma.veiculo.findMany({
+      where: { id: { in: usados }, ativo: true },
+      select: { id: true, placa: true },
+    });
+    if (reboques.length !== usados.length) return { erro: "Reboque não encontrado", status: 400 };
+
+    const outro = await prisma.veiculo.findFirst({
+      where: {
+        id: id ? { not: id } : undefined,
+        ativo: true,
+        OR: [{ reboque1Id: { in: usados } }, { reboque2Id: { in: usados } }, { reboque3Id: { in: usados } }],
+      },
+      select: { placa: true, reboque1Id: true, reboque2Id: true, reboque3Id: true },
+    });
+    if (outro) {
+      const preso = reboques.find(r => [outro.reboque1Id, outro.reboque2Id, outro.reboque3Id].includes(r.id));
+      return { erro: `O reboque ${preso?.placa} já está atrelado ao cavalo ${outro.placa}`, status: 409, detalhe: "Tire o reboque daquele cavalo antes." };
+    }
+  }
+  return { dados: { reboque1Id: ids[0], reboque2Id: ids[1], reboque3Id: ids[2] } };
+}
+
 // Lista todos os veículos ativos, com o nome da transportadora dona de
 // cada um (usado tanto na tela de cadastro quanto, futuramente, na
 // seleção de veículo ao montar um MDFe).
@@ -22,11 +66,13 @@ router.get("/", asyncHandler(async (req, res) => {
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { transportadoraId, placa, empresaId, motoristaId, anoFabricacao, anoModelo, ...resto } = req.body;
+  const { transportadoraId, placa, empresaId, motoristaId, anoFabricacao, anoModelo, reboque1Id, reboque2Id, reboque3Id, ...resto } = req.body;
   // Transportadora virou opcional: a frota é própria.
   if (!placa) {
     return res.status(400).json({ erro: "placa é obrigatória" });
   }
+  const reboques = await prepararReboques(req.body, null, req);
+  if (reboques.erro) return res.status(reboques.status).json({ erro: reboques.erro, detalhe: reboques.detalhe });
 
   const veiculo = await prisma.veiculo.create({
     data: {
@@ -36,6 +82,7 @@ router.post("/", asyncHandler(async (req, res) => {
       anoModelo: anoModelo ? Number(anoModelo) : undefined,
       transportadoraId: transportadoraId ? Number(transportadoraId) : undefined,
       motoristaId: motoristaId ? Number(motoristaId) : undefined,
+      ...reboques.dados,
       empresaId: req.usuario.empresaId || undefined,
     },
     include: { transportadora: true, motorista: { select: { id: true, nome: true, cpf: true } } },
@@ -45,7 +92,7 @@ router.post("/", asyncHandler(async (req, res) => {
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { transportadoraId, empresaId, motoristaId, anoFabricacao, anoModelo, ...dados } = req.body;
+  const { transportadoraId, empresaId, motoristaId, anoFabricacao, anoModelo, reboque1Id, reboque2Id, reboque3Id, ...dados } = req.body;
   const id = Number(req.params.id);
 
   const existente = await prisma.veiculo.findUnique({ where: { id } });
@@ -53,6 +100,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
   if (existente.empresaId && existente.empresaId !== req.usuario.empresaId) {
     return res.status(403).json({ erro: "Esse cadastro pertence a outra empresa" });
   }
+  const reboques = await prepararReboques(req.body, id, req);
+  if (reboques.erro) return res.status(reboques.status).json({ erro: reboques.erro, detalhe: reboques.detalhe });
 
   const veiculo = await prisma.veiculo.update({
     where: { id },
@@ -63,6 +112,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
       // null limpa o vínculo; undefined deixa como está.
       transportadoraId: transportadoraId === null ? null : (transportadoraId ? Number(transportadoraId) : undefined),
       motoristaId: motoristaId === null ? null : (motoristaId ? Number(motoristaId) : undefined),
+      ...reboques.dados,
     },
     include: { transportadora: true, motorista: { select: { id: true, nome: true, cpf: true } } },
   });

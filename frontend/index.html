@@ -619,6 +619,14 @@ const MODULES = {
       // Transportadora ficou reservada para subcontratação futura; a frota
       // hoje é própria, então saiu do topo e não é mais obrigatória.
       { key: "transportadoraId", label: "Transportadora (uso futuro)", type: "transportadora-select" },
+      // Aba Reboques (só para cavalo mecânico): os reboques atrelados a ele.
+      // A lista mostra os outros veículos que não são cavalo.
+      ...[1, 2, 3].map(n => ({
+        key: `reboque${n}Id`, label: `${n}º reboque`, type: "vinculo", aba: "reboques",
+        fonte: "/veiculos", vazio: "Nenhum",
+        rotulo: (v) => [v.placa, v.descricao].filter(Boolean).join(" — "),
+        filtrar: (v, dados) => v.id !== dados.id && v.tipoRodado !== "Cavalo Mecânico",
+      })),
     ],
     columns: ["placa", "descricao", "tipoRodado", "motoristaNome"],
     toApi: (data) => ({
@@ -643,6 +651,9 @@ const MODULES = {
       capacidadeKg: data.capacidadeKg ? Number(data.capacidadeKg) : undefined,
       capacidadeM3: data.capacidadeM3 ? Number(data.capacidadeM3) : undefined,
       motoristaId: data.motoristaId ?? null,
+      reboque1Id: data.reboque1Id ?? null,
+      reboque2Id: data.reboque2Id ?? null,
+      reboque3Id: data.reboque3Id ?? null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -670,6 +681,9 @@ const MODULES = {
       motoristaId: r.motoristaId ?? null,
       motoristaNome: r.motorista?.nome || "—",
       motoristaCpf: r.motorista?.cpf || "",
+      reboque1Id: r.reboque1Id ?? null,
+      reboque2Id: r.reboque2Id ?? null,
+      reboque3Id: r.reboque3Id ?? null,
     }),
   },
   operacoes: {
@@ -1011,12 +1025,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.074";
+const VERSAO_SISTEMA = "1.075";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.075", texto: "Veículos: cavalo mecânico com aba Reboques; na NF-e os reboques vêm junto com o cavalo" },
   { versao: "1.074", texto: "NF-e: campo do 3º reboque" },
   { versao: "1.073", texto: "NF-e: campos na nova arrumação desenhada" },
   { versao: "1.072", texto: "NF-e: tela de cadastro mais compacta" },
@@ -1555,7 +1570,7 @@ function Field({ field, value, onChange, disabled, dados }) {
             style={{ flex: 1 }}
           >
             <option value="">{opcoes === null ? "Carregando…" : field.vazio || "Sem vínculo"}</option>
-            {(opcoes || []).map(o => (
+            {(opcoes || []).filter(o => !field.filtrar || field.filtrar(o, dados || {}) || o.id === value).map(o => (
               <option key={o.id} value={o.id}>{rotuloDe(o)}</option>
             ))}
           </select>
@@ -3969,6 +3984,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   const temAbaFiscal = config.fields.some(f => f.aba === "fiscal");
   // Operação tem as viagens: um cadastro curto com uma planilha dentro.
   const temViagens = moduleKey === "operacoes";
+  // Cavalo mecânico tem os reboques atrelados a ele.
+  const temReboques = moduleKey === "veiculos" && data.tipoRodado === "Cavalo Mecânico";
+  // Deixou de ser cavalo com a aba aberta: volta para Dados.
+  useEffect(() => { if (!temReboques && aba === "reboques") setAba("dados"); }, [temReboques, aba]);
+  const temAbas = temJornada || temAbaFiscal || temViagens || temReboques;
 
   const setField = (key, value) => setData(d => ({ ...d, [key]: value }));
 
@@ -4014,7 +4034,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
 
-        {(temJornada || temAbaFiscal || temViagens) && (
+        {temAbas && (
           <div className="cte-abas" style={{ padding: "0 22px", borderBottom: "0.5px solid #e5e3da" }}>
             <button type="button" className="cte-aba" aria-selected={aba === "dados"} onClick={() => setAba("dados")}>Dados</button>
             {temViagens && (
@@ -4047,6 +4067,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
                 Notas fiscais e CT-e
               </button>
             )}
+            {temReboques && (
+              <button type="button" className="cte-aba" aria-selected={aba === "reboques"} onClick={() => setAba("reboques")}>
+                Reboques
+              </button>
+            )}
           </div>
         )}
 
@@ -4066,8 +4091,15 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
             <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
           )}
 
-          <div hidden={(temJornada || temAbaFiscal || temViagens) && aba !== "dados"}>
-            <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba !== "fiscal")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
+          {temReboques && aba === "reboques" && (
+            <>
+              <CamposEmSecoes campos={camposVisiveis.filter(f => f.aba === "reboques")} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
+              <p className="hint">Até três reboques atrelados a este cavalo. Ao escolher o cavalo na NF-e, os reboques vêm preenchidos.</p>
+            </>
+          )}
+
+          <div hidden={temAbas && aba !== "dados"}>
+            <CamposEmSecoes campos={camposVisiveis.filter(f => !f.aba)} data={data} setField={setField} editando={editando} colunas={config.colunas} colunasPorSecao={config.colunasPorSecao} />
           </div>
           {error && <p className="error-text">{error}</p>}
         </div>
@@ -6123,6 +6155,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(nota?.veiculoReboqueId ? String(nota.veiculoReboqueId) : "");
   const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(nota?.veiculoReboque2Id ? String(nota.veiculoReboque2Id) : "");
   const [veiculoReboque3Id, setVeiculoReboque3Id] = useState(nota?.veiculoReboque3Id ? String(nota.veiculoReboque3Id) : "");
+  // Cavalo com reboques atrelados no cadastro: escolher o cavalo preenche
+  // os três reboques, que continuam podendo ser trocados à mão.
+  const escolherCavalo = (id) => {
+    setVeiculoId(id);
+    const cavalo = (veiculos || []).find(v => String(v.id) === String(id));
+    if (cavalo && (cavalo.reboque1Id || cavalo.reboque2Id || cavalo.reboque3Id)) {
+      setVeiculoReboqueId(cavalo.reboque1Id ? String(cavalo.reboque1Id) : "");
+      setVeiculoReboque2Id(cavalo.reboque2Id ? String(cavalo.reboque2Id) : "");
+      setVeiculoReboque3Id(cavalo.reboque3Id ? String(cavalo.reboque3Id) : "");
+    }
+  };
 
   // Local de retirada: de onde a mercadoria sai, quando não é o endereço da
   // empresa (fazenda do produtor, pátio de terceiro). Pode ser cliente ou
@@ -6450,7 +6493,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               <div className="field-group">
                 <label className="field-label">Cavalo (placa)</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
+                  <select value={veiculoId} onChange={e => escolherCavalo(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
                     <option value="">Nenhum</option>
                     {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                   </select>

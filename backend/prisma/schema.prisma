@@ -336,6 +336,18 @@ model Veiculo {
   // SEFAZ exige o grupo do proprietário no MDF-e — e é só nesse caso que o
   // tipo de transportador pode ser informado (rejeição 745).
   propriedade              String? @default("propria")
+
+  // Cavalo mecânico: os reboques atrelados a ele (até 3). Ao escolher o
+  // cavalo num documento, os reboques vêm junto.
+  reboque1Id Int?     @map("reboque1_id")
+  reboque1   Veiculo? @relation("CavaloReboque1", fields: [reboque1Id], references: [id])
+  reboque2Id Int?     @map("reboque2_id")
+  reboque2   Veiculo? @relation("CavaloReboque2", fields: [reboque2Id], references: [id])
+  reboque3Id Int?     @map("reboque3_id")
+  reboque3   Veiculo? @relation("CavaloReboque3", fields: [reboque3Id], references: [id])
+  cavalosComoReboque1 Veiculo[] @relation("CavaloReboque1")
+  cavalosComoReboque2 Veiculo[] @relation("CavaloReboque2")
+  cavalosComoReboque3 Veiculo[] @relation("CavaloReboque3")
   proprietarioDocumento    String? @map("proprietario_documento")
   proprietarioNome         String? @map("proprietario_nome")
   proprietarioIe           String? @map("proprietario_ie")

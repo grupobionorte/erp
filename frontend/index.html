@@ -436,6 +436,8 @@ const MODULES = {
       email: data.email || undefined,
       eCliente: true,
       observacaoPadrao: data.observacaoPadrao || undefined,
+      ccsema: (data.ccsema || "").replace(/\D/g, "") || null,
+      memorialDescritivoGf: data.memorialDescritivoGf || null,
       endereco: data.endereco || undefined,
     }),
     fromApi: (r) => ({
@@ -450,6 +452,8 @@ const MODULES = {
       email: r.email,
       endereco: mapEndereco(r.endereco),
       observacaoPadrao: r.observacaoPadrao,
+      ccsema: r.ccsema || "",
+      memorialDescritivoGf: r.memorialDescritivoGf || "",
     }),
   },
   fornecedores: {
@@ -1027,12 +1031,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.078";
+const VERSAO_SISTEMA = "1.079";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.079", texto: "Clientes: CC-SEMA e memorial descritivo, preenchidos na GF pela extensão do SISFLORA" },
   { versao: "1.078", texto: "NF-e: copiar os dados da nota para preencher a GF no SISFLORA" },
   { versao: "1.077", texto: "Operação: tela de cadastro mais compacta, como a NF-e" },
   { versao: "1.076", texto: "Veículos: motorista não é obrigatório no tipo de rodado Outros (reboque)" },
@@ -2534,6 +2539,31 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
               </label>
             </div>
           </section>
+
+          {moduleKey === "clientes" && (
+            <section className="pf-secao">
+              <h4 className="pf-secao-titulo">Guia Florestal (SISFLORA)</h4>
+              <div className="pf-grade">
+                <label className="pf-campo pf-c4">
+                  <span className="field-label">Código CC-SEMA</span>
+                  <input inputMode="numeric" value={data.ccsema || ""} placeholder="Ex.: 2550"
+                    onChange={e => set("ccsema", e.target.value.replace(/\D/g, ""))} />
+                  <p className="pf-ajuda">Código do empreendimento no CC-SEMA: a extensão escolhe o destino da GF por ele.</p>
+                </label>
+                <label className="pf-campo pf-c12">
+                  <span className="field-label">Memorial descritivo</span>
+                  <textarea
+                    rows={3}
+                    maxLength={4000}
+                    value={data.memorialDescritivoGf || ""}
+                    onChange={e => set("memorialDescritivoGf", e.target.value)}
+                    style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+                  />
+                  <p className="pf-ajuda">Vai no campo "Memorial descritivo" de toda GF para esse cliente.</p>
+                </label>
+              </div>
+            </section>
+          )}
 
           <section className="pf-secao">
             <h4 className="pf-secao-titulo">Contato</h4>
@@ -9593,6 +9623,8 @@ function NotasFiscaisView({ onIrParaCte }) {
           cpfCnpj: d.destinatario?.documento || "",
           ie: d.destinatario?.ie || "",
           municipio: end.cidade || "", uf: end.uf || "",
+          ccsema: d.destinatario?.ccsema || "",
+          memorial: d.destinatario?.memorialDescritivoGf || "",
         },
         // Cavalo e reboques, na ordem em que a GF pede as placas.
         placas: [d.veiculo, d.veiculoReboque, d.veiculoReboque2, d.veiculoReboque3]

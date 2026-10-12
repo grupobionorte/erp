@@ -63,11 +63,13 @@
     botoes.innerHTML = "";
     botoes.append(
       el("button", { style: ESTILO_BOTAO, onclick: () => enviar("nfe") }, "1. Preencher NF-e (chave e protocolo)"),
-      el("button", { style: ESTILO_BOTAO, onclick: () => enviar("transporte") }, "2. Preencher transporte (destino e placas)"),
+      el("button", { style: ESTILO_BOTAO, onclick: () => enviar("destino") },
+        `2. Destino (CC-SEMA ${c.ccsema || "—"}) e memorial`),
+      el("button", { style: ESTILO_BOTAO, onclick: () => enviar("transporte") }, "3. Preencher transporte (destino e placas)"),
     );
     (dados.itens || []).forEach((it, i) => {
       botoes.append(el("button", { style: ESTILO_BOTAO, onclick: () => enviar("produto", { indice: i }) },
-        `3. Produto: ${it.descricao} — ${it.quantidade} ${it.unidade} · R$ ${it.valorTotal.toFixed(2).replace(".", ",")}`));
+        `4. Produto: ${it.descricao} — ${it.quantidade} ${it.unidade} · R$ ${it.valorTotal.toFixed(2).replace(".", ",")}`));
     });
     botoes.append(el("div", { style: { fontSize: "11.5px", color: "#6b6b68", marginTop: "4px" } },
       "No produto, escolha antes o lote, o produto e a essência. Depois de cada parte, confira e clique em Adicionar na própria tela. Emitir é sempre com vocês."));

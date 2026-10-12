@@ -48,8 +48,10 @@
 
   // ---- NF-e: chave e protocolo.
   async function preencherNfe(s, d, avisos) {
-    if (s.tela.bloquearCampos || s.tela.podeTrocarNf === false) {
-      avisos.push("A tela não deixa trocar o tipo de nota agora; preenchi só chave e protocolo.");
+    if (s.tela.isNfe === true) {
+      // Já está em NF-e (em geral a tela nem deixa trocar): só preenche.
+    } else if (s.tela.bloquearCampos || s.tela.podeTrocarNf === false) {
+      avisos.push("A tela não deixa marcar NF-e agora; preenchi só chave e protocolo.");
     } else {
       aplicar(s, () => { s.tela.isNfe = true; s.alterarNf && s.alterarNf(); });
       await espera(200);
@@ -60,6 +62,50 @@
     });
     if (String(d.nota.chave).length !== 44) avisos.push("A chave da nota não tem 44 dígitos — confira.");
     if (String(d.nota.protocolo).length !== 15) avisos.push("O protocolo não tem 15 dígitos — confira.");
+  }
+
+  // ---- Destino (empreendimento do CC-SEMA) e memorial descritivo.
+  // A busca é a mesma da janela "associar empreendimento" da tela
+  // (views/empreendimento/associar.js), pelo código do cliente. Só aceita o
+  // empreendimento se o CPF/CNPJ dele for o do cliente da nota.
+  async function preencherDestino(s, d, avisos) {
+    const so = (t) => String(t || "").replace(/\D/g, "");
+    const codigo = so(d.destinatario.ccsema);
+    if (!codigo) {
+      avisos.push("O cliente está sem código CC-SEMA no cadastro do ERP; escolha o destino à mão.");
+    } else if (s.tela.bloquearCampos) {
+      avisos.push("Destino travado pela tela; não mexi.");
+    } else {
+      const form = document.querySelector('form[name="formGerenciar"]');
+      const api = window.angular.element(form).injector().get("api");
+      const params = s.tela.empReceberParams || {};
+      const filtros = { ID: codigo, NOME: "", CPF_CNPJ: "", SITUACAO: ["[ATIVO]", "[SUSPENSO]"], CLASSIFICACAO: "" };
+      if (params.NotId) filtros.NOT_ID = params.NotId;
+      if (params.Classificacao) filtros.CLASSIFICACAO = params.Classificacao;
+      const config = { Filtros: filtros, ItensPorPagina: 10, Pagina: 1, IsOrdenarCrescente: true, ColunaOrdenar: "CEPROF" };
+      const resposta = await new Promise((ok) => {
+        api.empreendimento.listar(config, ok);
+        setTimeout(() => ok(null), 15000);
+      });
+      const item = resposta && (resposta.Itens || []).find((i) => so(i.Id) === codigo);
+      if (!item) {
+        avisos.push(`Não achei o empreendimento ${codigo} no CC-SEMA (ou ele não pode receber esta GF). Escolha à mão.`);
+      } else if (so(item.Cnpj || item.Cpf) && so(d.destinatario.cpfCnpj) && so(item.Cnpj || item.Cpf) !== so(d.destinatario.cpfCnpj)) {
+        avisos.push(`O empreendimento ${codigo} (${item.Nome}) tem outro CPF/CNPJ que o cliente da nota. Não preenchi — confira o código no cadastro do cliente.`);
+      } else {
+        aplicar(s, () => {
+          if (s.entidade.TipoDestino !== "[EMPREENDIMENTO_CCSEMA]") {
+            s.entidade.TipoDestino = "[EMPREENDIMENTO_CCSEMA]";
+            s.alterarDestino && s.alterarDestino();
+          }
+          s.adicionarEmpreendimento(item);
+        });
+      }
+    }
+
+    const memorial = String(d.destinatario.memorial || "").slice(0, 4000);
+    if (memorial) aplicar(s, () => { s.entidade.MemorialDescritivo = memorial; });
+    else avisos.push("O cliente está sem memorial descritivo no cadastro do ERP.");
   }
 
   // ---- Trecho rodoviário: destino e placas.
@@ -139,6 +185,7 @@
     }
     try {
       if (msg.acao === "nfe") await preencherNfe(s, msg.dados, avisos);
+      if (msg.acao === "destino") await preencherDestino(s, msg.dados, avisos);
       if (msg.acao === "transporte") await preencherTransporte(s, msg.dados, avisos);
       if (msg.acao === "produto") await preencherProduto(s, msg.dados, msg.indice, avisos);
       window.postMessage({ fonte: "erp-gf-pagina", ok: true, acao: msg.acao, avisos }, "*");

@@ -230,6 +230,12 @@ model Pessoa {
   // informações complementares da NF-e.
   observacaoPadrao String? @map("observacao_padrao")
 
+  // Guia Florestal (SISFLORA): código do empreendimento do cliente no
+  // CC-SEMA e o memorial descritivo que vai em cada GF dele. A extensão do
+  // SISFLORA usa os dois para preencher o destino e o memorial.
+  ccsema               String? @map("ccsema")
+  memorialDescritivoGf String? @map("memorial_descritivo_gf")
+
   enderecoId Int?     @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])
 

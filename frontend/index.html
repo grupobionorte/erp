@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.070";
+const VERSAO_SISTEMA = "1.071";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.071", texto: "NF-e: tela de cadastro sem as linhas entre as seções" },
   { versao: "1.070", texto: "NF-e: local de retirada da mercadoria, escolhido do cadastro" },
   { versao: "1.069", texto: "Visão geral: faturamento por cliente no topo, agenda logo abaixo" },
   { versao: "1.068", texto: "Menu: Equipamentos e Manutenção logo abaixo de Operações" },
@@ -6277,7 +6278,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro modal-documento">
+      <div className="modal modal-cadastro modal-documento modal-nfe">
         <div className="modal-header">
           <h3>{nota?.id ? "Editar" : "Nova"} Nota Fiscal</h3>
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
@@ -11889,6 +11890,8 @@ function ErpBiomassa() {
         /* Formulário de Nota Fiscal / CTe — seções com título e tabela de itens */
         .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
         .nf-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
+        /* Na NF-e, sem as linhas entre as seções: o título de cada uma já separa. */
+        .modal-nfe .nf-section { border-bottom: none; padding-bottom: 0; margin-bottom: 22px; }
         .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }
         /* overflow visível: senão a lista de sugestões de CFOP e NCM é
            cortada pela borda da tabela de itens. */

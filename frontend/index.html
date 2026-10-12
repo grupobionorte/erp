@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.071";
+const VERSAO_SISTEMA = "1.072";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.072", texto: "NF-e: tela de cadastro mais compacta" },
   { versao: "1.071", texto: "NF-e: tela de cadastro sem as linhas entre as seções" },
   { versao: "1.070", texto: "NF-e: local de retirada da mercadoria, escolhido do cadastro" },
   { versao: "1.069", texto: "Visão geral: faturamento por cliente no topo, agenda logo abaixo" },
@@ -11890,8 +11891,19 @@ function ErpBiomassa() {
         /* Formulário de Nota Fiscal / CTe — seções com título e tabela de itens */
         .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
         .nf-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
-        /* Na NF-e, sem as linhas entre as seções: o título de cada uma já separa. */
-        .modal-nfe .nf-section { border-bottom: none; padding-bottom: 0; margin-bottom: 22px; }
+        /* NF-e compacta: sem as linhas entre as seções (o título de cada uma
+           já separa), menos respiro e campos mais baixos — a nota tem muitos
+           campos, e assim cabe mais sem rolar. A letra fica do mesmo tamanho. */
+        .modal-nfe .nf-section { border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
+        .modal-nfe .nf-section-title { margin-bottom: 4px; }
+        .modal-nfe .field-group { margin-bottom: 4px; }
+        .modal-nfe .field-label { margin-bottom: 1px; font-size: 11.5px; }
+        .modal-nfe .field-group input, .modal-nfe .field-group select, .modal-nfe .field-group textarea { padding: 3px 8px; }
+        .modal-nfe .hint { margin: 1px 0 0; font-size: 11px; }
+        .modal-nfe .nf-toggle { padding-top: 3px; padding-bottom: 3px; }
+        .modal-nfe .endereco-grid, .modal-nfe .nf-grid-3, .modal-nfe .nf-grid-4 { gap: 6px; }
+        /* O botão + ao lado do campo acompanha a altura menor. */
+        .modal-nfe .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }
         .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }
         /* overflow visível: senão a lista de sugestões de CFOP e NCM é
            cortada pela borda da tabela de itens. */

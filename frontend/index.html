@@ -610,7 +610,9 @@ const MODULES = {
       // Motorista habitual, vindo do cadastro de colaboradores: é daqui que
       // o CT-e preenche nome e CPF.
       {
-        key: "motoristaId", label: "Motorista", type: "vinculo", required: true,
+        // Obrigatório, menos em "Outros", que é como o reboque é cadastrado:
+        // reboque não tem motorista, quem tem é o cavalo.
+        key: "motoristaId", label: "Motorista", type: "vinculo", required: (dados) => dados.tipoRodado !== "Outros",
         fonte: "/motoristas", vazio: "Nenhum",
         rotulo: (m) => [m.nome, m.cnh && `CNH ${m.cnh}`].filter(Boolean).join(" — "),
         // Abre o cadastro completo de motoristas, o mesmo da tela própria.
@@ -1025,12 +1027,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.075";
+const VERSAO_SISTEMA = "1.076";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.076", texto: "Veículos: motorista não é obrigatório no tipo de rodado Outros (reboque)" },
   { versao: "1.075", texto: "Veículos: cavalo mecânico com aba Reboques; na NF-e os reboques vêm junto com o cavalo" },
   { versao: "1.074", texto: "NF-e: campo do 3º reboque" },
   { versao: "1.073", texto: "NF-e: campos na nova arrumação desenhada" },
@@ -2581,6 +2584,10 @@ function PessoaForm({ moduleKey, record, onSave, onCancel }) {
 
 // Campos agrupados por seção. Sem isso, cadastro grande vira uma lista
 // corrida onde identificação, banco e configuração fiscal se misturam.
+// "required" pode ser fixo ou depender do que já foi preenchido (ex.: o
+// motorista do veículo, que não vale para reboque).
+const obrigatorio = (f, dados) => (typeof f.required === "function" ? f.required(dados || {}) : Boolean(f.required));
+
 function CamposEmSecoes({ campos, data, setField, editando, colunas, colunasPorSecao }) {
   const secoes = [];
   for (const campo of campos) {
@@ -2608,7 +2615,7 @@ function CamposEmSecoes({ campos, data, setField, editando, colunas, colunasPorS
                     ? { gridColumn: "1 / -1" } : undefined}
               >
                 <Field
-                  field={f}
+                  field={typeof f.required === "function" ? { ...f, required: obrigatorio(f, data) } : f}
                   value={data[f.key]}
                   onChange={v => setField(f.key, v)}
                   disabled={f.readOnlyOnEdit && editando}
@@ -4000,7 +4007,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
       if (f.type === "endereco") return Boolean(valor?.logradouro && valor?.cidade && valor?.uf);
       return Boolean(valor);
     };
-    const missing = camposVisiveis.filter(f => f.required && !preenchido(f));
+    const missing = camposVisiveis.filter(f => obrigatorio(f, data) && !preenchido(f));
     if (missing.length) {
       setError(`Preencha: ${missing.map(f => f.label).join(", ")}`);
       return;

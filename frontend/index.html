@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.072";
+const VERSAO_SISTEMA = "1.073";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.073", texto: "NF-e: campos na nova arrumação desenhada" },
   { versao: "1.072", texto: "NF-e: tela de cadastro mais compacta" },
   { versao: "1.071", texto: "NF-e: tela de cadastro sem as linhas entre as seções" },
   { versao: "1.070", texto: "NF-e: local de retirada da mercadoria, escolhido do cadastro" },
@@ -6285,17 +6286,19 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
+          {/* Layout desenhado pelo Leandro (1.073): grade de 4 colunas, e
+              "span N" é quantas colunas o campo ocupa. */}
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
-            <div className="nf-grid-3">
-              <div className="field-group">
+            <div className="nf-grade4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Natureza da operação</label>
                 <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Colaborador responsável</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1 }}>
+                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
                     <option value="">Nenhum</option>
                     {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
@@ -6308,32 +6311,29 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   {FINALIDADES_OPERACAO.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-            </div>
 
-            {/* Complementar, ajuste e devolução precisam apontar a nota de
-                origem: a SEFAZ recusa sem essa referência. */}
-            {finalidadeOperacao !== "Normal" && (
-              <div className="field-group">
-                <label className="field-label">
-                  Chave da NF-e de origem<span className="req">*</span>
-                </label>
-                <input
-                  value={chaveNfeReferenciada}
-                  inputMode="numeric"
-                  placeholder="44 dígitos — pode colar com espaços"
-                  onChange={e => setChaveNfeReferenciada(e.target.value.replace(/\D/g, "").slice(0, 44))}
-                />
-                <p className="hint">
-                  {chaveNfeReferenciada.length === 44
-                    ? "Chave completa."
-                    : `${chaveNfeReferenciada.length} de 44 dígitos — é a nota que está sendo ${finalidadeOperacao.toLowerCase() === "devolução" ? "devolvida" : "complementada ou ajustada"}.`}
-                </p>
-              </div>
-            )}
-            {/* Três colunas: com a grade de duas, a hora caía sozinha na
-                linha de baixo. */}
-            <div className="nf-grid-3">
-              <div className="field-group">
+              {/* Complementar, ajuste e devolução precisam apontar a nota de
+                  origem: a SEFAZ recusa sem essa referência. */}
+              {finalidadeOperacao !== "Normal" && (
+                <div className="field-group" style={{ gridColumn: "span 4" }}>
+                  <label className="field-label">
+                    Chave da NF-e de origem<span className="req">*</span>
+                  </label>
+                  <input
+                    value={chaveNfeReferenciada}
+                    inputMode="numeric"
+                    placeholder="44 dígitos — pode colar com espaços"
+                    onChange={e => setChaveNfeReferenciada(e.target.value.replace(/\D/g, "").slice(0, 44))}
+                  />
+                  <p className="hint">
+                    {chaveNfeReferenciada.length === 44
+                      ? "Chave completa."
+                      : `${chaveNfeReferenciada.length} de 44 dígitos — é a nota que está sendo ${finalidadeOperacao.toLowerCase() === "devolução" ? "devolvida" : "complementada ou ajustada"}.`}
+                  </p>
+                </div>
+              )}
+
+              <div className="field-group" style={{ gridColumnStart: 1 }}>
                 <label className="field-label">Data de emissão</label>
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
               </div>
@@ -6352,11 +6352,11 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
           <div className="nf-section">
             <h4 className="nf-section-title">Destinatário</h4>
-            <div className="endereco-grid">
-              <div className="field-group">
+            <div className="nf-grade4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Cliente<span className="req">*</span></label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={destinatarioId} onChange={e => escolherDestinatario(e.target.value)} style={{ flex: 1 }}>
+                  <select value={destinatarioId} onChange={e => escolherDestinatario(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
                     <option value="">Selecione…</option>
                     {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
                   </select>
@@ -6368,25 +6368,23 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <label className="field-label">CNPJ / CPF</label>
                 <input value={clienteSelecionado?.documento || ""} disabled placeholder="Selecione o cliente" />
               </div>
-            </div>
-            <div className="endereco-grid">
               <div className="field-group">
+                <label className="field-label">Contribuinte</label>
+                <input value={clienteSelecionado?.contribuinte || ""} disabled placeholder="Selecione o cliente" />
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Presença do comprador</label>
                 <select value={indicadorPresenca} onChange={e => setIndicadorPresenca(e.target.value)}>
                   {INDICADORES_PRESENCA.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Contribuinte</label>
-                <input value={clienteSelecionado?.contribuinte || ""} disabled placeholder="Selecione o cliente" />
               </div>
             </div>
           </div>
 
           <div className="nf-section">
             <h4 className="nf-section-title">Local de retirada</h4>
-            <div className="endereco-grid">
-              <div className="field-group">
+            <div className="nf-grade4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Retirada em</label>
                 <select value={localRetiradaId} onChange={e => setLocalRetiradaId(e.target.value)}>
                   <option value="">Endereço da própria empresa (não informar)</option>
@@ -6400,7 +6398,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   })}
                 </select>
               </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Endereço da retirada</label>
                 <input disabled value={localRetirada ? enderecoDaRetirada(localRetirada) : ""}
                   placeholder="Escolha só quando a mercadoria sai de outro endereço" />
@@ -6411,14 +6409,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
           <div className="nf-section">
             <h4 className="nf-section-title">Fatura</h4>
-            <div className="endereco-grid">
-              <div className="field-group">
+            <div className="nf-grade4">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Forma de pagamento</label>
                 <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
                   {FORMAS_PAGAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+              <div className="field-group" style={{ gridColumn: "span 2", display: "flex", alignItems: "flex-end" }}>
                 <label className={`nf-toggle ${consumidorFinal ? "nf-toggle-ativo" : ""}`}>
                   <input type="checkbox" checked={consumidorFinal} onChange={e => setConsumidorFinal(e.target.checked)} />
                   <span>Venda para consumidor final</span>
@@ -6429,17 +6427,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
 
           <div className="nf-section">
             <h4 className="nf-section-title">Transporte</h4>
-            <div className="field-group">
-              <label className="field-label">Modalidade do frete</label>
-              <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
-                {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div className="endereco-grid">
+            <div className="nf-grade4">
               <div className="field-group">
+                <label className="field-label">Modalidade do frete</label>
+                <select value={modalidadeFrete} onChange={e => setModalidadeFrete(e.target.value)}>
+                  {MODALIDADES_FRETE.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
                 <label className="field-label">Transportadora</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)} style={{ flex: 1 }}>
+                  <select value={transportadoraId} onChange={e => setTransportadoraId(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
                     <option value="">Nenhuma</option>
                     {(transportadoras || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
@@ -6449,7 +6447,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
               <div className="field-group">
                 <label className="field-label">Cavalo (placa)</label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1 }}>
+                  <select value={veiculoId} onChange={e => setVeiculoId(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
                     <option value="">Nenhum</option>
                     {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                   </select>
@@ -6472,9 +6470,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                 </select>
               </div>
-            </div>
-            <div className="nf-grid-4">
-              <div className="field-group">
+              {/* Volumes começam linha nova: o quarto lugar ao lado dos
+                  reboques fica vazio, como no desenho. */}
+              <div className="field-group" style={{ gridColumnStart: 1 }}>
                 <label className="field-label">Volumes (qtd.)</label>
                 <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />
               </div>
@@ -6537,8 +6535,27 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
           </div>
 
           <div className="nf-section">
-            <h4 className="nf-section-title">Frete, seguro e desconto</h4>
-            <div className="nf-grid-3">
+            <h4 className="nf-section-title">Impostos</h4>
+            {/* Ordem desenhada pelo Leandro: ICMS e ICMS ST, depois os
+                valores que mexem no total (frete, seguro, desconto, outras
+                despesas) e o IPI. */}
+            <div className="nf-grade4">
+              <div className="field-group">
+                <label className="field-label">Base de cálculo do ICMS (R$)</label>
+                <InputMoeda value={baseCalculoIcms} onChange={setBaseCalculoIcms} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS (R$)</label>
+                <InputMoeda value={valorIcms} onChange={setValorIcms} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Base de cálculo do ICMS ST (R$)</label>
+                <InputMoeda value={baseCalculoIcmsSt} onChange={setBaseCalculoIcmsSt} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor do ICMS ST (R$)</label>
+                <InputMoeda value={valorIcmsSt} onChange={setValorIcmsSt} />
+              </div>
               <div className="field-group">
                 <label className="field-label">Valor do frete (R$)</label>
                 <InputMoeda value={valorFrete} onChange={setValorFrete} />
@@ -6551,55 +6568,38 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 <label className="field-label">Desconto (R$)</label>
                 <InputMoeda value={valorDesconto} onChange={setValorDesconto} />
               </div>
-            </div>
-            <div className="field-group" style={{ marginBottom: 0 }}>
-              <label className="field-label">Informações complementares</label>
-              {/* Texto longo por natureza: regime especial, número de
-                  contrato, instrução de entrega. Uma linha só obrigava a
-                  rolar o campo para reler. */}
-              <textarea
-                rows={4}
-                value={informacoesComplementares}
-                onChange={e => setInformacoesComplementares(e.target.value)}
-                style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
-              />
-              <p className="hint">
-                A mensagem fixa cadastrada em Configurações é acrescentada automaticamente ao emitir.
-              </p>
-            </div>
-          </div>
-
-          <div className="nf-section">
-            <h4 className="nf-section-title">Impostos</h4>
-            <div className="nf-grid-3">
               <div className="field-group">
-                <label className="field-label">Base de cálculo do ICMS (R$)</label>
-                <InputMoeda value={baseCalculoIcms} onChange={setBaseCalculoIcms} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Valor do ICMS (R$)</label>
-                <InputMoeda value={valorIcms} onChange={setValorIcms} />
+                <label className="field-label">Outras despesas (R$)</label>
+                <InputMoeda value={outrasDespesas} onChange={setOutrasDespesas} />
               </div>
               <div className="field-group">
                 <label className="field-label">Valor do IPI (R$)</label>
                 <InputMoeda value={valorIpi} onChange={setValorIpi} />
               </div>
             </div>
-            <div className="nf-grid-3">
-              <div className="field-group">
-                <label className="field-label">Base de cálculo do ICMS ST (R$)</label>
-                <InputMoeda value={baseCalculoIcmsSt} onChange={setBaseCalculoIcmsSt} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Valor do ICMS ST (R$)</label>
-                <InputMoeda value={valorIcmsSt} onChange={setValorIcmsSt} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Outras despesas (R$)</label>
-                <InputMoeda value={outrasDespesas} onChange={setOutrasDespesas} />
+            <p className="hint">ICMS e ICMS ST são informativos (já embutidos no valor dos itens). IPI e outras despesas entram no total da nota.</p>
+          </div>
+
+          {/* Sem título: as informações complementares, logo abaixo dos
+              impostos. */}
+          <div className="nf-section">
+            <div className="nf-grade4">
+              <div className="field-group" style={{ gridColumn: "span 4" }}>
+                <label className="field-label">Informações complementares</label>
+                {/* Texto longo por natureza: regime especial, número de
+                    contrato, instrução de entrega. Uma linha só obrigava a
+                    rolar o campo para reler. */}
+                <textarea
+                  rows={4}
+                  value={informacoesComplementares}
+                  onChange={e => setInformacoesComplementares(e.target.value)}
+                  style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+                />
+                <p className="hint">
+                  A mensagem fixa cadastrada em Configurações é acrescentada automaticamente ao emitir.
+                </p>
               </div>
             </div>
-            <p className="hint" style={{ marginTop: -4 }}>ICMS e ICMS ST são informativos (já embutidos no valor dos itens). IPI e outras despesas entram no total da nota.</p>
           </div>
 
           <div className="nf-total-card">
@@ -11902,6 +11902,12 @@ function ErpBiomassa() {
         .modal-nfe .hint { margin: 1px 0 0; font-size: 11px; }
         .modal-nfe .nf-toggle { padding-top: 3px; padding-bottom: 3px; }
         .modal-nfe .endereco-grid, .modal-nfe .nf-grid-3, .modal-nfe .nf-grid-4 { gap: 6px; }
+        .nf-grade4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; }
+        .modal-nfe .nf-grade4 { gap: 0 6px; }
+        @media (max-width: 640px) {
+          .nf-grade4 { grid-template-columns: 1fr; }
+          .nf-grade4 > * { grid-column: 1 / -1 !important; }
+        }
         /* O botão + ao lado do campo acompanha a altura menor. */
         .modal-nfe .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }
         .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }

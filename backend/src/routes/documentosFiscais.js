@@ -225,7 +225,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    destinatarioId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id,
+    destinatarioId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
     naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     finalidadeOperacao, chaveNfeReferenciada, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
@@ -287,6 +287,7 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       veiculoId: veiculoId || undefined,
       veiculoReboqueId: veiculoReboqueId || undefined,
       veiculoReboque2Id: veiculoReboque2Id || undefined,
+      veiculoReboque3Id: veiculoReboque3Id || undefined,
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
       localRetiradaId: localRetiradaId ? Number(localRetiradaId) : undefined,
       numero,

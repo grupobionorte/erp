@@ -1011,12 +1011,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.073";
+const VERSAO_SISTEMA = "1.074";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.074", texto: "NF-e: campo do 3º reboque" },
   { versao: "1.073", texto: "NF-e: campos na nova arrumação desenhada" },
   { versao: "1.072", texto: "NF-e: tela de cadastro mais compacta" },
   { versao: "1.071", texto: "NF-e: tela de cadastro sem as linhas entre as seções" },
@@ -6121,6 +6122,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [veiculoId, setVeiculoId] = useState(nota?.veiculoId ? String(nota.veiculoId) : "");
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(nota?.veiculoReboqueId ? String(nota.veiculoReboqueId) : "");
   const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(nota?.veiculoReboque2Id ? String(nota.veiculoReboque2Id) : "");
+  const [veiculoReboque3Id, setVeiculoReboque3Id] = useState(nota?.veiculoReboque3Id ? String(nota.veiculoReboque3Id) : "");
 
   // Local de retirada: de onde a mercadoria sai, quando não é o endereço da
   // empresa (fazenda do produtor, pátio de terceiro). Pode ser cliente ou
@@ -6236,6 +6238,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         veiculoId: veiculoId ? Number(veiculoId) : null,
         veiculoReboqueId: veiculoReboqueId ? Number(veiculoReboqueId) : null,
         veiculoReboque2Id: veiculoReboque2Id ? Number(veiculoReboque2Id) : null,
+        veiculoReboque3Id: veiculoReboque3Id ? Number(veiculoReboque3Id) : null,
         localRetiradaId: localRetiradaId ? Number(localRetiradaId) : null,
         colaboradorResponsavelId: colaboradorResponsavelId ? Number(colaboradorResponsavelId) : undefined,
         dataEmissao: dataEmissao || undefined,
@@ -6470,8 +6473,14 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                   {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                 </select>
               </div>
-              {/* Volumes começam linha nova: o quarto lugar ao lado dos
-                  reboques fica vazio, como no desenho. */}
+              <div className="field-group">
+                <label className="field-label">3º reboque</label>
+                <select value={veiculoReboque3Id} onChange={e => setVeiculoReboque3Id(e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                </select>
+              </div>
+              {/* Volumes começam linha nova. */}
               <div className="field-group" style={{ gridColumnStart: 1 }}>
                 <label className="field-label">Volumes (qtd.)</label>
                 <input type="number" value={quantidadeVolumes} onChange={e => setQuantidadeVolumes(e.target.value)} />

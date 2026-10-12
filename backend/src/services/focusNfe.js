@@ -221,6 +221,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     placaComUf(veiculo) ? `CAVALO: ${placaComUf(veiculo)}` : null,
     placaComUf(documento.veiculoReboque) ? `REBOQUE: ${placaComUf(documento.veiculoReboque)}` : null,
     placaComUf(documento.veiculoReboque2) ? `REBOQUE 2: ${placaComUf(documento.veiculoReboque2)}` : null,
+    placaComUf(documento.veiculoReboque3) ? `REBOQUE 3: ${placaComUf(documento.veiculoReboque3)}` : null,
   ].filter(Boolean).join("\n") || null;
 
   return {

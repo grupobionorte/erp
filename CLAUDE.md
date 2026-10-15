@@ -58,6 +58,12 @@ um cadastro é acrescentar uma entrada ali mais uma rota no servidor.
 Telas próprias: Vendas/NF-e, CT-e, MDF-e, Ponto, Agenda, Manutenção, Contas
 a pagar, Relatórios.
 
+Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
+transportadoras, motoristas e veículos de uma empresa para outra
+(`lib/copiarCadastros.js`). É cópia, nunca mudança de dono; pula quem já existe
+(CNPJ, CPF ou placa) e mostra prévia antes de gravar. Motorista funcionário
+entra como terceiro, sem vínculo com colaborador.
+
 Fora do ERP: `tablet-ponto.html` (PWA do relógio de ponto, com
 reconhecimento facial) e `agenda.html` (PWA da agenda no celular, com
 notificações push).

@@ -3,6 +3,7 @@ const prisma = require("../lib/prisma");
 const { exigirAdmin } = require("../middleware/auth");
 
 const asyncHandler = require("../lib/asyncHandler");
+const { executar, TIPOS } = require("../lib/copiarCadastros");
 const router = express.Router();
 
 // Gerenciar a lista de empresas (e a numeração fiscal de cada uma) é
@@ -30,6 +31,31 @@ router.post("/:id/reativar", asyncHandler(async (req, res) => {
     include: { endereco: true },
   });
   res.json(empresa);
+}));
+
+// Copia cadastros de uma empresa do grupo para outra. Sem "aplicar: true" só
+// devolve a prévia (o que seria copiado e o que seria pulado), sem gravar.
+router.post("/copiar-cadastros", asyncHandler(async (req, res) => {
+  const origemId = Number(req.body.origemId);
+  const destinoId = Number(req.body.destinoId);
+  const tipos = Array.isArray(req.body.tipos) ? req.body.tipos.filter((t) => TIPOS.includes(t)) : [];
+
+  if (!origemId || !destinoId) return res.status(400).json({ erro: "Escolha a empresa de origem e a de destino" });
+  if (origemId === destinoId) return res.status(400).json({ erro: "A origem e o destino precisam ser empresas diferentes" });
+  if (!tipos.length) return res.status(400).json({ erro: "Escolha ao menos um tipo de cadastro" });
+
+  const empresas = await prisma.empresa.findMany({
+    where: { id: { in: [origemId, destinoId] }, ativo: true },
+    select: { id: true, razaoSocial: true },
+  });
+  if (empresas.length !== 2) return res.status(404).json({ erro: "Empresa de origem ou de destino não encontrada" });
+
+  const aplicar = req.body.aplicar === true;
+  const resultado = await executar({ origemId, destinoId, tipos, aplicar });
+  if (aplicar) {
+    console.log(`[copiar-cadastros] ${req.usuario.id} copiou ${tipos.join(",")} de ${origemId} para ${destinoId}`);
+  }
+  res.json({ aplicado: aplicar, ...resultado });
 }));
 
 router.post("/", asyncHandler(async (req, res) => {

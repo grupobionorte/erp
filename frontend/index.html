@@ -1033,12 +1033,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.081";
+const VERSAO_SISTEMA = "1.082";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.082", texto: "Configurações: copiar cadastros (clientes, fornecedores, transportadoras, motoristas e veículos) de uma empresa para outra" },
   { versao: "1.081", texto: "Agenda: botão Testar aviso e lembretes (resumo das 7h e 1 hora antes) sem repetição" },
   { versao: "1.080", texto: "Clientes: observação do ICMS da GF, preenchida pela extensão do SISFLORA" },
   { versao: "1.079", texto: "Clientes: CC-SEMA e memorial descritivo, preenchidos na GF pela extensão do SISFLORA" },
@@ -5190,6 +5191,148 @@ function usePaginacaoLocal(lista, reiniciar) {
   return { itens, pagina: atual, paginas, total: todos.length, controle };
 }
 
+// Copia cadastros (clientes, fornecedores, transportadoras, motoristas e
+// veículos) de uma empresa do grupo para outra. É cópia: o cadastro de origem
+// não é mexido, porque já pode estar em notas e CT-e emitidos. Sempre mostra
+// a prévia antes de gravar.
+const TIPOS_COPIA = [
+  { chave: "clientes", rotulo: "Clientes" },
+  { chave: "fornecedores", rotulo: "Fornecedores" },
+  { chave: "transportadoras", rotulo: "Transportadoras" },
+  { chave: "motoristas", rotulo: "Motoristas" },
+  { chave: "veiculos", rotulo: "Veículos" },
+];
+
+function CopiarCadastrosModal({ onFechar }) {
+  const [empresas, setEmpresas] = useState(null);
+  const [origemId, setOrigemId] = useState("");
+  const [destinoId, setDestinoId] = useState("");
+  const [tipos, setTipos] = useState(new Set(TIPOS_COPIA.map(t => t.chave)));
+  const [previa, setPrevia] = useState(null);
+  const [concluido, setConcluido] = useState(false);
+  const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    apiRequest("/empresas").then(setEmpresas).catch(e => setErro(e.message));
+  }, []);
+
+  // Mudou qualquer escolha: a prévia anterior não vale mais.
+  const mudar = (fn) => (...args) => { fn(...args); setPrevia(null); setConcluido(false); setErro(""); };
+  const alternarTipo = mudar((chave) => setTipos(atual => {
+    const novo = new Set(atual);
+    novo.has(chave) ? novo.delete(chave) : novo.add(chave);
+    return novo;
+  }));
+
+  const chamar = async (aplicar) => {
+    setOcupado(true); setErro("");
+    try {
+      const r = await apiRequest("/empresas/copiar-cadastros", {
+        method: "POST",
+        body: JSON.stringify({ origemId: Number(origemId), destinoId: Number(destinoId), tipos: [...tipos], aplicar }),
+      });
+      setPrevia(r);
+      setConcluido(aplicar);
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setOcupado(false); }
+  };
+
+  const nomeDe = (id) => empresas?.find(e => String(e.id) === String(id))?.razaoSocial || "";
+  const pronto = origemId && destinoId && origemId !== destinoId && tipos.size > 0;
+
+  const confirmar = () => {
+    const total = Object.values(previa.resumo).reduce((soma, r) => soma + r.copiar, 0);
+    if (!window.confirm(`Copiar ${total} cadastro(s) de ${nomeDe(origemId)} para ${nomeDe(destinoId)}?\n\nOs cadastros da origem não são alterados.`)) return;
+    chamar(true);
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 620 }}>
+        <div className="modal-header">
+          <h3>Copiar cadastros entre empresas</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          {empresas === null ? <p className="hint">Carregando empresas…</p> : (
+            <>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Copiar de</label>
+                  <select value={origemId} onChange={e => mudar(setOrigemId)(e.target.value)}>
+                    <option value="">Escolha…</option>
+                    {empresas.map(e => <option key={e.id} value={e.id}>{e.razaoSocial}</option>)}
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Para</label>
+                  <select value={destinoId} onChange={e => mudar(setDestinoId)(e.target.value)}>
+                    <option value="">Escolha…</option>
+                    {empresas.map(e => <option key={e.id} value={e.id}>{e.razaoSocial}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="field-group">
+                <label className="field-label">O que copiar</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px" }}>
+                  {TIPOS_COPIA.map(t => (
+                    <label key={t.chave} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <input type="checkbox" checked={tipos.has(t.chave)} onChange={() => alternarTipo(t.chave)} /> {t.rotulo}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <p className="hint">
+                Só cadastros ativos. Quem já existe na empresa de destino (mesmo CNPJ, CPF ou placa) é pulado,
+                sem duplicar. Os cadastros da origem não são alterados.
+              </p>
+            </>
+          )}
+
+          {previa && (
+            <div style={{ marginTop: 12 }}>
+              <strong>{concluido ? "Copiado" : "Prévia — nada foi gravado ainda"}</strong>
+              <table className="data-table tabela-densa" style={{ marginTop: 6 }}>
+                <thead><tr><th>Cadastro</th><th>{concluido ? "Copiados" : "Serão copiados"}</th><th>Já existiam</th></tr></thead>
+                <tbody>
+                  {TIPOS_COPIA.filter(t => previa.resumo[t.chave]).map(t => (
+                    <tr key={t.chave}>
+                      <td>{t.rotulo}</td>
+                      <td>{previa.resumo[t.chave].copiar}</td>
+                      <td title={previa.resumo[t.chave].pulados.join("\n")}>{previa.resumo[t.chave].pular}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {previa.avisos.map((a, i) => <p key={i} className="hint">⚠ {a}</p>)}
+            </div>
+          )}
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar}>{concluido ? "Fechar" : "Cancelar"}</button>
+          {!concluido && (
+            <>
+              <button className="btn" disabled={!pronto || ocupado} onClick={() => chamar(false)}>
+                {ocupado && !previa ? "Calculando…" : "Ver prévia"}
+              </button>
+              {previa && (
+                <button className="btn btn-primary" disabled={ocupado} onClick={confirmar}>
+                  {ocupado ? "Copiando…" : "Copiar agora"}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModuleView({ moduleKey }) {
   const config = MODULES[moduleKey];
   const Icon = config.icon;
@@ -5198,6 +5341,7 @@ function ModuleView({ moduleKey }) {
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [copiando, setCopiando] = useState(false);
   const filtered = (items || []).filter(it => {
     if (!query) return true;
     const hay = JSON.stringify(it).toLowerCase();
@@ -5257,10 +5401,16 @@ function ModuleView({ moduleKey }) {
             </p>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
-          <Plus size={16} /> Novo
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {moduleKey === "empresas" && (
+            <button className="btn" onClick={() => setCopiando(true)}>Copiar cadastros</button>
+          )}
+          <button className="btn btn-primary" onClick={() => { setEditing(null); setShowForm(true); }}>
+            <Plus size={16} /> Novo
+          </button>
+        </div>
       </div>
+      {copiando && <CopiarCadastrosModal onFechar={() => setCopiando(false)} />}
 
       {erro && (
         <div className="error-banner">

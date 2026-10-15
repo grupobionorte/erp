@@ -112,6 +112,14 @@ function somenteDigitos(valor) {
   return String(valor).replace(/\D/g, "") || undefined;
 }
 
+// Texto livre que vai ao XML. O schema da SEFAZ não aceita espaço no começo
+// nem no fim (padrão "[!-ÿ]...[!-ÿ]"): "AKAD SEGUROS S.A " com um espaço no
+// final derrubou um MDF-e com erro de schema. Também junta espaços repetidos.
+function textoLimpo(valor) {
+  const limpo = String(valor ?? "").replace(/\s+/g, " ").trim();
+  return limpo || undefined;
+}
+
 // Partes de data/hora de um instante, já no fuso informado.
 function partesNoFuso(d, timeZone) {
   return Object.fromEntries(
@@ -987,10 +995,10 @@ function montarPayloadMdfe({
             responsavel_seguro: documento.seguroResponsavel || "1",
             cnpj_responsavel:
               (documento.seguroResponsavel || "1") === "1" ? somenteDigitos(empresa.cnpj) : undefined,
-            nome_seguradora: documento.seguroNomeSeguradora,
+            nome_seguradora: textoLimpo(documento.seguroNomeSeguradora),
             cnpj_seguradora: somenteDigitos(documento.seguroCnpjSeguradora),
-            numero_apolice: documento.seguroNumeroApolice || undefined,
-            numero_averbacao: documento.seguroNumeroAverbacao || undefined,
+            numero_apolice: textoLimpo(documento.seguroNumeroApolice),
+            numero_averbacao: textoLimpo(documento.seguroNumeroAverbacao),
           },
         ]
       : undefined,
@@ -1129,6 +1137,18 @@ function validarPayloadMdfe(payload) {
     problemas.push(
       "Seguro da carga não informado — obrigatório no modal rodoviário (seguradora, CNPJ e apólice)."
     );
+  }
+  // Dentro do grupo do seguro, nome e CNPJ da seguradora são obrigatórios no
+  // schema: sem o CNPJ a SEFAZ devolve "Missing child element(s). Expected is
+  // CNPJ", que não diz qual campo faltou.
+  for (const seguro of payload.seguros_carga || []) {
+    if (!seguro.nome_seguradora) problemas.push("Nome da seguradora não informado.");
+    if (!/^\d{14}$/.test(seguro.cnpj_seguradora || "")) {
+      problemas.push(
+        "CNPJ da seguradora não informado ou incompleto (14 números). " +
+        "Preencha no cadastro da empresa, em Configurações, ou no manifesto."
+      );
+    }
   }
   // O percurso lista só as UFs intermediárias.
   if ((payload.percursos || []).some((p) => p.uf_percurso === payload.uf_inicio || p.uf_percurso === payload.uf_fim)) {

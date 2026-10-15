@@ -1044,12 +1044,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.084";
+const VERSAO_SISTEMA = "1.085";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.085", texto: "MDF-e: CNPJ da seguradora obrigatório e espaços sobrando no nome da seguradora removidos" },
   { versao: "1.084", texto: "Empresa: seguradora, CNPJ e apólice no cadastro; o MDF-e novo já vem com o seguro preenchido" },
   { versao: "1.083", texto: "Emissão: cada empresa usa o próprio token da Focus (corrige \"CNPJ do emitente não autorizado\")" },
   { versao: "1.082", texto: "Configurações: copiar cadastros (clientes, fornecedores, transportadoras, motoristas e veículos) de uma empresa para outra" },
@@ -5977,6 +5978,12 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
     if (!selecionados.length) { setErro("Selecione ao menos um CT-e."); return; }
     if (!seguro.nomeSeguradora || !seguro.numeroApolice) {
       setErro("Seguradora e número da apólice são obrigatórios no modal rodoviário.");
+      return;
+    }
+    // O CNPJ da seguradora é obrigatório no XML; sem ele a SEFAZ recusa com
+    // um erro de schema difícil de entender.
+    if (String(seguro.cnpjSeguradora || "").replace(/\D/g, "").length !== 14) {
+      setErro("Informe o CNPJ da seguradora completo (14 números).");
       return;
     }
     setErro("");

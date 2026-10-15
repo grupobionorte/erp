@@ -1498,6 +1498,58 @@ async function rejeitadoSemValorNaFocus(documento) {
   return { pode: true };
 }
 
+// Apaga o documento e o que pendura nele. Só para o que nunca teve valor
+// fiscal: rascunho, rejeitado conferido na Focus, ou descartado.
+function apagarDocumentoDeVez(id) {
+  return prisma.$transaction([
+    prisma.cteDocumento.deleteMany({ where: { cteId: id } }),
+    prisma.documentoItem.deleteMany({ where: { documentoId: id } }),
+    prisma.documentoEvento.deleteMany({ where: { documentoId: id } }),
+    prisma.cartaCorrecao.deleteMany({ where: { documentoId: id } }),
+    // Solta os documentos que este manifesto carregava, se for um MDFe.
+    prisma.documentoFiscal.updateMany({ where: { mdfeId: id }, data: { mdfeId: null } }),
+    prisma.documentoFiscal.delete({ where: { id } }),
+  ]);
+}
+
+// Limpeza dos "cancelados" que nunca valeram: antes da 1.088, excluir um
+// rascunho ou rejeitado o deixava na lista como cancelado. Só entra quem
+// não tem chave, protocolo nem data de autorização — cancelado de verdade na
+// SEFAZ tem os três e nunca é tocado. Cada um ainda é conferido na Focus,
+// como na exclusão do rejeitado. Sem "aplicar", só conta.
+router.post("/limpar-descartados", asyncHandler(async (req, res) => {
+  const tipo = ["NFe", "CTe", "MDFe"].includes(req.body?.tipo) ? req.body.tipo : null;
+  if (!tipo) return res.status(400).json({ erro: "Informe o tipo de documento" });
+
+  const candidatos = await prisma.documentoFiscal.findMany({
+    where: {
+      tipo,
+      empresaId: req.usuario.empresaId,
+      status: "cancelado",
+      chaveAcesso: null,
+      protocoloAutorizacao: null,
+      dataAutorizacao: null,
+    },
+    orderBy: { id: "asc" },
+  });
+
+  if (req.body?.aplicar !== true) return res.json({ encontrados: candidatos.length });
+
+  let apagados = 0;
+  const mantidos = [];
+  for (const documento of candidatos) {
+    const conferencia = await rejeitadoSemValorNaFocus(documento);
+    if (!conferencia.pode) {
+      mantidos.push(`nº ${documento.numero || documento.id}: ${conferencia.motivo}`);
+      continue;
+    }
+    await apagarDocumentoDeVez(documento.id);
+    apagados++;
+  }
+  console.log(`[limpar-descartados] ${req.usuario.id} ${tipo}: ${apagados} apagado(s), ${mantidos.length} mantido(s)`);
+  res.json({ encontrados: candidatos.length, apagados, mantidos });
+}));
+
 router.delete("/:id", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
 
@@ -1527,15 +1579,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
     }
   }
   if (definitivo && (existente.status === "rascunho" || existente.status === "rejeitado")) {
-    await prisma.$transaction([
-      prisma.cteDocumento.deleteMany({ where: { cteId: id } }),
-      prisma.documentoItem.deleteMany({ where: { documentoId: id } }),
-      prisma.documentoEvento.deleteMany({ where: { documentoId: id } }),
-      prisma.cartaCorrecao.deleteMany({ where: { documentoId: id } }),
-      // Solta os documentos que este manifesto carregava, se for um MDFe.
-      prisma.documentoFiscal.updateMany({ where: { mdfeId: id }, data: { mdfeId: null } }),
-      prisma.documentoFiscal.delete({ where: { id } }),
-    ]);
+    await apagarDocumentoDeVez(id);
     return res.status(204).send();
   }
 

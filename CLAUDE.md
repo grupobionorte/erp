@@ -63,6 +63,13 @@ O seguro da carga do MDF-e (seguradora, CNPJ, apólice) fica no cadastro da
 empresa (aba Fiscal) e preenche o MDF-e novo; a averbação é de cada viagem e
 é digitada no manifesto. Sem seguro no cadastro, vale o do último manifesto.
 
+**NF-e de outra empresa no CT-e:** a busca de NF-e do CT-e enxerga as
+empresas do grupo a que o usuário tem acesso (com o menu de NF-e liberado
+nelas). Escolher a nota chama `POST /documentos-fiscais/cte/importar-nfe`, que
+acha ou copia remetente (o emitente da nota) e destinatário pelo CNPJ nos
+clientes da empresa logada, procura o veículo pela placa (não cria) e devolve
+trajeto e motorista. A tela só preenche campos vazios.
+
 **Carta frete** (menu do CT-e autorizado, `routes/cartasFrete.js`): contrato e
 recibo do frete pago ao proprietário do veículo, 4 vias no layout do sistema
 anterior. Não vai à SEFAZ. O proprietário vem do cadastro do veículo (cavalo),

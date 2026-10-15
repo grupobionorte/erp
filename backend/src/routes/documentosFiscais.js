@@ -62,10 +62,14 @@ function mapCteDocumento(doc) {
 // Busca NFe já autorizadas — usado no CTe pra achar a nota pela chave de
 // acesso ou pelo número, sem precisar rolar a lista inteira. Exige pelo
 // menos 3 caracteres pra não devolver tudo a cada tecla.
+//
+// A busca enxerga as empresas do grupo que o usuário pode acessar, não só a
+// logada: é comum a NF-e sair pela Comércio e o CT-e pela Transportes, e
+// antes era preciso digitar a nota inteira à mão.
 router.get("/nfes-autorizadas", asyncHandler(async (req, res) => {
   const busca = (req.query.busca || "").trim();
-  const { empresaId } = req.usuario;
   if (busca.length < 3) return res.json([]);
+  const empresaIds = await empresasComNfeVisivel(req.usuario);
 
   const somenteDigitos = busca.replace(/\D/g, "");
   // "número" da NFe tem no máximo 9 dígitos — uma chave de acesso inteira
@@ -77,18 +81,180 @@ router.get("/nfes-autorizadas", asyncHandler(async (req, res) => {
     where: {
       tipo: "NFe",
       status: "autorizado",
-      ...(empresaId ? { empresaId } : {}),
+      empresaId: { in: empresaIds },
       OR: [
         ...(somenteDigitos ? [{ chaveAcesso: { contains: somenteDigitos } }] : []),
         ...(Number.isSafeInteger(numeroBusca) ? [{ numero: numeroBusca }] : []),
       ],
     },
-    include: { destinatario: true, itens: { include: { produto: true } } },
+    include: {
+      destinatario: true, itens: { include: { produto: true } },
+      empresa: { select: { id: true, razaoSocial: true } },
+    },
     orderBy: { dataEmissao: "desc" },
     take: 20,
   });
 
   res.json(notas);
+}));
+
+const digitos = (v) => String(v || "").replace(/\D/g, "");
+
+/**
+ * Empresas cujas NF-e o usuário pode trazer para o CT-e: a logada e as
+ * outras a que ele tem acesso (admin: todas as ativas), desde que nelas o
+ * menu de NF-e esteja liberado. É a mesma regra do login e das permissões
+ * por empresa — buscar a nota não pode abrir o que o menu fecha.
+ */
+async function empresasComNfeVisivel(usuarioSessao) {
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioSessao.id },
+    select: {
+      papel: true, permissoes: true,
+      empresas: { where: { ativo: true }, select: { id: true } },
+      permissoesPorEmpresa: { select: { empresaId: true, menus: true } },
+    },
+  });
+  const candidatas = usuario?.papel === "admin"
+    ? (await prisma.empresa.findMany({ where: { ativo: true }, select: { id: true } })).map((e) => e.id)
+    : (usuario?.empresas || []).map((e) => e.id);
+  if (usuarioSessao.empresaId && !candidatas.includes(usuarioSessao.empresaId)) candidatas.push(usuarioSessao.empresaId);
+
+  return candidatas.filter((id) => {
+    if (id === usuarioSessao.empresaId) return true;
+    const daEmpresa = usuario.permissoesPorEmpresa.find((p) => p.empresaId === id);
+    const menus = daEmpresa ? daEmpresa.menus || [] : usuario.permissoes || [];
+    // Lista vazia é "tudo liberado", como no restante do sistema.
+    return !menus.length || menus.includes("notasFiscais");
+  });
+}
+
+async function copiarEnderecoPara(tx, endereco) {
+  if (!endereco) return null;
+  const { id: _id, ...dados } = endereco;
+  const criado = await tx.endereco.create({ data: dados });
+  return criado.id;
+}
+
+/**
+ * Traz para o CT-e o que a NF-e já sabe: remetente, destinatário, trajeto,
+ * veículo e motorista. A nota pode ser de outra empresa do grupo; os
+ * cadastros, não — cada empresa tem os seus. Remetente e destinatário são
+ * procurados pelo CNPJ/CPF na empresa logada e, se não existirem, copiados
+ * (cópia, nunca mudança de dono, como em Copiar cadastros). Veículo é
+ * procurado pela placa e não é criado: a frota é cadastro de quem opera.
+ */
+router.post("/cte/importar-nfe", asyncHandler(async (req, res) => {
+  const empresaAtual = req.usuario.empresaId;
+  if (!empresaAtual) return res.status(400).json({ erro: "Escolha uma empresa no login antes de emitir CT-e" });
+
+  const nota = await prisma.documentoFiscal.findUnique({
+    where: { id: Number(req.body.notaId) },
+    include: {
+      empresa: { include: { endereco: true } },
+      destinatario: { include: { endereco: true } },
+      localRetirada: { include: { endereco: true } },
+      veiculo: true, veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
+    },
+  });
+  if (!nota || nota.tipo !== "NFe" || nota.status !== "autorizado") {
+    return res.status(404).json({ erro: "NF-e autorizada não encontrada" });
+  }
+  if (!(await empresasComNfeVisivel(req.usuario)).includes(nota.empresaId)) {
+    return res.status(403).json({ erro: "Seu usuário não tem acesso às notas dessa empresa" });
+  }
+
+  const avisos = [];
+  const criados = [];
+  const resultado = await prisma.$transaction(async (tx) => {
+    const clientePorDocumento = async (documento) => {
+      const doc = digitos(documento);
+      if (!doc) return null;
+      // Inclui os excluídos: o CNPJ é único por empresa e papel, então criar
+      // de novo falharia. Achando um excluído, usa e avisa.
+      const lista = await tx.pessoa.findMany({ where: { empresaId: empresaAtual, papel: "cliente" } });
+      const iguais = lista.filter((p) => digitos(p.documento) === doc);
+      const achado = iguais.find((p) => p.ativo) || iguais[0] || null;
+      if (achado && !achado.ativo) avisos.push(`${achado.nomeRazaoSocial} está excluído nos clientes desta empresa; reative o cadastro.`);
+      return achado;
+    };
+
+    // Remetente: quem emitiu a nota. Sendo a própria empresa logada, fica em
+    // branco, como no CT-e gerado da NF-e — o emitente é o remetente.
+    let remetenteId = null;
+    if (nota.empresaId !== empresaAtual) {
+      const emitente = nota.empresa;
+      let remetente = await clientePorDocumento(emitente.cnpj);
+      if (!remetente) {
+        remetente = await tx.pessoa.create({
+          data: {
+            tipo: "pessoa_juridica",
+            nomeRazaoSocial: emitente.razaoSocial,
+            nomeFantasia: emitente.nomeFantasia || null,
+            documento: emitente.cnpj,
+            ie: emitente.ie || null,
+            // Só afirma "Contribuinte" quando há IE; sem ela, não inventa.
+            indicadorIe: emitente.ie ? "Contribuinte" : null,
+            eCliente: true,
+            papel: "cliente",
+            enderecoId: await copiarEnderecoPara(tx, emitente.endereco),
+            empresaId: empresaAtual,
+          },
+        });
+        criados.push(`${remetente.nomeRazaoSocial} (remetente)`);
+      }
+      remetenteId = remetente.id;
+    }
+
+    let destinatarioId = null;
+    if (nota.destinatario) {
+      let destinatario = await clientePorDocumento(nota.destinatario.documento);
+      if (!destinatario) {
+        const { id: _id, criadoEm: _c, enderecoId: _e, empresaId: _emp, endereco, ...dados } = nota.destinatario;
+        destinatario = await tx.pessoa.create({
+          data: { ...dados, papel: "cliente", eCliente: true, eFornecedor: false, enderecoId: await copiarEnderecoPara(tx, endereco), empresaId: empresaAtual },
+        });
+        criados.push(`${destinatario.nomeRazaoSocial} (destinatário)`);
+      }
+      destinatarioId = destinatario.id;
+    }
+
+    // Veículos pela placa, na frota da empresa logada.
+    const frota = await tx.veiculo.findMany({ where: { empresaId: empresaAtual, ativo: true }, select: { id: true, placa: true } });
+    const placa = (v) => String(v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const naFrota = (v) => {
+      if (!v) return null;
+      const achado = frota.find((f) => placa(f.placa) === placa(v.placa));
+      if (!achado) avisos.push(`Placa ${v.placa} não está cadastrada nesta empresa: escolha o veículo à mão ou copie o cadastro.`);
+      return achado?.id || null;
+    };
+
+    return {
+      remetenteId,
+      destinatarioId,
+      veiculoId: naFrota(nota.veiculo),
+      reboquesIds: [naFrota(nota.veiculoReboque), naFrota(nota.veiculoReboque2), naFrota(nota.veiculoReboque3)],
+    };
+  });
+
+  // Trajeto: começa onde a carga foi retirada (local de retirada da nota) ou
+  // no emitente; termina no destinatário.
+  const inicio = nota.localRetirada?.endereco || nota.empresa?.endereco;
+  const fim = nota.destinatario?.endereco;
+
+  res.json({
+    ...resultado,
+    nomeMotorista: nota.nomeMotorista || null,
+    cpfMotorista: nota.cpfMotorista || null,
+    ufInicio: inicio?.uf || null,
+    origemPercurso: inicio?.cidade || null,
+    ufFim: fim?.uf || null,
+    destinoPercurso: fim?.cidade || null,
+    empresaDaNota: nota.empresa?.razaoSocial,
+    outraEmpresa: nota.empresaId !== empresaAtual,
+    criados,
+    avisos,
+  });
 }));
 
 router.get("/", asyncHandler(async (req, res) => {

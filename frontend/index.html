@@ -1056,12 +1056,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.101";
+const VERSAO_SISTEMA = "1.110";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.110", texto: "CT-e: buscar NF-e de outra empresa do grupo e trazer remetente, destinatário, trajeto, veículo e motorista" },
   { versao: "1.101", texto: "CT-e e MDF-e: listas com uma linha por registro, como a de NF-e" },
   { versao: "1.100", texto: "CT-e: emissão da carta frete (4 vias), com o proprietário do cadastro do veículo" },
   { versao: "1.091", texto: "MDF-e: veículo \"de terceiro\" sem proprietário completo é barrado antes do envio" },
@@ -10518,7 +10519,14 @@ function NfeCteField({ onSelecionar }) {
               onMouseDown={() => { onSelecionar(s); setBusca(""); setAberto(false); }}
             >
               <span className="ncm-codigo">Nº {s.numero}</span>
-              <span className="ncm-descricao">{s.destinatario?.nomeRazaoSocial} — R$ {formatarMoeda(Number(s.valorTotal || 0))}</span>
+              <span className="ncm-descricao">
+                {s.destinatario?.nomeRazaoSocial} — R$ {formatarMoeda(Number(s.valorTotal || 0))}
+                {/* Nota de outra empresa do grupo: diz de qual, para não
+                    confundir com uma nota da empresa logada. */}
+                {s.empresa && s.empresa.id !== usuarioLogado?.empresa?.id && (
+                  <span style={{ color: "#8a6d00" }}> · {s.empresa.razaoSocial}</span>
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -10527,7 +10535,7 @@ function NfeCteField({ onSelecionar }) {
   );
 }
 
-function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
+function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? diaDoInstante(cte.dataEmissao) : hoje);
   // Documento novo já nasce com o colaborador de quem está emitindo — o
@@ -10629,6 +10637,47 @@ function CteForm({ cte, clientes, produtos, transportadoras, veiculos, colaborad
       numeroRomaneio: "",
       valorCargaAverbacao: nota.valorTotal ?? "",
     });
+    importarDadosDaNota(nota);
+  };
+
+  // Além do documento, a nota traz remetente, destinatário, trajeto, veículo
+  // e motorista — inclusive quando é de outra empresa do grupo (NF-e pela
+  // Comércio, CT-e pela Transportes). Só preenche o que está vazio: o que
+  // alguém já escolheu no formulário não é trocado.
+  const [avisoImportacao, setAvisoImportacao] = useState(null);
+  const importarDadosDaNota = async (nota) => {
+    try {
+      const r = await apiRequest("/documentos-fiscais/cte/importar-nfe", {
+        method: "POST", body: JSON.stringify({ notaId: nota.id }),
+      });
+      if (r.criados.length) await recarregarClientes?.();
+      if (r.remetenteId && !remetenteId) setRemetenteId(String(r.remetenteId));
+      if (r.destinatarioId && !tomadorId) setTomadorId(String(r.destinatarioId));
+      if (r.ufInicio && !origemPercurso) {
+        setUfInicio(r.ufInicio); setOrigemPercurso(r.origemPercurso);
+        setTrajetoManual(t => ({ ...t, inicio: true }));
+      }
+      if (r.ufFim && !destinoPercurso) {
+        setUfFim(r.ufFim); setDestinoPercurso(r.destinoPercurso);
+        setTrajetoManual(t => ({ ...t, fim: true }));
+      }
+      if (r.veiculoId && !veiculoId) escolherVeiculo(String(r.veiculoId));
+      const [r1, r2, r3] = r.reboquesIds || [];
+      if (r1 && !veiculoReboqueId) setVeiculoReboqueId(String(r1));
+      if (r2 && !veiculoReboque2Id) setVeiculoReboque2Id(String(r2));
+      if (r3 && !veiculoReboque3Id) setVeiculoReboque3Id(String(r3));
+      if (r.nomeMotorista && !nomeMotorista) {
+        setNomeMotorista(r.nomeMotorista);
+        setCpfMotorista(r.cpfMotorista ? formatCPF(r.cpfMotorista) : "");
+      }
+      setAvisoImportacao({
+        texto: `Dados da NF-e nº ${nota.numero}${r.outraEmpresa ? ` (${r.empresaDaNota})` : ""} trazidos para o CT-e. Confira antes de salvar.`,
+        criados: r.criados,
+        avisos: r.avisos,
+      });
+    } catch (e) {
+      setAvisoImportacao({ texto: `O documento foi preenchido, mas os demais dados da nota não vieram: ${e.message}`, criados: [], avisos: [] });
+    }
   };
 
   const novoDocumento = () => setDocEmEdicao({ ...DOCUMENTO_VAZIO });
@@ -11002,6 +11051,15 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <div className="field-group" style={{ gridColumn: "span 2" }}>
                   <label className="field-label">Buscar nota fiscal (chave ou número)</label>
                   <NfeCteField onSelecionar={selecionarNfeParaDocumento} />
+                  {avisoImportacao && (
+                    <div className="hint" style={{ marginTop: 6 }}>
+                      {avisoImportacao.texto}
+                      {avisoImportacao.criados.length > 0 && (
+                        <div>Cadastrado nesta empresa: {avisoImportacao.criados.join(", ")}.</div>
+                      )}
+                      {avisoImportacao.avisos.map((a, i) => <div key={i} style={{ color: "#8a6d00" }}>⚠ {a}</div>)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -11710,7 +11768,7 @@ function CartaFreteModal({ cte, onClose }) {
 }
 
 function CteView({ onIrParaMdfe }) {
-  const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
+  const { items: clientes, criar: criarCliente, recarregar: recarregarClientes } = useApiCollection("clientes");
   const { items: produtos } = useApiCollection("produtos");
   const { items: transportadoras, criar: criarTransportadora } = useApiCollection("transportadoras");
   const { items: veiculos, criar: criarVeiculo } = useApiCollection("veiculos");
@@ -12181,6 +12239,7 @@ function CteView({ onIrParaMdfe }) {
         <CteForm
           cte={editando}
           clientes={clientes}
+          recarregarClientes={recarregarClientes}
           produtos={produtos}
           motoristas={motoristas}
           transportadoras={transportadoras}

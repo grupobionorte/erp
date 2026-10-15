@@ -23,15 +23,29 @@ function ambienteDoTipo(tipo) {
     : AMBIENTE_PADRAO;
 }
 
-function criarCliente(ambiente) {
-  const producao = ambiente === "producao";
+// Cada empresa (CNPJ) tem o próprio token na Focus, e a Focus só deixa emitir
+// pelo CNPJ ao qual o token pertence — com o token de outra empresa a resposta
+// é "permissao_negada: CNPJ do emitente não autorizado". Por isso o token é
+// escolhido pela empresa emitente do documento, em variáveis do Render:
+//   FOCUS_NFE_TOKEN_PRODUCAO_<CNPJ só com números>
+//   FOCUS_NFE_TOKEN_HOMOLOGACAO_<CNPJ só com números>
+// Sem a variável da empresa, vale a do ambiente e, por último, FOCUS_NFE_TOKEN
+// — o comportamento de antes, para quem só tem uma empresa ou um token
+// principal da conta. O token fica no Render e não no banco: assim ele nunca
+// viaja em resposta da API nem entra em cópia de dados.
+function tokenDoAmbiente(ambiente, cnpj) {
+  const sufixo = ambiente === "producao" ? "PRODUCAO" : "HOMOLOGACAO";
+  const digitos = String(cnpj || "").replace(/\D/g, "");
+  const limpar = (valor) => String(valor || "").trim();
+  return limpar(digitos && process.env[`FOCUS_NFE_TOKEN_${sufixo}_${digitos}`])
+    || limpar(process.env[`FOCUS_NFE_TOKEN_${sufixo}`])
+    || limpar(process.env.FOCUS_NFE_TOKEN);
+}
+
+function criarCliente(ambiente, token) {
   return axios.create({
-    baseURL: producao ? URL_PRODUCAO : URL_HOMOLOGACAO,
-    auth: {
-      username: (producao ? process.env.FOCUS_NFE_TOKEN_PRODUCAO : process.env.FOCUS_NFE_TOKEN_HOMOLOGACAO)
-        || process.env.FOCUS_NFE_TOKEN,
-      password: "",
-    },
+    baseURL: ambiente === "producao" ? URL_PRODUCAO : URL_HOMOLOGACAO,
+    auth: { username: token, password: "" },
     // O charset explícito evita que acentos (ç, ã, í...) se percam — sem
     // isso, alguns servidores presumem Latin-1 em vez de UTF-8 e os
     // caracteres acentuados saem corrompidos do outro lado (por exemplo, no
@@ -40,14 +54,19 @@ function criarCliente(ambiente) {
   });
 }
 
-const CLIENTES = { homologacao: criarCliente("homologacao"), producao: criarCliente("producao") };
+// Um cliente por ambiente + token, criado na primeira vez que é preciso.
+const CLIENTES = new Map();
 
-// Cliente do tipo de documento. Toda chamada passa por aqui, então não há
-// como um documento sair pelo ambiente errado por esquecimento.
-const clienteDe = (tipo) => CLIENTES[ambienteDoTipo(tipo)];
-
-// Compatibilidade: chamadas antigas sem tipo caem no ambiente padrão.
-const client = CLIENTES[AMBIENTE_PADRAO];
+// Cliente do tipo de documento, para a empresa emitente. Toda chamada passa
+// por aqui, então não há como um documento sair pelo ambiente — ou pelo
+// token — errado por esquecimento. Sem o CNPJ, vale o token padrão.
+function clienteDe(tipo, cnpj) {
+  const ambiente = ambienteDoTipo(tipo);
+  const token = tokenDoAmbiente(ambiente, cnpj);
+  const chave = `${ambiente}:${token}`;
+  if (!CLIENTES.has(chave)) CLIENTES.set(chave, criarCliente(ambiente, token));
+  return CLIENTES.get(chave);
+}
 
 // Tabelas de código da SEFAZ — convertidas a partir dos rótulos em
 // português que aparecem no formulário, pra montar o payload da Focus NFe.
@@ -1125,28 +1144,28 @@ const ENDPOINT_POR_TIPO = { NFe: "nfe", CTe: "cte", MDFe: "mdfe" };
 // assíncrona — por isso o fluxo típico é: enviar, depois consultar o status.
 // O mesmo par emitir/consultar serve para os três tipos de documento; só
 // muda o segmento da URL.
-async function emitir({ tipo, ref, payload }) {
-  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}?ref=${ref}`, payload);
+async function emitir({ tipo, ref, payload, cnpj }) {
+  const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}?ref=${ref}`, payload);
   return data; // { status: "processando_autorizacao", ... }
 }
 
-async function consultar({ tipo, ref }) {
-  const { data } = await clienteDe(tipo).get(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`);
+async function consultar({ tipo, ref, cnpj }) {
+  const { data } = await clienteDe(tipo, cnpj).get(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`);
   return data; // status pode ser: autorizado | erro_autorizacao | cancelado
 }
 
 // Só existe pra NFe na Focus — manda o DANFE/XML por e-mail pro
 // destinatário (ou pra qualquer e-mail que a gente passar).
-async function enviarPorEmail({ tipo, ref, emails }) {
-  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/email`, { emails });
+async function enviarPorEmail({ tipo, ref, emails, cnpj }) {
+  const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/email`, { emails });
   return data;
 }
 
 // Cancela um documento já autorizado — isso manda um evento real pra
 // SEFAZ, é bem diferente de só apagar um rascunho. A SEFAZ exige uma
 // justificativa entre 15 e 255 caracteres.
-async function cancelar({ tipo, ref, justificativa }) {
-  const { data } = await clienteDe(tipo).delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
+async function cancelar({ tipo, ref, justificativa, cnpj }) {
+  const { data } = await clienteDe(tipo, cnpj).delete(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}`, {
     data: { justificativa },
   });
   return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
@@ -1156,8 +1175,8 @@ async function cancelar({ tipo, ref, justificativa }) {
 // entre 15 e 1000 caracteres, e não serve pra corrigir valores, impostos,
 // dados cadastrais do emitente/destinatário ou datas — só detalhes como
 // descrição, endereço de entrega, etc.
-async function emitirCartaCorrecao({ tipo, ref, texto }) {
-  const { data } = await clienteDe(tipo).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
+async function emitirCartaCorrecao({ tipo, ref, texto, cnpj }) {
+  const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
   return data;
 }
 
@@ -1165,10 +1184,10 @@ async function emitirCartaCorrecao({ tipo, ref, texto }) {
 // encerrado, a SEFAZ recusa o próximo da mesma placa ("Existe MDF-e não
 // encerrado para esta placa"). Deve ser feito quando a carga chega ao
 // destino, informando onde e quando terminou a viagem.
-async function encerrarMdfe({ ref, data, sigla_uf, nome_municipio }) {
+async function encerrarMdfe({ ref, data, sigla_uf, nome_municipio, cnpj }) {
   // O caminho é /encerrar (não /encerramento), e a SEFAZ quer o NOME do
   // município, não o código IBGE.
-  const resposta = await clienteDe("MDFe").post(`/v2/mdfe/${ref}/encerrar`, {
+  const resposta = await clienteDe("MDFe", cnpj).post(`/v2/mdfe/${ref}/encerrar`, {
     data,
     sigla_uf,
     nome_municipio,

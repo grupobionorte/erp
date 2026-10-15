@@ -10,6 +10,14 @@ const router = express.Router();
 // sempre coisa de admin — inclusive só enxergar os dados completos.
 router.use(exigirAdmin);
 
+// CNPJ da seguradora vai ao MDF-e: se estiver incompleto, a SEFAZ recusa só
+// na emissão. Barra no cadastro, onde a correção é imediata.
+function problemaNoSeguro(dados) {
+  const cnpj = String(dados.seguroCnpjSeguradora || "").replace(/\D/g, "");
+  if (cnpj && cnpj.length !== 14) return "O CNPJ da seguradora precisa ter 14 números";
+  return null;
+}
+
 router.get("/", asyncHandler(async (req, res) => {
   // ?inativas=1 mostra também as desativadas — é assim que se recupera uma
   // empresa excluída por engano, já que a exclusão aqui é só uma marca.
@@ -60,6 +68,8 @@ router.post("/copiar-cadastros", asyncHandler(async (req, res) => {
 
 router.post("/", asyncHandler(async (req, res) => {
   const { endereco, ...dados } = req.body;
+  const problemaSeguro = problemaNoSeguro(dados);
+  if (problemaSeguro) return res.status(400).json({ erro: problemaSeguro });
 
   if (!dados.razaoSocial || !dados.cnpj || !dados.regimeTributario) {
     return res.status(400).json({ erro: "razaoSocial, cnpj e regimeTributario são obrigatórios" });
@@ -78,6 +88,8 @@ router.post("/", asyncHandler(async (req, res) => {
 
 router.put("/:id", asyncHandler(async (req, res) => {
   const { endereco, ...dados } = req.body;
+  const problemaSeguro = problemaNoSeguro(dados);
+  if (problemaSeguro) return res.status(400).json({ erro: problemaSeguro });
 
   const empresa = await prisma.empresa.update({
     where: { id: Number(req.params.id) },

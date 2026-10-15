@@ -970,6 +970,10 @@ const MODULES = {
       { key: "cfopPadraoCte", label: "CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
       { key: "mdfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       { key: "mdfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Manifesto (MDF-e)" },
+      // Todo MDF-e novo já traz o seguro da carga preenchido com estes dados.
+      { key: "seguroNomeSeguradora", label: "Nome da seguradora", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
+      { key: "seguroCnpjSeguradora", label: "CNPJ da seguradora", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
+      { key: "seguroNumeroApolice", label: "Número da apólice", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       // Vai em toda NF-e, somada ao que for escrito na nota.
       { key: "observacaoPadraoNfe", label: "Mensagem fixa nas informações complementares", type: "texto-longo", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
     ],
@@ -996,6 +1000,10 @@ const MODULES = {
       mdfeSerie: data.mdfeSerie || undefined,
       mdfeProximoNumero: data.mdfeProximoNumero ? Number(data.mdfeProximoNumero) : undefined,
       observacaoPadraoNfe: data.observacaoPadraoNfe || undefined,
+      // null (e não undefined) para o campo poder ser apagado na edição.
+      seguroNomeSeguradora: data.seguroNomeSeguradora || null,
+      seguroCnpjSeguradora: data.seguroCnpjSeguradora || null,
+      seguroNumeroApolice: data.seguroNumeroApolice || null,
     }),
     fromApi: (r) => ({
       id: r.id,
@@ -1020,6 +1028,9 @@ const MODULES = {
       mdfeSerie: r.mdfeSerie,
       mdfeProximoNumero: r.mdfeProximoNumero,
       observacaoPadraoNfe: r.observacaoPadraoNfe,
+      seguroNomeSeguradora: r.seguroNomeSeguradora,
+      seguroCnpjSeguradora: r.seguroCnpjSeguradora,
+      seguroNumeroApolice: r.seguroNumeroApolice,
       ativo: r.ativo !== false,
     }),
     // Exclusão de empresa é só uma marca: dá pra ver as inativas e trazer
@@ -1033,12 +1044,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.083";
+const VERSAO_SISTEMA = "1.084";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.084", texto: "Empresa: seguradora, CNPJ e apólice no cadastro; o MDF-e novo já vem com o seguro preenchido" },
   { versao: "1.083", texto: "Emissão: cada empresa usa o próprio token da Focus (corrige \"CNPJ do emitente não autorizado\")" },
   { versao: "1.082", texto: "Configurações: copiar cadastros (clientes, fornecedores, transportadoras, motoristas e veículos) de uma empresa para outra" },
   { versao: "1.081", texto: "Agenda: botão Testar aviso e lembretes (resumo das 7h e 1 hora antes) sem repetição" },
@@ -5912,11 +5924,29 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
   useEffect(() => {
     (async () => {
       try {
-        // Seguro muda pouco entre viagens: reaproveita o do último
-        // manifesto pra não obrigar a redigitar apólice toda vez.
+        // O seguro do cadastro da empresa vale primeiro. Buscado na hora, e
+        // não do que ficou guardado no login, para uma apólice renovada
+        // aparecer sem precisar sair e entrar de novo. A averbação é de cada
+        // viagem e não é preenchida.
         const manifestos = await apiRequest("/documentos-fiscais?tipo=MDFe");
         const ultimo = manifestos.find(m => m.seguroNomeSeguradora);
-        if (ultimo) {
+        let daEmpresa = null;
+        try {
+          const eu = await apiRequest("/auth/me");
+          if (eu.empresa?.seguroNomeSeguradora) daEmpresa = eu.empresa;
+        } catch { /* sem o cadastro, cai no último manifesto */ }
+
+        if (daEmpresa) {
+          setSeguro({
+            responsavel: ultimo?.seguroResponsavel || "1",
+            nomeSeguradora: daEmpresa.seguroNomeSeguradora || "",
+            cnpjSeguradora: daEmpresa.seguroCnpjSeguradora || "",
+            numeroApolice: daEmpresa.seguroNumeroApolice || "",
+            numeroAverbacao: "",
+          });
+        } else if (ultimo) {
+          // Sem seguro no cadastro: reaproveita o do último manifesto pra não
+          // obrigar a redigitar a apólice toda vez.
           setSeguro({
             responsavel: ultimo.seguroResponsavel || "1",
             nomeSeguradora: ultimo.seguroNomeSeguradora || "",

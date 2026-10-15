@@ -1044,12 +1044,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.089";
+const VERSAO_SISTEMA = "1.090";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.090", texto: "MDF-e: botão \"Limpar descartados\" apaga os cancelados que nunca foram autorizados" },
   { versao: "1.089", texto: "MDF-e: reboques do cavalo mecânico vêm do cadastro do veículo quando o CT-e não traz" },
   { versao: "1.088", texto: "Excluir rascunho ou documento rejeitado apaga de vez, sem deixar \"cancelado\" na lista" },
   { versao: "1.087", texto: "MDF-e excluído ou cancelado libera o CT-e para um manifesto novo" },
@@ -6298,6 +6299,31 @@ function MdfeView() {
   // Rascunho e rejeitado são apagados de vez, sem ficar na lista como
   // cancelado. No rejeitado o servidor confere antes na Focus que nenhuma
   // tentativa ficou valendo.
+  // Remove os "cancelados" que nunca foram autorizados (sobras de quando
+  // excluir rascunho ou rejeitado não apagava de vez). O servidor confere
+  // cada um na Focus antes de apagar.
+  const [limpando, setLimpando] = useState(false);
+  const limparDescartados = async () => {
+    try {
+      const { encontrados } = await apiRequest("/documentos-fiscais/limpar-descartados", {
+        method: "POST", body: JSON.stringify({ tipo: "MDFe" }),
+      });
+      if (!encontrados) { alert("Nenhum MDF-e descartado para limpar."); return; }
+      if (!window.confirm(
+        `Encontrei ${encontrados} MDF-e cancelado(s) que nunca foram autorizados.\n\n` +
+        "Eles serão apagados de vez. Antes, o sistema confere cada um na Focus. Os cancelados de verdade na SEFAZ não são tocados."
+      )) return;
+      setLimpando(true);
+      const r = await apiRequest("/documentos-fiscais/limpar-descartados", {
+        method: "POST", body: JSON.stringify({ tipo: "MDFe", aplicar: true }),
+      });
+      alert(`${r.apagados} apagado(s).` + (r.mantidos.length ? `\n\nMantidos:\n${r.mantidos.join("\n")}` : ""));
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível limpar: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
+    } finally { setLimpando(false); }
+  };
+
   const excluirRascunho = async (id) => {
     const mdfe = (mdfes || []).find(m => m.id === id);
     const aviso = mdfe?.status === "rejeitado"
@@ -6326,9 +6352,14 @@ function MdfeView() {
             </p>
           </div>
         </div>
+        <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn" onClick={limparDescartados} disabled={limpando}>
+          {limpando ? "Limpando…" : "Limpar descartados"}
+        </button>
         <button className="btn btn-primary" onClick={() => setMostrarGerar(true)}>
           <Plus size={16} /> Novo MDFe
         </button>
+        </div>
       </div>
 
       {erro && <p className="form-error">{erro}</p>}

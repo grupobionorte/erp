@@ -19,7 +19,8 @@ const MENUS = {
   colaboradores: { rotulo: "Colaboradores", rotas: ["/colaboradores"] },
   operacoes: { rotulo: "Operações", rotas: ["/operacoes"] },
   notasFiscais: { rotulo: "Vendas / NF-e", rotas: [] },
-  cte: { rotulo: "CT-e", rotas: [] },
+  // A carta frete sai do CT-e: quem emite CT-e emite a carta.
+  cte: { rotulo: "CT-e", rotas: ["/cartas-frete"] },
   emissao: { rotulo: "MDF-e", rotas: [] },
   equipamentos: { rotulo: "Equipamentos", rotas: [] },
   manutencao: { rotulo: "Manutenção", rotas: ["/manutencao/equipamentos", "/manutencao/ordens"] },

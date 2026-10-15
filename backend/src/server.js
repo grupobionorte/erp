@@ -25,6 +25,7 @@ const contasPagarRouter = require("./routes/contasPagar");
 const agendaRouter = require("./routes/agenda");
 const pushRouter = require("./routes/push");
 const lembretesRouter = require("./routes/lembretes");
+const cartasFreteRouter = require("./routes/cartasFrete");
 const { autenticar } = require("./middleware/auth");
 const { exigirPermissaoDeMenu } = require("./lib/permissoes");
 
@@ -75,6 +76,7 @@ app.use("/transportadoras", transportadorasRouter);
 app.use("/veiculos", veiculosRouter);
 app.use("/produtos", produtosRouter);
 app.use("/documentos-fiscais", documentosFiscaisRouter);
+app.use("/cartas-frete", cartasFreteRouter);
 app.use("/ncms", ncmsRouter);
 app.use("/cfops", cfopsRouter);
 app.use("/municipios", municipiosRouter);

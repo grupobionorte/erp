@@ -1056,12 +1056,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.100";
+const VERSAO_SISTEMA = "1.101";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.101", texto: "CT-e e MDF-e: listas com uma linha por registro, como a de NF-e" },
   { versao: "1.100", texto: "CT-e: emissão da carta frete (4 vias), com o proprietário do cadastro do veículo" },
   { versao: "1.091", texto: "MDF-e: veículo \"de terceiro\" sem proprietário completo é barrado antes do envio" },
   { versao: "1.090", texto: "MDF-e: botão \"Limpar descartados\" apaga os cancelados que nunca foram autorizados" },
@@ -6386,35 +6387,38 @@ function MdfeView() {
       )}
 
       {mdfes?.length > 0 && (
-        <table className="data-table">
+        <table className="data-table tabela-compacta">
+          {/* Mesmo padrão da lista de NF-e: uma linha por registro, colunas
+              de largura fixa e texto longo cortado com o inteiro no tooltip. */}
           <thead>
             <tr>
-              <th>Número/Série</th>
+              <th style={{ width: 80 }}>Número/Série</th>
               <th>Trajeto</th>
-              <th>Veículo</th>
-              <th>Documentos</th>
-              <th>Status</th>
-              <th>Chave / Motivo</th>
-              <th>Encerrado</th>
-              <th></th>
+              <th style={{ width: 120 }}>Veículo</th>
+              <th style={{ width: 82 }}>Documentos</th>
+              <th style={{ width: 95 }}>Status</th>
+              <th style={{ width: 150 }}>Chave / Motivo</th>
+              <th style={{ width: 82 }}>Encerrado</th>
+              <th className="actions-col"></th>
             </tr>
           </thead>
           <tbody>
             {mdfes.map(mdfe => (
               <tr key={mdfe.id}>
                 <td>{mdfe.numero || "—"}/{mdfe.serie || "—"}</td>
-                <td>
+                <td title={`${mdfe.municipioCarregamento}/${mdfe.ufInicio} → ${mdfe.municipioDescarregamento}/${mdfe.ufFim}`}>
                   {mdfe.municipioCarregamento}/{mdfe.ufInicio} → {mdfe.municipioDescarregamento}/{mdfe.ufFim}
                 </td>
-                <td style={{ whiteSpace: "nowrap" }}>
-                  {/* Placa do cavalo; os reboques ficam no tooltip, para
-                      não alargar a linha. */}
+                {/* Placa do cavalo e a contagem de reboques na mesma linha —
+                    em linha separada, a contagem deixava esse registro mais
+                    alto que os outros. As placas dos reboques ficam no
+                    tooltip. */}
+                <td title={[mdfe.veiculo, mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3]
+                  .filter(Boolean).map(r => r.placa).join(" · ")}>
                   {mdfe.veiculo?.placa || "—"}
                   {(mdfe.veiculoReboque || mdfe.veiculoReboque2 || mdfe.veiculoReboque3) && (
-                    <span className="subtle" style={{ display: "block", fontSize: 11.5 }}
-                      title={[mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3]
-                        .filter(Boolean).map(r => r.placa).join(" · ")}>
-                      +{[mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3].filter(Boolean).length} reboque(s)
+                    <span className="subtle" style={{ fontSize: 11.5 }}>
+                      {" "}+{[mdfe.veiculoReboque, mdfe.veiculoReboque2, mdfe.veiculoReboque3].filter(Boolean).length}
                     </span>
                   )}
                 </td>
@@ -6425,8 +6429,7 @@ function MdfeView() {
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· aguardando…</span>
                   )}
                 </td>
-                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    title={mdfe.chaveAcesso || mdfe.motivoRejeicao || ""}>
+                <td title={mdfe.chaveAcesso || mdfe.motivoRejeicao || ""}>
                   {mdfe.chaveAcesso || (mdfe.status === "rejeitado" ? mdfe.motivoRejeicao : null) || "—"}
                 </td>
                 <td>
@@ -6439,10 +6442,11 @@ function MdfeView() {
                 <td className="actions-col" style={{ position: "relative" }}>
                   <button
                     className="icon-btn nf-menu-trigger"
+                    style={{ padding: 2 }}
                     aria-label="Ações"
                     onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === mdfe.id ? null : mdfe.id); }}
                   >
-                    <MoreVertical size={16} />
+                    <MoreVertical size={14} />
                   </button>
                   {menuAberto === mdfe.id && (
                     <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>
@@ -12001,22 +12005,24 @@ function CteView({ onIrParaMdfe }) {
           </button>
         </div>
       ) : (
-        <table className="data-table">
+        <table className="data-table tabela-compacta">
+          {/* Mesmo padrão da lista de NF-e: uma linha por registro, colunas
+              de largura fixa e texto longo cortado com o inteiro no tooltip. */}
           <thead>
             <tr>
               <th
                 onClick={alternarOrdemNumero}
                 title="Clique para ordenar por número"
-                style={{ cursor: "pointer", userSelect: "none" }}
+                style={{ cursor: "pointer", userSelect: "none", width: 92 }}
               >
                 Número/Série{ordem === "numeroDesc" ? " ↓" : ordem === "numeroAsc" ? " ↑" : ""}
               </th>
               <th>Tomador</th>
-              <th>Trajeto</th>
-              <th>Valor</th>
-              <th>Status</th>
-              <th>Chave / Motivo</th>
-              <th>Emissão</th>
+              <th style={{ width: 230 }}>Trajeto</th>
+              <th style={{ width: 105, textAlign: "right" }}>Valor</th>
+              <th style={{ width: 95 }}>Status</th>
+              <th style={{ width: 130 }}>Chave / Motivo</th>
+              <th style={{ width: 78 }}>Emissão</th>
               <th className="actions-col"></th>
             </tr>
           </thead>
@@ -12024,16 +12030,19 @@ function CteView({ onIrParaMdfe }) {
             {ctesOrdenados.map(cte => (
               <tr key={cte.id}>
                 <td>{cte.numero ? `${cte.numero}/${cte.serie ?? "—"}` : "—"}</td>
-                <td>{cte.destinatario?.nomeRazaoSocial || "—"}</td>
-                <td>{cte.origemPercurso ? `${cte.origemPercurso}/${cte.ufInicio || "—"}` : "—"} → {cte.destinoPercurso ? `${cte.destinoPercurso}/${cte.ufFim || "—"}` : "—"}</td>
-                <td>{cte.valorTotal != null ? `R$ ${formatarMoeda(cte.valorTotal)}` : "—"}</td>
+                <td title={cte.destinatario?.nomeRazaoSocial || ""}>{cte.destinatario?.nomeRazaoSocial || "—"}</td>
+                {(() => {
+                  const trajeto = `${cte.origemPercurso ? `${cte.origemPercurso}/${cte.ufInicio || "—"}` : "—"} → ${cte.destinoPercurso ? `${cte.destinoPercurso}/${cte.ufFim || "—"}` : "—"}`;
+                  return <td title={trajeto}>{trajeto}</td>;
+                })()}
+                <td style={{ textAlign: "right" }}>{cte.valorTotal != null ? `R$ ${formatarMoeda(cte.valorTotal)}` : "—"}</td>
                 <td>
                   <StatusDocumento status={cte.status} />
                   {processando === cte.id && cte.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
                 </td>
-                <td style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
+                <td title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
                   {cte.status === "cancelado" && cte.justificativaCancelamento
                     ? `Cancelado: ${cte.justificativaCancelamento}`
                     : cte.chaveAcesso || (cte.status === "rejeitado" ? cte.motivoRejeicao : null) || "—"}
@@ -12042,10 +12051,11 @@ function CteView({ onIrParaMdfe }) {
                 <td className="actions-col" style={{ position: "relative" }}>
                   <button
                     className="icon-btn nf-menu-trigger"
+                    style={{ padding: 2 }}
                     aria-label="Ações"
                     onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === cte.id ? null : cte.id); }}
                   >
-                    <MoreVertical size={16} />
+                    <MoreVertical size={14} />
                   </button>
                   {menuAberto === cte.id && (
                     <div className="nf-dropdown" onClick={(e) => e.stopPropagation()}>

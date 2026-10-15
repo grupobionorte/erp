@@ -37,6 +37,7 @@ Variáveis essenciais no Render (serviço `erp-biomassa-backend`):
 | `JWT_SECRET` | sessões |
 | `FOCUS_NFE_BASE_URL` / `FOCUS_NFE_TOKEN` | provedor fiscal (padrão) |
 | `FOCUS_NFE_TOKEN_PRODUCAO` / `FOCUS_NFE_TOKEN_HOMOLOGACAO` | token por ambiente |
+| `FOCUS_NFE_TOKEN_PRODUCAO_<CNPJ>` / `FOCUS_NFE_TOKEN_HOMOLOGACAO_<CNPJ>` | token **da empresa** (CNPJ só com números), usado no lugar do token do ambiente quando existe. Cada empresa tem token próprio na Focus, e ela só deixa emitir pelo CNPJ dono do token (`permissao_negada`) |
 | `FOCUS_AMBIENTE_NFE` / `_CTE` / `_MDFE` | `producao` ou `homologacao`, **por documento** |
 | `TZ_FISCAL` | `America/Cuiaba` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CONTATO` | notificações push |

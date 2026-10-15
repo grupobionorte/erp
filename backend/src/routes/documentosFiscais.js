@@ -6,6 +6,17 @@ const asyncHandler = require("../lib/asyncHandler");
 const fuso = require("../lib/fuso");
 const router = express.Router();
 
+// CNPJ da empresa emitente. Cada empresa tem token próprio na Focus, e é por
+// este CNPJ que o serviço escolhe qual usar — com o token de outra empresa a
+// Focus responde "CNPJ do emitente não autorizado". Vale para todo contato com
+// o provedor (emitir, consultar, cancelar, e-mail, carta, encerramento): um
+// documento da empresa A nunca pode ser consultado com o token da B.
+async function cnpjDoEmitente(empresaId) {
+  if (!empresaId) return undefined;
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { cnpj: true } });
+  return empresa?.cnpj;
+}
+
 // Referência enviada ao provedor. A primeira tentativa mantém o formato
 // antigo ("cte-2") pra não quebrar os documentos já emitidos; a partir da
 // segunda o número da tentativa entra no fim ("cte-2-2"). Isso destrava o
@@ -810,6 +821,7 @@ router.post("/:id/encerrar", asyncHandler(async (req, res) => {
       data: dataEncerramento,
       sigla_uf: uf,
       nome_municipio: nomeMunicipio,
+      cnpj: await cnpjDoEmitente(documento.empresaId),
     });
 
     const atualizado = await prisma.documentoFiscal.update({
@@ -1066,7 +1078,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   }
 
   try {
-    await focusNfe.emitir({ tipo: documento.tipo, ref, payload });
+    await focusNfe.emitir({ tipo: documento.tipo, ref, payload, cnpj: await cnpjDoEmitente(documento.empresaId) });
     const atualizado = await prisma.documentoFiscal.update({
       where: { id },
       // Limpa o motivo da tentativa anterior — senão a tela mostra
@@ -1079,9 +1091,18 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     // Axios só coloca "Request failed with status code 400" em erro.message
     // — a explicação de verdade que a Focus NFe manda (campo inválido,
     // certificado não encontrado, etc.) vem no corpo da resposta de erro.
-    const detalheProvedor = erro.response?.data
+    let detalheProvedor = erro.response?.data
       ? JSON.stringify(erro.response.data)
       : erro.message;
+
+    // "CNPJ do emitente não autorizado" quer dizer token de outra empresa: a
+    // Focus emite só pelo CNPJ dono do token. Diz onde acertar, em vez de
+    // deixar só o código do provedor.
+    if (erro.response?.data?.codigo === "permissao_negada") {
+      const cnpj = String((await cnpjDoEmitente(documento.empresaId)) || "").replace(/\D/g, "");
+      const ambiente = focusNfe.ambienteDoTipo(documento.tipo) === "producao" ? "PRODUCAO" : "HOMOLOGACAO";
+      detalheProvedor += ` | O token usado não pertence a esta empresa. No Render, cadastre FOCUS_NFE_TOKEN_${ambiente}_${cnpj} com o token dela na Focus.`;
+    }
 
     await prisma.documentoFiscal.update({
       where: { id },
@@ -1120,7 +1141,7 @@ router.post("/:id/enviar-email", asyncHandler(async (req, res) => {
   }
 
   const ref = refDocumento(documento);
-  await focusNfe.enviarPorEmail({ tipo: documento.tipo, ref, emails });
+  await focusNfe.enviarPorEmail({ tipo: documento.tipo, ref, emails, cnpj: await cnpjDoEmitente(documento.empresaId) });
   res.json({ enviado: true, emails });
 }));
 
@@ -1135,7 +1156,7 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
   }
 
   const ref = refDocumento(documento);
-  const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });
+  const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref, cnpj: await cnpjDoEmitente(documento.empresaId) });
 
   if (resultado.status === "autorizado") {
     // A Focus NFe nomeia os campos de retorno de forma diferente por tipo
@@ -1446,7 +1467,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
 
     const ref = refDocumento(existente);
     try {
-      const resultado = await focusNfe.cancelar({ tipo: existente.tipo, ref, justificativa: justificativa.trim() });
+      const resultado = await focusNfe.cancelar({ tipo: existente.tipo, ref, justificativa: justificativa.trim(), cnpj: await cnpjDoEmitente(existente.empresaId) });
       if (resultado.status !== "cancelado") {
         return res.status(409).json({ erro: `SEFAZ não confirmou o cancelamento (status: ${resultado.status})`, detalhe: resultado });
       }
@@ -1492,7 +1513,7 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
 
   const ref = refDocumento(documento);
   try {
-    const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto: texto.trim() });
+    const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto: texto.trim(), cnpj: await cnpjDoEmitente(documento.empresaId) });
     const carta = await prisma.cartaCorrecao.create({
       data: {
         documentoId: id,
@@ -1545,7 +1566,7 @@ router.get("/:id/carta-correcao/:cartaId/status", asyncHandler(async (req, res) 
 
   const ref = refDocumento(documento);
   try {
-    const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref });
+    const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref, cnpj: await cnpjDoEmitente(documento.empresaId) });
     // A Focus só expõe o PDF/XML da carta de correção mais recente por
     // aqui — se essa não for a mais recente, avisa em vez de inventar
     // um link.

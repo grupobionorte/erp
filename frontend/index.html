@@ -1044,12 +1044,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.085";
+const VERSAO_SISTEMA = "1.086";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.086", texto: "MDF-e: \"Corrigir seguro\" no manifesto rejeitado, sem precisar excluir e gerar de novo" },
   { versao: "1.085", texto: "MDF-e: CNPJ da seguradora obrigatório e espaços sobrando no nome da seguradora removidos" },
   { versao: "1.084", texto: "Empresa: seguradora, CNPJ e apólice no cadastro; o MDF-e novo já vem com o seguro preenchido" },
   { versao: "1.083", texto: "Emissão: cada empresa usa o próprio token da Focus (corrige \"CNPJ do emitente não autorizado\")" },
@@ -6078,12 +6079,106 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
   );
 }
 
+// Corrige o seguro de um MDF-e em rascunho ou rejeitado, sem precisar
+// excluir o manifesto e gerar de novo. Pode puxar o do cadastro da empresa.
+function CorrigirSeguroMdfeModal({ mdfeId, onSalvo, onCancel }) {
+  const [seguro, setSeguro] = useState(null);
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    apiRequest(`/documentos-fiscais/${mdfeId}`)
+      .then(d => setSeguro({
+        responsavel: d.seguroResponsavel || "1",
+        nomeSeguradora: d.seguroNomeSeguradora || "",
+        cnpjSeguradora: d.seguroCnpjSeguradora || "",
+        numeroApolice: d.seguroNumeroApolice || "",
+        numeroAverbacao: d.seguroNumeroAverbacao || "",
+      }))
+      .catch(e => setErro(e.message));
+  }, [mdfeId]);
+
+  const usarDoCadastro = async () => {
+    try {
+      const eu = await apiRequest("/auth/me");
+      if (!eu.empresa?.seguroNomeSeguradora) {
+        setErro("A empresa não tem seguro no cadastro. Preencha em Configurações, aba Notas fiscais e CT-e.");
+        return;
+      }
+      // A averbação é desta viagem: fica a que já estava.
+      setSeguro(s => ({ ...s,
+        nomeSeguradora: eu.empresa.seguroNomeSeguradora || "",
+        cnpjSeguradora: eu.empresa.seguroCnpjSeguradora || "",
+        numeroApolice: eu.empresa.seguroNumeroApolice || "",
+      }));
+      setErro("");
+    } catch (e) { setErro(e.message); }
+  };
+
+  const salvar = async () => {
+    setSalvando(true); setErro("");
+    try {
+      await apiRequest(`/documentos-fiscais/${mdfeId}/seguro`, { method: "PUT", body: JSON.stringify(seguro) });
+      onSalvo();
+    } catch (e) {
+      setErro(e.message);
+    } finally { setSalvando(false); }
+  };
+
+  const campo = (chave, rotulo) => (
+    <div className="field-group">
+      <label className="field-label">{rotulo}</label>
+      <input value={seguro[chave]} onChange={e => setSeguro(s => ({ ...s, [chave]: e.target.value }))} />
+    </div>
+  );
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3>Corrigir seguro da carga</h3>
+          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          {!seguro ? <p className="hint">Carregando…</p> : (
+            <>
+              <div className="field-group">
+                <label className="field-label">Responsável pelo seguro</label>
+                <select value={seguro.responsavel} onChange={e => setSeguro(s => ({ ...s, responsavel: e.target.value }))}>
+                  <option value="1">Emitente do MDF-e</option>
+                  <option value="2">Contratante do transporte</option>
+                </select>
+              </div>
+              <div className="nf-grid-2">
+                {campo("nomeSeguradora", "Seguradora")}
+                {campo("cnpjSeguradora", "CNPJ da seguradora")}
+                {campo("numeroApolice", "Número da apólice")}
+                {campo("numeroAverbacao", "Número da averbação")}
+              </div>
+              <button className="btn" onClick={usarDoCadastro}>Usar o seguro do cadastro da empresa</button>
+              <p className="hint">Depois de salvar, use "Tentar emitir de novo" no menu do manifesto.</p>
+            </>
+          )}
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel}>Cancelar</button>
+          <button className="btn btn-primary" disabled={!seguro || salvando} onClick={salvar}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MdfeView() {
   const [mdfes, setMdfes] = useState(null);
   const [erro, setErro] = useState(null);
   const [processando, setProcessando] = useState(null);
   const [menuAberto, setMenuAberto] = useState(null);
   const [mostrarGerar, setMostrarGerar] = useState(false);
+  const [corrigindoSeguro, setCorrigindoSeguro] = useState(null);
 
   useEffect(() => {
     const fechar = () => setMenuAberto(null);
@@ -6302,6 +6397,10 @@ function MdfeView() {
                             onClick={() => { setMenuAberto(null); emitir(mdfe.id); }}>
                             <FileText size={14} /> {mdfe.status === "rejeitado" ? "Tentar emitir de novo" : "Emitir MDFe"}
                           </button>
+                          <button className="nf-dropdown-item"
+                            onClick={() => { setMenuAberto(null); setCorrigindoSeguro(mdfe.id); }}>
+                            <Pencil size={14} /> Corrigir seguro
+                          </button>
                           <button className="nf-dropdown-item nf-dropdown-item-danger"
                             onClick={() => { setMenuAberto(null); excluirRascunho(mdfe.id); }}>
                             <Trash2 size={14} /> Excluir rascunho
@@ -6361,6 +6460,11 @@ function MdfeView() {
         naPagina={(mdfes || []).length} onMudar={setPagina} />
 
       {mostrarGerar && <GerarMdfeModal onGerar={gerar} onCancel={() => setMostrarGerar(false)} />}
+      {corrigindoSeguro && (
+        <CorrigirSeguroMdfeModal mdfeId={corrigindoSeguro}
+          onSalvo={() => { setCorrigindoSeguro(null); carregar(); }}
+          onCancel={() => setCorrigindoSeguro(null)} />
+      )}
     </div>
   );
 }

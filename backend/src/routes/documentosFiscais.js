@@ -1113,7 +1113,12 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   }
 
   if (documento.tipo === "MDFe") {
-    const problemas = focusNfe.validarPayloadMdfe(payload);
+    const problemas = [
+      ...focusNfe.validarPayloadMdfe(payload),
+      ...focusNfe.conferirProprietarios([
+        documento.veiculo, documento.veiculoReboque, documento.veiculoReboque2, documento.veiculoReboque3,
+      ]),
+    ];
     if (problemas.length) {
       return res.status(422).json({
         erro: "O MDF-e não passou na conferência antes do envio.",

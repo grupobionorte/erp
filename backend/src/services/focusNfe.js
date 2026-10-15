@@ -796,6 +796,31 @@ function proprietarioDoVeiculo(v, sufixo = "") {
   };
 }
 
+// Veículo marcado como de terceiro precisa do proprietário completo. Sem o
+// CNPJ/CPF, proprietarioDoVeiculo não manda o grupo, e o veículo seguia para
+// a SEFAZ como próprio sem ninguém perceber. Aqui isso vira um aviso antes
+// do envio: ou preenche o dono, ou marca como próprio (caso de veículo
+// arrendado dentro do RNTRC da própria empresa).
+function conferirProprietarios(veiculos) {
+  const problemas = [];
+  for (const v of (veiculos || []).filter(Boolean)) {
+    if (v.propriedade !== "terceiro") continue;
+    const placa = v.placa || "sem placa";
+    const doc = somenteDigitos(v.proprietarioDocumento) || "";
+    if (doc.length !== 11 && doc.length !== 14) {
+      problemas.push(
+        `O veículo ${placa} está como "de terceiro", mas sem o CNPJ/CPF do proprietário. ` +
+        "Preencha o proprietário no cadastro do veículo ou, se ele está no RNTRC da própria empresa, marque como próprio."
+      );
+      continue;
+    }
+    if (!/^\d{8}$/.test(somenteDigitos(v.proprietarioRntrc) || "")) {
+      problemas.push(`O veículo ${placa} está como "de terceiro", mas sem o RNTRC do proprietário (8 números).`);
+    }
+  }
+  return problemas;
+}
+
 // Quem contratou o frete em cada CT-e. A SEFAZ exige esse grupo no MDF-e
 // de prestador de serviço (rejeição 578), e a informação já existe: é o
 // tomador do conhecimento.
@@ -1245,6 +1270,7 @@ module.exports = {
   montarPayloadCte,
   validarPayloadCte,
   validarPayloadMdfe,
+  conferirProprietarios,
   encerrarMdfe,
   urlCompleta,
   enviarPorEmail,

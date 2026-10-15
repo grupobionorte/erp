@@ -914,6 +914,42 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   res.status(201).json({ ...clone, aviso });
 }));
 
+// Corrige o seguro da carga de um MDF-e ainda não autorizado. O manifesto
+// não tem tela de edição completa (quase tudo vem do CT-e), e um seguro
+// errado — nome com espaço sobrando, CNPJ em branco — deixava o MDF-e preso
+// na rejeição de schema, sem como consertar sem excluir e gerar de novo.
+router.put("/:id/seguro", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "MDFe") return res.status(400).json({ erro: "Só o MDF-e tem seguro da carga" });
+  if (documento.status !== "rascunho" && documento.status !== "rejeitado") {
+    return res.status(409).json({ erro: "Só dá para corrigir o seguro de MDF-e em rascunho ou rejeitado" });
+  }
+
+  const texto = (v) => String(v ?? "").replace(/\s+/g, " ").trim() || null;
+  const nome = texto(req.body.nomeSeguradora);
+  const cnpj = String(req.body.cnpjSeguradora || "").replace(/\D/g, "");
+  if (!nome) return res.status(400).json({ erro: "Informe o nome da seguradora" });
+  if (cnpj.length !== 14) return res.status(400).json({ erro: "O CNPJ da seguradora precisa ter 14 números" });
+  if (!texto(req.body.numeroApolice)) return res.status(400).json({ erro: "Informe o número da apólice" });
+
+  const atualizado = await prisma.documentoFiscal.update({
+    where: { id },
+    data: {
+      seguroResponsavel: req.body.responsavel === "2" ? "2" : "1",
+      seguroNomeSeguradora: nome,
+      seguroCnpjSeguradora: cnpj,
+      seguroNumeroApolice: texto(req.body.numeroApolice),
+      seguroNumeroAverbacao: texto(req.body.numeroAverbacao),
+    },
+  });
+  res.json(atualizado);
+}));
+
 // Guia Florestal: emitida no SISFLORA, registrada aqui. O sistema não emite
 // a guia — o órgão não abre integração para isso —, mas controlar número e
 // prazo evita a restrição por guia não recebida.

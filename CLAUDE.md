@@ -63,6 +63,16 @@ O seguro da carga do MDF-e (seguradora, CNPJ, apólice) fica no cadastro da
 empresa (aba Fiscal) e preenche o MDF-e novo; a averbação é de cada viagem e
 é digitada no manifesto. Sem seguro no cadastro, vale o do último manifesto.
 
+**Carta frete** (menu do CT-e autorizado, `routes/cartasFrete.js`): contrato e
+recibo do frete pago ao proprietário do veículo, 4 vias no layout do sistema
+anterior. Não vai à SEFAZ. O proprietário vem do cadastro do veículo (cavalo),
+que pode ter dono preenchido mesmo sendo "própria" — o MDF-e só o declara
+quando é de terceiro. Valor do documento = peso (t) × valor por tonelada;
+documento e líquido são calculados no servidor. Uma carta valendo por CT-e;
+cancelada fica no histórico e o número não volta. Os dados das partes ficam
+congelados na emissão (`dados`). Numeração própria por empresa
+(`cartaFreteProximoNumero`).
+
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra
 (`lib/copiarCadastros.js`). É cópia, nunca mudança de dono; pula quem já existe

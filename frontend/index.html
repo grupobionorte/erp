@@ -603,9 +603,14 @@ const MODULES = {
       // Propriedade: com frota própria o MDF-e não leva proprietário nem
       // tipo de transportador. Sendo de terceiro, a SEFAZ exige os dois.
       { key: "propriedade", label: "Propriedade", type: "select", options: ["Própria", "De terceiro"], required: true },
-      { key: "proprietarioNome", label: "Proprietário (só se for de terceiro)", type: "text" },
+      // O proprietário também vai na carta frete, mesmo com o veículo
+      // "próprio" (arrendado no RNTRC da empresa) — o MDF-e só o declara
+      // quando o veículo é de terceiro.
+      { key: "proprietarioNome", label: "Proprietário (MDF-e só usa se for de terceiro; a carta frete sempre)", type: "text" },
       { key: "proprietarioDocumento", label: "CNPJ/CPF do proprietário", type: "text" },
       { key: "proprietarioIe", label: "IE do proprietário", type: "text" },
+      { key: "proprietarioEndereco", label: "Endereço do proprietário", type: "text" },
+      { key: "proprietarioMunicipio", label: "Município do proprietário", type: "text" },
       { key: "proprietarioUf", label: "UF do proprietário", type: "select", options: UFS },
       { key: "proprietarioRntrc", label: "RNTRC do proprietário", type: "text" },
       { key: "proprietarioTipo", label: "Tipo do proprietário", type: "select", options: ["TAC agregado", "TAC independente", "Outros"] },
@@ -652,6 +657,8 @@ const MODULES = {
       proprietarioDocumento: data.proprietarioDocumento || undefined,
       proprietarioIe: data.proprietarioIe || undefined,
       proprietarioUf: data.proprietarioUf || undefined,
+      proprietarioEndereco: data.proprietarioEndereco || null,
+      proprietarioMunicipio: data.proprietarioMunicipio || null,
       proprietarioRntrc: data.proprietarioRntrc || undefined,
       proprietarioTipo: { "TAC agregado": "0", "TAC independente": "1", "Outros": "2" }[data.proprietarioTipo],
       tipoTransportador: { "ETC": "1", "TAC": "2", "CTC": "3" }[data.tipoTransportador],
@@ -680,6 +687,8 @@ const MODULES = {
       proprietarioDocumento: r.proprietarioDocumento,
       proprietarioIe: r.proprietarioIe,
       proprietarioUf: r.proprietarioUf,
+      proprietarioEndereco: r.proprietarioEndereco,
+      proprietarioMunicipio: r.proprietarioMunicipio,
       proprietarioRntrc: r.proprietarioRntrc,
       proprietarioTipo: { "0": "TAC agregado", "1": "TAC independente", "2": "Outros" }[r.proprietarioTipo],
       tipoTransportador: { "1": "ETC", "2": "TAC", "3": "CTC" }[r.tipoTransportador],
@@ -970,6 +979,7 @@ const MODULES = {
       { key: "cfopPadraoCte", label: "CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
       { key: "mdfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       { key: "mdfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Manifesto (MDF-e)" },
+      { key: "cartaFreteProximoNumero", label: "Próximo número da carta frete", type: "number", aba: "fiscal", secao: "Carta frete" },
       // Todo MDF-e novo já traz o seguro da carga preenchido com estes dados.
       { key: "seguroNomeSeguradora", label: "Nome da seguradora", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       { key: "seguroCnpjSeguradora", label: "CNPJ da seguradora", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
@@ -999,6 +1009,7 @@ const MODULES = {
       cteProximoNumero: data.cteProximoNumero ? Number(data.cteProximoNumero) : undefined,
       mdfeSerie: data.mdfeSerie || undefined,
       mdfeProximoNumero: data.mdfeProximoNumero ? Number(data.mdfeProximoNumero) : undefined,
+      cartaFreteProximoNumero: data.cartaFreteProximoNumero ? Number(data.cartaFreteProximoNumero) : undefined,
       observacaoPadraoNfe: data.observacaoPadraoNfe || undefined,
       // null (e não undefined) para o campo poder ser apagado na edição.
       seguroNomeSeguradora: data.seguroNomeSeguradora || null,
@@ -1027,6 +1038,7 @@ const MODULES = {
       cteProximoNumero: r.cteProximoNumero,
       mdfeSerie: r.mdfeSerie,
       mdfeProximoNumero: r.mdfeProximoNumero,
+      cartaFreteProximoNumero: r.cartaFreteProximoNumero,
       observacaoPadraoNfe: r.observacaoPadraoNfe,
       seguroNomeSeguradora: r.seguroNomeSeguradora,
       seguroCnpjSeguradora: r.seguroCnpjSeguradora,
@@ -1044,12 +1056,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.091";
+const VERSAO_SISTEMA = "1.100";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.100", texto: "CT-e: emissão da carta frete (4 vias), com o proprietário do cadastro do veículo" },
   { versao: "1.091", texto: "MDF-e: veículo \"de terceiro\" sem proprietário completo é barrado antes do envio" },
   { versao: "1.090", texto: "MDF-e: botão \"Limpar descartados\" apaga os cancelados que nunca foram autorizados" },
   { versao: "1.089", texto: "MDF-e: reboques do cavalo mecânico vêm do cadastro do veículo quando o CT-e não traz" },
@@ -11445,6 +11458,253 @@ naturezaOperacao: naturezaOperacao || undefined,
   );
 }
 
+// ---------- Carta frete ----------
+// Contrato e recibo do frete pago ao proprietário do veículo, no layout do
+// sistema anterior: 4 vias (saldo, adiantamento, motorista, arquivo), duas
+// por folha. Não é documento fiscal; sai de um CT-e autorizado.
+
+const CARTA_DEBITOS = [
+  ["adiantamento", "Adiantamento"], ["seguro", "Seguro"], ["pedagio", "Pedágio"], ["estadia", "Estadia"],
+  ["outrosDebitos", "Outros débitos"], ["irrf", "IRRF"], ["inss", "INSS"], ["outrasEntidades", "Outras entidades"],
+  ["comissaoFixa", "Comissão fixa"], ["comissaoVariavel", "Comissão variável"],
+];
+
+function imprimirCartaFrete(carta) {
+  const d = carta.dados || {};
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const m = (v) => formatarMoeda(Number(v) || 0, 2) || "0,00";
+  // CNPJ e CPF com pontuação, como no papel do sistema anterior.
+  const doc = (v) => {
+    const n = String(v || "").replace(/\D/g, "");
+    if (n.length === 14) return n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    if (n.length === 11) return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+    return v || "";
+  };
+  const emissao = new Date(carta.dataEmissao).toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO });
+  const linha = (rotulo, valor) => `<div class="l"><span class="r">${rotulo}</span><span>${esc(valor) || "&nbsp;"}</span></div>`;
+  const val = (rotulo, valor) => `<div class="v"><span>${rotulo}</span><span>${m(valor)}</span></div>`;
+  const notas = (d.mercadoria?.notas || []).map(n => `NF: ${esc(n.numero || "")}${n.valor != null ? ` R$ ${m(n.valor)}` : ""}`).join("<br>");
+
+  const composicao = (adiantamento) => adiantamento
+    ? `<div class="grade">${val("(+) Adiantamento de pedágio:", carta.adiantamentoPedagio)}${val("(+) Adiantamento:", carta.adiantamento)}</div>
+       <div class="liq">Valor líquido: <b>${m((Number(carta.adiantamentoPedagio) || 0) + (Number(carta.adiantamento) || 0))}</b></div>`
+    : `<div class="grade">
+         ${val("(+) Valor do documento:", carta.valorDocumento)}
+         ${CARTA_DEBITOS.map(([k, r]) => val(`(-) ${r}:`, carta[k])).join("")}
+         ${val("(+) Outros créditos:", carta.outrosCreditos)}
+       </div>
+       <div class="liq">Valor líquido: <b>${m(carta.valorLiquido)}</b></div>`;
+
+  const via = (titulo, adiantamento) => `
+    <section class="via">
+      <div class="topo">
+        <div>
+          <div class="emp">${esc(d.emitente?.nome)}</div>
+          <div>CNPJ ${esc(doc(d.emitente?.cnpj))} Insc. Est. ${esc(d.emitente?.ie)}</div>
+          <div>${esc(d.emitente?.endereco)}</div>
+          <div>${esc(d.emitente?.municipio)}${d.emitente?.rntrc ? `, RNTRC ${esc(d.emitente.rntrc)}` : ""}</div>
+        </div>
+        <div class="num">
+          <div>Data de emissão<br><b>${esc(emissao)}</b></div>
+          <div><b>${titulo}</b></div>
+          <div class="n">Nº ${esc(carta.numero)}${carta.status === "cancelada" ? " — CANCELADA" : ""}</div>
+        </div>
+      </div>
+      <div class="cols">
+        <div><h4>Proprietário do veículo</h4>
+          ${linha("Proprietário:", d.proprietario?.nome)}${linha("CNPJ/CPF:", doc(d.proprietario?.documento))}
+          ${linha("Insc. Est.:", d.proprietario?.ie)}${linha("RNTRC:", d.proprietario?.rntrc)}
+          ${linha("Endereço:", d.proprietario?.endereco)}${linha("Município:", d.proprietario?.municipio)}</div>
+        <div><h4>Remetente</h4>
+          ${linha("Nome:", d.remetente?.nome)}${linha("CNPJ/CPF:", doc(d.remetente?.documento))}${linha("Município:", d.remetente?.municipio)}
+          <h4>Destinatário</h4>
+          ${linha("Nome:", d.destinatario?.nome)}${linha("CNPJ/CPF:", doc(d.destinatario?.documento))}${linha("Município:", d.destinatario?.municipio)}</div>
+      </div>
+      <div class="cols3">
+        <div><h4>Motorista</h4>${linha("Nome:", d.motorista?.nome)}${linha("CPF:", doc(d.motorista?.cpf))}${linha("CNH:", d.motorista?.cnh)}</div>
+        <div><h4>Veículo</h4>${linha("Município:", d.motorista?.municipio)}${linha("Placa:", (d.placas || []).join(", "))}</div>
+        <div><h4>Transporte</h4>${linha("Coleta:", d.coleta)}${linha("Entrega:", d.entrega)}</div>
+      </div>
+      <h4>Composição de valores</h4>
+      ${composicao(adiantamento)}
+      <div class="cols">
+        <div><h4>Conhecimento de transporte eletrônico</h4>${esc(d.cte?.numero)} - ${esc(d.cte?.chave)}</div>
+        <div><h4>Mercadoria transportada</h4>Natureza: ${esc(d.mercadoria?.natureza)}<br>${notas}
+          <br>Valor por tonelada: ${m(carta.valorPorTonelada)}<br>Peso bruto das mercadorias: ${formatarMoeda(carta.pesoToneladas, 2)}</div>
+      </div>
+      <div class="obs"><b>Observações:</b> ${esc(carta.observacoes)}</div>
+      <div class="recibo"><b>RECIBO</b><br>Recebi de ${esc(d.emitente?.nome)} a importância correspondente ao transporte das mercadorias descritas neste documento.</div>
+      <div class="ass"><div>Responsável contratante</div><div>Motorista/CPF</div></div>
+    </section>`;
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Carta frete ${esc(carta.numero)}</title>
+    <style>
+      @page { size: A4; margin: 7mm; }
+      body { font: 8pt Arial, sans-serif; margin: 0; color: #000; }
+      .via { height: 138mm; box-sizing: border-box; border: 1px solid #000; padding: 2.5mm 3mm; margin-bottom: 4mm; overflow: hidden; page-break-inside: avoid; }
+      .via:nth-of-type(2n) { page-break-after: always; }
+      .topo { display: flex; justify-content: space-between; border-bottom: 1px solid #000; padding-bottom: 1.5mm; }
+      .emp { font-size: 10pt; font-weight: bold; }
+      .num { text-align: right; } .num .n { font-size: 11pt; font-weight: bold; }
+      h4 { margin: 1.5mm 0 .5mm; font-size: 8pt; background: #eee; padding: .3mm 1mm; }
+      .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+      .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm; }
+      .l { display: flex; gap: 1.5mm; } .l .r { min-width: 18mm; color: #333; }
+      .grade { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 5mm; }
+      .v { display: flex; justify-content: space-between; }
+      .liq { text-align: right; font-size: 9pt; margin-top: 1mm; }
+      .obs { margin-top: 1.5mm; min-height: 6mm; }
+      .recibo { text-align: center; margin-top: 1.5mm; }
+      .ass { display: flex; justify-content: space-around; margin-top: 9mm; }
+      .ass div { border-top: 1px solid #000; width: 65mm; text-align: center; padding-top: .5mm; }
+    </style></head><body>
+    ${via("1ª Via - SALDO DE FRETE", false)}${via("2ª Via - Adiantamento", true)}${via("3ª Via - Motorista", false)}${via("4ª Via - Arquivo", false)}
+    </body></html>`;
+
+  const janela = window.open("", "_blank");
+  if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+  janela.document.write(html);
+  janela.document.close();
+  janela.focus();
+  setTimeout(() => janela.print(), 400);
+}
+
+function CartaFreteModal({ cte, onClose }) {
+  const [estado, setEstado] = useState(null);
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [form, setForm] = useState({ pesoToneladas: "", valorPorTonelada: "", coleta: "", entrega: "", observacoes: "", adiantamentoPedagio: "", outrosCreditos: "" });
+
+  const carregar = useCallback(async () => {
+    try {
+      const r = await apiRequest(`/cartas-frete/do-cte/${cte.id}`);
+      setEstado(r);
+      setForm(f => ({ ...f,
+        pesoToneladas: f.pesoToneladas || (r.previa.pesoToneladas ?? ""),
+        coleta: f.coleta || r.previa.dados.coleta || "",
+        entrega: f.entrega || r.previa.dados.entrega || "",
+      }));
+    } catch (e) { setErro(e.message); }
+  }, [cte.id]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const n = (v) => Number(v) || 0;
+  const set = (campo) => (v) => setForm(f => ({ ...f, [campo]: v }));
+  // Mostrados só para conferência: o servidor recalcula e grava os mesmos.
+  const valorDocumento = Math.round(n(form.pesoToneladas) * n(form.valorPorTonelada) * 100) / 100;
+  const valorLiquido = Math.round((valorDocumento + n(form.outrosCreditos)
+    - CARTA_DEBITOS.reduce((t, [k]) => t + n(form[k]), 0)) * 100) / 100;
+
+  const ativa = estado?.cartas.find(c => c.status === "emitida");
+
+  const emitir = async () => {
+    setSalvando(true); setErro("");
+    try {
+      const carta = await apiRequest("/cartas-frete", { method: "POST", body: JSON.stringify({ cteId: cte.id, ...form }) });
+      await carregar();
+      imprimirCartaFrete(carta);
+    } catch (e) {
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  const cancelar = async (carta) => {
+    if (!window.confirm(`Cancelar a carta frete nº ${carta.numero}?\n\nEla fica no histórico como cancelada, e o CT-e pode ganhar uma carta nova.`)) return;
+    try { await apiRequest(`/cartas-frete/${carta.id}/cancelar`, { method: "POST" }); carregar(); }
+    catch (e) { setErro(e.message); }
+  };
+
+  const campoValor = (campo, rotulo) => (
+    <div className="field-group" key={campo}>
+      <label className="field-label">{rotulo}</label>
+      <InputMoeda value={form[campo] ?? ""} onChange={set(campo)} casas={2} />
+    </div>
+  );
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 760 }}>
+        <div className="modal-header">
+          <h3>Carta frete — CT-e {cte.numero}</h3>
+          <button className="icon-btn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          {!estado && !erro && <p className="hint">Carregando…</p>}
+
+          {estado?.cartas.length > 0 && (
+            <table className="data-table tabela-densa" style={{ marginBottom: 12 }}>
+              <thead><tr><th>Nº</th><th>Emissão</th><th>Líquido</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {estado.cartas.map(c => (
+                  <tr key={c.id} style={c.status === "cancelada" ? { opacity: 0.55 } : undefined}>
+                    <td>{c.numero}</td>
+                    <td>{new Date(c.dataEmissao).toLocaleDateString("pt-BR", { timeZone: FUSO_OPERACAO })}</td>
+                    <td>R$ {formatarMoeda(c.valorLiquido, 2)}</td>
+                    <td>{c.status === "cancelada" ? "Cancelada" : "Emitida"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="btn" onClick={() => imprimirCartaFrete(c)}>Imprimir</button>{" "}
+                      {c.status === "emitida" && <button className="btn" onClick={() => cancelar(c)}>Cancelar</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {estado && !ativa && (
+            estado.previa.faltando.length ? (
+              <div className="error-banner"><span>Antes da carta: {estado.previa.faltando.join(" ")}</span></div>
+            ) : (
+              <>
+                <p className="hint">
+                  Proprietário: <b>{estado.previa.dados.proprietario?.nome}</b> · Motorista: <b>{estado.previa.dados.motorista?.nome}</b> · Placas: {estado.previa.dados.placas.join(", ")}
+                </p>
+                <div className="nf-grid-2">
+                  <div className="field-group">
+                    <label className="field-label">Peso (toneladas)</label>
+                    <InputMoeda value={form.pesoToneladas} onChange={set("pesoToneladas")} casas={3} />
+                  </div>
+                  {campoValor("valorPorTonelada", "Valor por tonelada (R$)")}
+                  <div className="field-group">
+                    <label className="field-label">Coleta</label>
+                    <input value={form.coleta} onChange={e => set("coleta")(e.target.value)} />
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Entrega</label>
+                    <input value={form.entrega} onChange={e => set("entrega")(e.target.value)} />
+                  </div>
+                </div>
+                <p className="field-label" style={{ marginTop: 8 }}>Descontos e créditos</p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0 12px" }}>
+                  {CARTA_DEBITOS.map(([k, r]) => campoValor(k, r))}
+                  {campoValor("outrosCreditos", "Outros créditos (+)")}
+                  {campoValor("adiantamentoPedagio", "Adiantamento de pedágio (2ª via)")}
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Observações</label>
+                  <input value={form.observacoes} onChange={e => set("observacoes")(e.target.value)} />
+                </div>
+                <div className="nf-total-row"><span>Valor do documento (peso × valor/t)</span><span>R$ {formatarMoeda(valorDocumento, 2) || "0,00"}</span></div>
+                <div className="nf-total-row"><span><b>Valor líquido</b></span><span><b>R$ {formatarMoeda(valorLiquido, 2) || "0,00"}</b></span></div>
+              </>
+            )
+          )}
+          {ativa && <p className="hint">Esse CT-e já tem a carta nº {ativa.numero}. Para emitir outra, cancele a atual.</p>}
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onClose}>Fechar</button>
+          {estado && !ativa && !estado.previa.faltando.length && (
+            <button className="btn btn-primary" disabled={salvando} onClick={emitir}>
+              {salvando ? "Emitindo…" : "Emitir e imprimir"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CteView({ onIrParaMdfe }) {
   const { items: clientes, criar: criarCliente } = useApiCollection("clientes");
   const { items: produtos } = useApiCollection("produtos");
@@ -11461,6 +11721,7 @@ function CteView({ onIrParaMdfe }) {
   const [menuAberto, setMenuAberto] = useState(null);
   const [cteParaCorrigir, setCteParaCorrigir] = useState(null);
   const [cteParaManifestar, setCteParaManifestar] = useState(null);
+  const [cteCartaFrete, setCteCartaFrete] = useState(null);
 
   useEffect(() => {
     const fechar = () => setMenuAberto(null);
@@ -11873,6 +12134,9 @@ function CteView({ onIrParaMdfe }) {
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); clonarCte(cte); }}>
                             <Plus size={14} /> Clonar para novo CTe
                           </button>
+                          <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteCartaFrete(cte); }}>
+                            <FileText size={14} /> Carta frete
+                          </button>
                           {cte.mdfeId ? (
                             <button className="nf-dropdown-item" disabled onClick={() => setMenuAberto(null)}>
                               <Truck size={14} /> MDF-e já gerado
@@ -11922,6 +12186,7 @@ function CteView({ onIrParaMdfe }) {
       {cteParaCorrigir && (
         <CartaCorrecaoModal nota={cteParaCorrigir} onClose={() => setCteParaCorrigir(null)} />
       )}
+      {cteCartaFrete && <CartaFreteModal cte={cteCartaFrete} onClose={() => setCteCartaFrete(null)} />}
       {cteParaManifestar && (
         <GerarMdfeModal
           ctePreSelecionado={cteParaManifestar}

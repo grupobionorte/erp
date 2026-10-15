@@ -157,6 +157,9 @@ model Empresa {
   cteProximoNumero    Int      @default(1) @map("cte_proximo_numero")
   mdfeSerie           String?  @map("mdfe_serie")
   mdfeProximoNumero   Int      @default(1) @map("mdfe_proximo_numero")
+  // Carta frete não é documento fiscal: a numeração é só nossa, por empresa,
+  // e começa onde o sistema anterior parou.
+  cartaFreteProximoNumero Int  @default(1) @map("carta_frete_proximo_numero")
 
   enderecoId     Int?                @map("endereco_id")
   endereco       Endereco?           @relation(fields: [enderecoId], references: [id])
@@ -208,6 +211,7 @@ model Empresa {
   ordensManutencao OrdemManutencao[]
   operacoes Operacao[]
   permissoesDeUsuarios UsuarioEmpresaPermissao[]
+  cartasFrete CartaFrete[]
 }
 
 model Pessoa {
@@ -367,6 +371,11 @@ model Veiculo {
   proprietarioNome         String? @map("proprietario_nome")
   proprietarioIe           String? @map("proprietario_ie")
   proprietarioUf           String? @map("proprietario_uf")
+  // Endereço do proprietário: vai na carta frete. Pode estar preenchido
+  // mesmo com o veículo "próprio" (arrendado no RNTRC da empresa) — o MDF-e só
+  // declara o proprietário quando o veículo é de terceiro.
+  proprietarioEndereco     String? @map("proprietario_endereco")
+  proprietarioMunicipio    String? @map("proprietario_municipio")
   proprietarioRntrc        String? @map("proprietario_rntrc")
   // 0 TAC agregado, 1 TAC independente, 2 outros
   proprietarioTipo         String? @map("proprietario_tipo")
@@ -633,6 +642,8 @@ model DocumentoFiscal {
   // campos daquela tela (não é só a chave, tem peso, valores, etc.).
   documentosTransportados CteDocumento[] @relation("DocumentosDoCte")
   cteDocumentosComoNota   CteDocumento[] @relation("CteDocumentoNota")
+
+  cartasFrete CartaFrete[]
 
   @@map("documentos_fiscais")
 }
@@ -1472,4 +1483,55 @@ model FaturaOperacao {
 
   @@unique([empresaId, numero])
   @@map("faturas_operacao")
+}
+
+// ---------------------------------------------------------------------------
+// Carta frete
+// ---------------------------------------------------------------------------
+
+// Contrato e recibo do frete pago a quem fez o transporte (o proprietário do
+// veículo), emitido a partir de um CT-e autorizado. Não vai à SEFAZ.
+//
+// Os dados das partes ficam congelados em "dados" no momento da emissão: a
+// reimpressão tem que sair igual à via assinada, mesmo que o cadastro do
+// veículo ou do motorista mude depois.
+model CartaFrete {
+  id        Int      @id @default(autoincrement())
+  numero    Int
+  status    String   @default("emitida") // emitida | cancelada
+  dataEmissao DateTime @default(now()) @map("data_emissao")
+
+  empresaId Int             @map("empresa_id")
+  empresa   Empresa         @relation(fields: [empresaId], references: [id])
+  cteId     Int             @map("cte_id")
+  cte       DocumentoFiscal @relation(fields: [cteId], references: [id])
+
+  dados Json
+
+  pesoToneladas       Float @map("peso_toneladas")
+  valorPorTonelada    Float @map("valor_por_tonelada")
+  // Calculados no servidor a partir dos campos acima — não se digita.
+  valorDocumento      Float @map("valor_documento")
+  valorLiquido        Float @map("valor_liquido")
+
+  adiantamento        Float @default(0)
+  adiantamentoPedagio Float @default(0) @map("adiantamento_pedagio")
+  outrosCreditos      Float @default(0) @map("outros_creditos")
+  seguro              Float @default(0)
+  pedagio             Float @default(0)
+  estadia             Float @default(0)
+  outrosDebitos       Float @default(0) @map("outros_debitos")
+  irrf                Float @default(0)
+  inss                Float @default(0)
+  outrasEntidades     Float @default(0) @map("outras_entidades")
+  comissaoFixa        Float @default(0) @map("comissao_fixa")
+  comissaoVariavel    Float @default(0) @map("comissao_variavel")
+
+  observacoes String?
+  criadoPorId Int?    @map("criado_por_id")
+  criadoEm    DateTime @default(now()) @map("criado_em")
+
+  @@unique([empresaId, numero])
+  @@index([cteId])
+  @@map("cartas_frete")
 }

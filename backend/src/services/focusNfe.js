@@ -1130,6 +1130,14 @@ function validarPayloadMdfe(payload) {
   } else if (!/^\d{11}$/.test(modal.condutores[0].cpf || "")) {
     problemas.push("CPF do condutor inválido.");
   }
+  // Rejeição 523: cavalo mecânico precisa de pelo menos um reboque na
+  // composição. Melhor barrar aqui, apontando onde corrigir.
+  if (modal.tipo_rodado_veiculo === "03" && !modal.veiculos_reboque?.length) {
+    problemas.push(
+      `O veículo ${modal.placa_veiculo || ""} é cavalo mecânico e o manifesto está sem reboque. ` +
+      "Atrele os reboques no cadastro do veículo (aba Reboques), exclua este MDF-e e gere de novo."
+    );
+  }
   for (const reboque of modal.veiculos_reboque || []) {
     if (!reboque.tara) problemas.push(`Tara não preenchida no cadastro do reboque ${reboque.placa || ""}.`);
   }

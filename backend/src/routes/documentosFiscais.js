@@ -695,6 +695,15 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   }
 
   const primeiro = ctes[0];
+
+  // Reboques: os do CT-e, quando ele traz; senão, os atrelados ao cavalo no
+  // cadastro de veículos (mesma regra da NF-e). Cavalo mecânico sem reboque
+  // é rejeição 523 — e o CT-e autorizado, que já não pode ser editado, muitas
+  // vezes saiu sem eles.
+  const reboquesDoCte = [primeiro.veiculoReboqueId, primeiro.veiculoReboque2Id, primeiro.veiculoReboque3Id];
+  const reboquesDoManifesto = reboquesDoCte.some(Boolean)
+    ? reboquesDoCte
+    : [primeiro.veiculo?.reboque1Id, primeiro.veiculo?.reboque2Id, primeiro.veiculo?.reboque3Id];
   const ultimo = ctes[ctes.length - 1];
 
   // O MDFe exige município COM código IBGE nos dois extremos; o CTe guarda
@@ -754,9 +763,9 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       empresaId: req.usuario.empresaId,
       transportadoraId: primeiro.transportadoraId,
       veiculoId: primeiro.veiculoId,
-      veiculoReboqueId: primeiro.veiculoReboqueId,
-      veiculoReboque2Id: primeiro.veiculoReboque2Id,
-      veiculoReboque3Id: primeiro.veiculoReboque3Id,
+      veiculoReboqueId: reboquesDoManifesto[0],
+      veiculoReboque2Id: reboquesDoManifesto[1],
+      veiculoReboque3Id: reboquesDoManifesto[2],
       nomeMotorista: primeiro.nomeMotorista,
       cpfMotorista: primeiro.cpfMotorista,
       ufPercurso: ufsTrajeto.join(","),

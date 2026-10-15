@@ -173,6 +173,10 @@ porquê.
   carga lotação, tipo de transportador
 - **868** — grupo do veículo proibido fora do mesmo município
 - **301** — NCM do produto predominante no MDF-e
+- **523** — MDF-e com cavalo mecânico exige reboque; sem reboque no CT-e,
+  vale a composição do cavalo no cadastro de veículos
+- **Schema infSeg / xSeg** — CNPJ da seguradora obrigatório e nenhum espaço
+  no começo ou fim do nome (`textoLimpo`)
 - Encerramento do MDF-e é `POST /v2/mdfe/{ref}/encerrar`, com `data`,
   `sigla_uf` e `nome_municipio` — nome, não código IBGE
 

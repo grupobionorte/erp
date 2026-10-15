@@ -172,6 +172,12 @@ porquê.
 - AFD e AEJ do ponto (layout da Portaria 671/2021) — não implementados
 - Regularização REP-P: INPI, certificado ICP-Brasil, responsável técnico
 - E-mail do comprovante de ponto (SMTP configurado, falta testar no plano pago)
+- Agendador dos lembretes da agenda: tem que ser externo (ex.: cron-job.org),
+  `POST /lembretes` a cada 5 min com o cabeçalho `x-cron-token` igual ao
+  `CRON_TOKEN` do backend. Sem ele, o resumo das 7h e o aviso de 1 hora antes
+  não saem. O intervalo precisa casar com `INTERVALO_CRON_MIN` em
+  `backend/src/routes/lembretes.js`. Não vai no `render.yaml`: com Auto Sync
+  ligado, isso criaria um serviço pago sozinho
 - MDF-e com carga fracionada: caminho testado, mas pouco rodado
 
 ---

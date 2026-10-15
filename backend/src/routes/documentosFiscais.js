@@ -1465,6 +1465,30 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // Cancela um rascunho (documento já emitido precisa de um evento de
 // cancelamento de verdade, não simplesmente apagar — mas um rascunho
 // pode ser descartado direto).
+// Para apagar de vez um documento rejeitado: confere na Focus cada ref já
+// usada (uma por tentativa de envio). Só libera se todas estão com erro de
+// autorização ou não existem lá (envio recusado antes de virar documento,
+// como erro de schema ou de token). Qualquer outro status — autorizado,
+// processando, denegado — segura.
+async function rejeitadoSemValorNaFocus(documento) {
+  const cnpj = await cnpjDoEmitente(documento.empresaId);
+  const tentativas = Math.max(documento.tentativaEnvio || 1, 1);
+  for (let t = 1; t <= tentativas; t++) {
+    const ref = refDocumento({ ...documento, tentativaEnvio: t });
+    try {
+      const resultado = await focusNfe.consultar({ tipo: documento.tipo, ref, cnpj });
+      if (resultado.status !== "erro_autorizacao") {
+        return { pode: false, motivo: `Na Focus a tentativa ${t} está como "${resultado.status}". Consulte o status antes.` };
+      }
+    } catch (erro) {
+      if (erro.response?.status === 404) continue;
+      const detalhe = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
+      return { pode: false, motivo: `Não consegui consultar a Focus agora (${detalhe}). Tente de novo em instantes.` };
+    }
+  }
+  return { pode: true };
+}
+
 router.delete("/:id", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
 
@@ -1477,7 +1501,23 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   // Rascunho nunca saiu daqui: não tem número na SEFAZ, não tem valor
   // fiscal e não precisa deixar rastro. Com ?definitivo=1 ele é apagado de
   // vez, em vez de ficar sujando a lista como cancelado.
-  if (existente.status === "rascunho" && req.query.definitivo === "1") {
+  //
+  // Rejeitado também, mas só depois de confirmar na Focus que nenhuma das
+  // tentativas ficou valendo: o envio que falha por tempo esgotado também é
+  // gravado como rejeitado, e um documento autorizado sem registro aqui
+  // seria perda fiscal. Na dúvida (Focus fora do ar, status diferente de
+  // erro), não apaga.
+  const definitivo = req.query.definitivo === "1";
+  if (definitivo && existente.status === "rejeitado") {
+    const conferencia = await rejeitadoSemValorNaFocus(existente);
+    if (!conferencia.pode) {
+      return res.status(409).json({
+        erro: "Não apaguei: não deu para confirmar que esse documento não ficou valendo.",
+        detalhe: conferencia.motivo,
+      });
+    }
+  }
+  if (definitivo && (existente.status === "rascunho" || existente.status === "rejeitado")) {
     await prisma.$transaction([
       prisma.cteDocumento.deleteMany({ where: { cteId: id } }),
       prisma.documentoItem.deleteMany({ where: { documentoId: id } }),

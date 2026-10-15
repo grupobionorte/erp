@@ -1044,12 +1044,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.087";
+const VERSAO_SISTEMA = "1.088";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.088", texto: "Excluir rascunho ou documento rejeitado apaga de vez, sem deixar \"cancelado\" na lista" },
   { versao: "1.087", texto: "MDF-e excluído ou cancelado libera o CT-e para um manifesto novo" },
   { versao: "1.086", texto: "MDF-e: \"Corrigir seguro\" no manifesto rejeitado, sem precisar excluir e gerar de novo" },
   { versao: "1.085", texto: "MDF-e: CNPJ da seguradora obrigatório e espaços sobrando no nome da seguradora removidos" },
@@ -6293,13 +6294,20 @@ function MdfeView() {
     }
   };
 
+  // Rascunho e rejeitado são apagados de vez, sem ficar na lista como
+  // cancelado. No rejeitado o servidor confere antes na Focus que nenhuma
+  // tentativa ficou valendo.
   const excluirRascunho = async (id) => {
-    if (!window.confirm("Excluir esse rascunho de MDFe?")) return;
+    const mdfe = (mdfes || []).find(m => m.id === id);
+    const aviso = mdfe?.status === "rejeitado"
+      ? "Excluir esse MDF-e rejeitado?\n\nEle será apagado de vez. Antes, o sistema confere na Focus que ele não ficou valendo."
+      : "Excluir esse rascunho de MDF-e?\n\nEle será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro.";
+    if (!window.confirm(aviso)) return;
     try {
-      await apiRequest(`/documentos-fiscais/${id}`, { method: "DELETE" });
+      await apiRequest(`/documentos-fiscais/${id}?definitivo=1`, { method: "DELETE" });
       carregar();
     } catch (e) {
-      alert(`Não foi possível excluir: ${e.message}`);
+      alert(`Não foi possível excluir: ${e.message}${e.detalhe ? `\n\nDetalhe: ${e.detalhe}` : ""}`);
     }
   };
 
@@ -9970,9 +9978,9 @@ function NotasFiscaisView({ onIrParaCte }) {
   // Rascunho nunca foi à SEFAZ: não tem número nem valor fiscal, então pode
   // sumir de vez em vez de ficar na lista como cancelado.
   const excluirRascunho = async (nota) => {
-    if (!window.confirm(
-      `Excluir o rascunho da nota ${nota.numero || ""}?\n\n` +
-      "Ele será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro."
+    if (!window.confirm(nota.status === "rejeitado"
+      ? `Excluir a nota rejeitada ${nota.numero || ""}?\n\nEla será apagada de vez. Antes, o sistema confere na Focus que ela não ficou valendo.`
+      : `Excluir o rascunho da nota ${nota.numero || ""}?\n\nEle será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro.`
     )) return;
     try {
       await apiRequest(`/documentos-fiscais/${nota.id}?definitivo=1`, { method: "DELETE" });
@@ -11505,7 +11513,9 @@ function CteView({ onIrParaMdfe }) {
   // Rascunho nunca foi à SEFAZ: pode sumir de vez, em vez de ficar na lista
   // como cancelado.
   const excluirRascunho = async (cte) => {
-    if (!window.confirm(`Excluir o rascunho de CTe ${cte.numero || ""}?\n\nEle será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro.`)) return;
+    if (!window.confirm(cte.status === "rejeitado"
+      ? `Excluir o CT-e rejeitado ${cte.numero || ""}?\n\nEle será apagado de vez. Antes, o sistema confere na Focus que ele não ficou valendo.`
+      : `Excluir o rascunho de CTe ${cte.numero || ""}?\n\nEle será apagado de vez. Como nunca foi enviado à SEFAZ, não fica registro.`)) return;
     try {
       await apiRequest(`/documentos-fiscais/${cte.id}?definitivo=1`, { method: "DELETE" });
       carregar();

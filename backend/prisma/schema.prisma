@@ -194,6 +194,7 @@ model Empresa {
   motoristas Motorista[]
   categoriasDespesa CategoriaDespesa[]
   centrosCusto      CentroCusto[]
+  contasBancarias   ContaBancaria[]
   contasPagar       ContaPagar[]
   eventos Evento[]
   equipamentos     Equipamento[]
@@ -229,6 +230,14 @@ model Pessoa {
   // informações complementares da NF-e.
   observacaoPadrao String? @map("observacao_padrao")
 
+  // Guia Florestal (SISFLORA): código do empreendimento do cliente no
+  // CC-SEMA e o memorial descritivo que vai em cada GF dele. A extensão do
+  // SISFLORA usa os dois para preencher o destino e o memorial.
+  ccsema               String? @map("ccsema")
+  memorialDescritivoGf String? @map("memorial_descritivo_gf")
+  // Observação do ICMS na GF (forma de recolhimento "Outros").
+  observacaoIcmsGf     String? @map("observacao_icms_gf")
+
   enderecoId Int?     @map("endereco_id")
   endereco   Endereco? @relation(fields: [enderecoId], references: [id])
 
@@ -240,6 +249,7 @@ model Pessoa {
 
   documentosComoDestinatario DocumentoFiscal[]
   documentosComoRemetente    DocumentoFiscal[] @relation("CteRemetente")
+  documentosComoRetirada     DocumentoFiscal[] @relation("NfeLocalRetirada")
   documentosComoExpedidor    DocumentoFiscal[] @relation("CteExpedidor")
   documentosComoRecebedor    DocumentoFiscal[] @relation("CteRecebedor")
 
@@ -334,6 +344,18 @@ model Veiculo {
   // SEFAZ exige o grupo do proprietário no MDF-e — e é só nesse caso que o
   // tipo de transportador pode ser informado (rejeição 745).
   propriedade              String? @default("propria")
+
+  // Cavalo mecânico: os reboques atrelados a ele (até 3). Ao escolher o
+  // cavalo num documento, os reboques vêm junto.
+  reboque1Id Int?     @map("reboque1_id")
+  reboque1   Veiculo? @relation("CavaloReboque1", fields: [reboque1Id], references: [id])
+  reboque2Id Int?     @map("reboque2_id")
+  reboque2   Veiculo? @relation("CavaloReboque2", fields: [reboque2Id], references: [id])
+  reboque3Id Int?     @map("reboque3_id")
+  reboque3   Veiculo? @relation("CavaloReboque3", fields: [reboque3Id], references: [id])
+  cavalosComoReboque1 Veiculo[] @relation("CavaloReboque1")
+  cavalosComoReboque2 Veiculo[] @relation("CavaloReboque2")
+  cavalosComoReboque3 Veiculo[] @relation("CavaloReboque3")
   proprietarioDocumento    String? @map("proprietario_documento")
   proprietarioNome         String? @map("proprietario_nome")
   proprietarioIe           String? @map("proprietario_ie")
@@ -536,6 +558,12 @@ model DocumentoFiscal {
   // definição do tomador é "Outros"/o próprio destinatário).
   remetenteId Int?    @map("remetente_id")
   remetente   Pessoa? @relation("CteRemetente", fields: [remetenteId], references: [id])
+
+  // NF-e — local de retirada (grupo "retirada" do XML), quando a mercadoria
+  // sai de um lugar diferente do endereço do emitente: a fazenda do
+  // produtor, o pátio de terceiro. Vazio = sai do próprio emitente.
+  localRetiradaId Int?    @map("local_retirada_id")
+  localRetirada   Pessoa? @relation("NfeLocalRetirada", fields: [localRetiradaId], references: [id])
   expedidorId Int?    @map("expedidor_id")
   expedidor   Pessoa? @relation("CteExpedidor", fields: [expedidorId], references: [id])
   recebedorId Int?    @map("recebedor_id")
@@ -923,6 +951,27 @@ model CategoriaDespesa {
 
 // Centro de custo: onde a despesa foi consumida. Pode apontar para um
 // veículo — é como a operação pensa custo de frota.
+// De onde saiu o dinheiro de um pagamento: conta do banco, caixa da
+// empresa, cartão. O nome é o apelido que aparece nas listas.
+model ContaBancaria {
+  id      Int     @id @default(autoincrement())
+  nome    String
+  banco   String?
+  agencia String?
+  numero  String?
+  ativo   Boolean @default(true)
+
+  empresaId Int?     @map("empresa_id")
+  empresa   Empresa? @relation(fields: [empresaId], references: [id])
+
+  pagamentos ContaPagar[]
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, nome])
+  @@map("contas_bancarias")
+}
+
 model CentroCusto {
   id     Int     @id @default(autoincrement())
   nome   String
@@ -960,6 +1009,10 @@ model ContaPagar {
   jurosMulta     Float?    @map("juros_multa")
   desconto       Float?
   formaPagamento String?   @map("forma_pagamento")
+
+  // Conta de onde saiu o dinheiro do pagamento.
+  contaBancariaId Int?           @map("conta_bancaria_id")
+  contaBancaria   ContaBancaria? @relation(fields: [contaBancariaId], references: [id])
 
   // Número do boleto, da nota de compra ou do recibo.
   documento  String?
@@ -1099,8 +1152,30 @@ model EventoItem {
 // fiscal — placa, RNTRC, tara. Equipamento existe para a manutenção, e boa
 // parte do maquinário não tem placa nenhuma. Quando os dois descrevem a
 // mesma máquina, o vínculo liga os cadastros sem duplicar o controle.
+// Equipamento alocado numa operação. Entrada e saída guardam o histórico:
+// o mesmo picador passa por várias frentes ao longo do ano. Sem saída, está
+// na operação agora.
+model OperacaoEquipamento {
+  id            Int         @id @default(autoincrement())
+  operacaoId    Int         @map("operacao_id")
+  operacao      Operacao    @relation(fields: [operacaoId], references: [id])
+  equipamentoId Int         @map("equipamento_id")
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id])
+  dataEntrada   DateTime?   @map("data_entrada")
+  dataSaida     DateTime?   @map("data_saida")
+  observacao    String?
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  @@index([operacaoId])
+  @@index([equipamentoId])
+  @@map("operacao_equipamentos")
+}
+
 model Equipamento {
   id    Int     @id @default(autoincrement())
+  // Código interno da empresa (ex.: BN-1001). Único por empresa.
+  codigo String?
   nome  String
   // picador | escavadeira | pa-carregadeira | caminhao | carro | outro
   tipo  String  @default("outro")
@@ -1129,6 +1204,7 @@ model Equipamento {
 
   planos PlanoManutencao[]
   ordens OrdemManutencao[]
+  alocacoes OperacaoEquipamento[]
 
   @@index([empresaId, nome])
   @@map("equipamentos")
@@ -1229,8 +1305,23 @@ model Operacao {
   id        Int       @id @default(autoincrement())
   codigo    String
   descricao String
+  // Período do serviço (quando a frente de trabalho roda de fato).
   dataInicio DateTime? @map("data_inicio")
   dataFim    DateTime? @map("data_fim")
+
+  // Período do contrato, que pode começar antes e terminar depois do
+  // serviço.
+  dataInicioContrato DateTime? @map("data_inicio_contrato")
+  dataFimContrato    DateTime? @map("data_fim_contrato")
+
+  // Serviço parado temporariamente (chuva, licença, entressafra), sem
+  // encerrar a operação.
+  servicoPausado Boolean @default(false) @map("servico_pausado")
+
+  // Tamanho do contrato: área total e previsão de produção.
+  hectaresContrato  Float? @map("hectares_contrato")
+  previsaoToneladas Float? @map("previsao_toneladas")
+  previsaoM3        Float? @map("previsao_m3")
 
   // Quanto custa a matéria-prima por unidade nesta operação. É o que
   // transforma a quantidade descarregada em custo, viagem a viagem.
@@ -1239,6 +1330,12 @@ model Operacao {
   // Umidade contratada da biomassa, em porcentagem. Fica na operação
   // porque é condição do contrato, não de cada viagem.
   umidade Float?
+
+  // Serviços que a operação abrange e quem executa cada um:
+  // [{ tipo: "corte", execucao: "proprio" | "terceirizado", fornecedorId,
+  //    unidade: "m3" | "kg" | "ha" | "alq", valor }].
+  // O fornecedor só existe no terceirizado: é quem presta o serviço.
+  servicos Json @default("[]")
 
   // De quem vem a matéria-prima desta operação.
   fornecedorId Int?    @map("fornecedor_id")
@@ -1256,6 +1353,7 @@ model Operacao {
   viagens ViagemOperacao[]
   faturas FaturaOperacao[]
   contasPagar ContaPagar[]
+  equipamentos OperacaoEquipamento[]
 }
 
 // Menus liberados para um usuário DENTRO de uma empresa.

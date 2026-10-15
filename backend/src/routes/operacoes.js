@@ -10,19 +10,57 @@ const router = express.Router();
 const dataDoDia = (valor) =>
   valor ? new Date(`${String(valor).slice(0, 10)}T12:00:00-04:00`) : null;
 
+// A listagem mostra o nome do fornecedor. Criar e editar devolvem a operação
+// com ele também: sem isso a linha recém-salva aparecia com "—" no lugar do
+// fornecedor, como se ele tivesse sido apagado, até a tela ser recarregada.
+const incluirFornecedor = { fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } };
+
 router.get("/", asyncHandler(async (req, res) => {
   res.json(await prisma.operacao.findMany({
     where: {
       empresaId: req.usuario.empresaId || undefined,
       ativo: req.query.inativas === "1" ? undefined : true,
     },
-    include: { fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } },
+    include: incluirFornecedor,
     orderBy: [{ dataInicio: "desc" }, { codigo: "asc" }],
   }));
 }));
 
+// Lista fechada: a tela mostra estes seis, e um tipo desconhecido gravado
+// ficaria invisível e impossível de desmarcar.
+const TIPOS_SERVICO = ["corte", "enleiramento", "tracamento", "arraste", "picagem", "transporte"];
+// Unidade em que o serviço é cobrado: metro cúbico, quilo, hectare, alqueire.
+const UNIDADES_SERVICO = ["m3", "kg", "ha", "alq"];
+
+function servicosValidos(lista) {
+  if (!Array.isArray(lista)) return undefined;
+  const vistos = new Set();
+  return lista
+    .filter(s => s && TIPOS_SERVICO.includes(s.tipo) && !vistos.has(s.tipo) && vistos.add(s.tipo))
+    .map(s => {
+      const terceirizado = s.execucao === "terceirizado";
+      const fornecedorId = terceirizado && Number(s.fornecedorId) > 0 ? Number(s.fornecedorId) : null;
+      const valor = s.valor === "" || s.valor === null || s.valor === undefined ? null : Number(s.valor);
+      return {
+        tipo: s.tipo,
+        execucao: terceirizado ? "terceirizado" : "proprio",
+        fornecedorId,
+        unidade: UNIDADES_SERVICO.includes(s.unidade) ? s.unidade : null,
+        valor: Number.isFinite(valor) && valor >= 0 ? valor : null,
+      };
+    });
+}
+
+// Número opcional: vazio limpa, ausente não mexe.
+const numeroOpcional = (v) => (v === "" || v === null ? null : (v !== undefined ? Number(v) : undefined));
+// Data opcional, mesma regra.
+const dataOpcional = (v) => (v === "" || v === null ? null : (v ? dataDoDia(v) : undefined));
+
 router.post("/", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
+  const {
+    codigo, descricao, dataInicio, dataFim, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos,
+    dataInicioContrato, dataFimContrato, servicoPausado, hectaresContrato, previsaoToneladas, previsaoM3,
+  } = req.body;
   if (!codigo || !descricao) {
     return res.status(400).json({ erro: "Informe o código e a descrição" });
   }
@@ -37,13 +75,24 @@ router.post("/", asyncHandler(async (req, res) => {
         ? Number(valorUnitarioMateriaPrima) : undefined,
       fornecedorId: fornecedorId ? Number(fornecedorId) : undefined,
       umidade: umidade !== undefined && umidade !== "" ? Number(umidade) : undefined,
+      servicos: servicosValidos(servicos),
+      dataInicioContrato: dataOpcional(dataInicioContrato) || undefined,
+      dataFimContrato: dataOpcional(dataFimContrato) || undefined,
+      servicoPausado: servicoPausado === true,
+      hectaresContrato: numeroOpcional(hectaresContrato) ?? undefined,
+      previsaoToneladas: numeroOpcional(previsaoToneladas) ?? undefined,
+      previsaoM3: numeroOpcional(previsaoM3) ?? undefined,
       empresaId: req.usuario.empresaId || undefined,
     },
+    include: incluirFornecedor,
   }));
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade } = req.body;
+  const {
+    codigo, descricao, dataInicio, dataFim, ativo, valorUnitarioMateriaPrima, fornecedorId, umidade, servicos,
+    dataInicioContrato, dataFimContrato, servicoPausado, hectaresContrato, previsaoToneladas, previsaoM3,
+  } = req.body;
 
   res.json(await prisma.operacao.update({
     where: { id: Number(req.params.id) },
@@ -63,7 +112,15 @@ router.put("/:id", asyncHandler(async (req, res) => {
       umidade: umidade === "" || umidade === null
         ? null
         : (umidade !== undefined ? Number(umidade) : undefined),
+      servicos: servicosValidos(servicos),
+      dataInicioContrato: dataOpcional(dataInicioContrato),
+      dataFimContrato: dataOpcional(dataFimContrato),
+      servicoPausado: typeof servicoPausado === "boolean" ? servicoPausado : undefined,
+      hectaresContrato: numeroOpcional(hectaresContrato),
+      previsaoToneladas: numeroOpcional(previsaoToneladas),
+      previsaoM3: numeroOpcional(previsaoM3),
     },
+    include: incluirFornecedor,
   }));
 }));
 
@@ -226,6 +283,137 @@ router.get("/viagens-por-cliente/:pessoaId", asyncHandler(async (req, res) => {
   });
 
   res.json({ viagens, totais: totaisDasViagens(viagens) });
+}));
+
+/* ---------------------------------------------------------------------------
+   Equipamentos alocados na operação.
+
+   A lista de equipamentos para escolher vem por aqui, e não por
+   /manutencao/equipamentos, para seguir a permissão do menu Operações:
+   quem aloca equipamento na operação nem sempre mexe na manutenção.
+--------------------------------------------------------------------------- */
+const incluirEquipamento = {
+  equipamento: {
+    select: { id: true, codigo: true, nome: true, tipo: true, identificacao: true, veiculo: { select: { placa: true } } },
+  },
+};
+
+async function operacaoDaEmpresa(id, req) {
+  return prisma.operacao.findFirst({
+    where: { id: Number(id), empresaId: req.usuario.empresaId || undefined },
+    select: { id: true },
+  });
+}
+
+// Alocação aberta do mesmo equipamento em outra operação: um equipamento
+// não está em duas frentes ao mesmo tempo.
+async function alocacaoAbertaEmOutra(equipamentoId, operacaoId, ignorarId) {
+  return prisma.operacaoEquipamento.findFirst({
+    where: {
+      equipamentoId: Number(equipamentoId),
+      dataSaida: null,
+      operacaoId: { not: Number(operacaoId) },
+      id: ignorarId ? { not: Number(ignorarId) } : undefined,
+    },
+    include: { operacao: { select: { codigo: true, descricao: true } } },
+  });
+}
+
+router.get("/equipamentos-disponiveis", asyncHandler(async (req, res) => {
+  const equipamentos = await prisma.equipamento.findMany({
+    where: { empresaId: req.usuario.empresaId || undefined, ativo: true },
+    select: {
+      id: true, codigo: true, nome: true, tipo: true, identificacao: true,
+      veiculo: { select: { placa: true } },
+      alocacoes: {
+        where: { dataSaida: null },
+        select: { operacaoId: true, operacao: { select: { codigo: true, descricao: true } } },
+      },
+    },
+    orderBy: [{ codigo: { sort: "asc", nulls: "last" } }, { nome: "asc" }],
+  });
+  res.json(equipamentos);
+}));
+
+router.get("/:id/equipamentos", asyncHandler(async (req, res) => {
+  if (!(await operacaoDaEmpresa(req.params.id, req))) return res.status(404).json({ erro: "Operação não encontrada" });
+  res.json(await prisma.operacaoEquipamento.findMany({
+    where: { operacaoId: Number(req.params.id) },
+    include: incluirEquipamento,
+    // Os que estão na operação agora primeiro; depois o histórico.
+    orderBy: [{ dataSaida: { sort: "desc", nulls: "first" } }, { dataEntrada: "desc" }, { id: "desc" }],
+  }));
+}));
+
+router.post("/:id/equipamentos", asyncHandler(async (req, res) => {
+  const operacaoId = Number(req.params.id);
+  if (!(await operacaoDaEmpresa(operacaoId, req))) return res.status(404).json({ erro: "Operação não encontrada" });
+  const { equipamentoId, dataEntrada, dataSaida, observacao } = req.body;
+  const equipamento = equipamentoId && await prisma.equipamento.findFirst({
+    where: { id: Number(equipamentoId), empresaId: req.usuario.empresaId || undefined },
+  });
+  if (!equipamento) return res.status(400).json({ erro: "Escolha o equipamento" });
+
+  if (!dataSaida) {
+    const outra = await alocacaoAbertaEmOutra(equipamento.id, operacaoId);
+    if (outra) {
+      return res.status(409).json({
+        erro: `${equipamento.nome} já está na operação ${outra.operacao.codigo} — ${outra.operacao.descricao}`,
+        detalhe: "Informe a data de saída dele lá antes de alocar aqui.",
+      });
+    }
+  }
+
+  res.status(201).json(await prisma.operacaoEquipamento.create({
+    data: {
+      operacaoId,
+      equipamentoId: equipamento.id,
+      dataEntrada: dataDoDia(dataEntrada) || undefined,
+      dataSaida: dataDoDia(dataSaida) || undefined,
+      observacao: String(observacao || "").trim() || undefined,
+    },
+    include: incluirEquipamento,
+  }));
+}));
+
+router.put("/:id/equipamentos/:alocacaoId", asyncHandler(async (req, res) => {
+  const operacaoId = Number(req.params.id);
+  const alocacao = await prisma.operacaoEquipamento.findFirst({
+    where: { id: Number(req.params.alocacaoId), operacaoId, operacao: { empresaId: req.usuario.empresaId || undefined } },
+  });
+  if (!alocacao) return res.status(404).json({ erro: "Alocação não encontrada" });
+  const { dataEntrada, dataSaida, observacao } = req.body;
+
+  // Reabrir (apagar a saída) só se o equipamento não estiver em outra frente.
+  if (dataSaida === "" || dataSaida === null) {
+    const outra = await alocacaoAbertaEmOutra(alocacao.equipamentoId, operacaoId, alocacao.id);
+    if (outra) {
+      return res.status(409).json({
+        erro: `Esse equipamento está na operação ${outra.operacao.codigo} — ${outra.operacao.descricao}`,
+        detalhe: "Informe a saída dele lá antes de deixar esta alocação em aberto.",
+      });
+    }
+  }
+
+  res.json(await prisma.operacaoEquipamento.update({
+    where: { id: alocacao.id },
+    data: {
+      dataEntrada: dataEntrada === "" || dataEntrada === null ? null : (dataEntrada ? dataDoDia(dataEntrada) : undefined),
+      dataSaida: dataSaida === "" || dataSaida === null ? null : (dataSaida ? dataDoDia(dataSaida) : undefined),
+      observacao: observacao !== undefined ? (String(observacao || "").trim() || null) : undefined,
+    },
+    include: incluirEquipamento,
+  }));
+}));
+
+// Excluir é para lançamento errado; equipamento que saiu ganha data de saída.
+router.delete("/:id/equipamentos/:alocacaoId", asyncHandler(async (req, res) => {
+  const alocacao = await prisma.operacaoEquipamento.findFirst({
+    where: { id: Number(req.params.alocacaoId), operacaoId: Number(req.params.id), operacao: { empresaId: req.usuario.empresaId || undefined } },
+  });
+  if (!alocacao) return res.status(404).json({ erro: "Alocação não encontrada" });
+  await prisma.operacaoEquipamento.delete({ where: { id: alocacao.id } });
+  res.status(204).send();
 }));
 
 router.get("/:id/viagens", asyncHandler(async (req, res) => {

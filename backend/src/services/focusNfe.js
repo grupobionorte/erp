@@ -173,7 +173,23 @@ function dataEmissaoSefaz(data = new Date(), timeZone = process.env.TZ_FISCAL ||
 // produto, transportadora/veículo, colaborador responsável e os campos de
 // cabeçalho preenchidos no cadastro). Ajuste os nomes de campo conforme a
 // versão da documentação do provedor.
-function montarPayloadNfe({ empresa, destinatario, itens, documento, transportadora, veiculo }) {
+// Falta no endereço do local de retirada: o grupo vai para a SEFAZ com
+// CNPJ/CPF, logradouro, número, bairro, município e UF, e não há dado
+// plausível para preencher no lugar. Devolve a lista do que falta.
+function faltaNoLocalRetirada(local) {
+  if (!local) return [];
+  const e = local.endereco || {};
+  return [
+    !somenteDigitos(local.documento) && "CNPJ/CPF",
+    !e.logradouro && "logradouro",
+    !e.numero && "número",
+    !e.bairro && "bairro",
+    !e.cidade && "município",
+    !e.uf && "UF",
+  ].filter(Boolean);
+}
+
+function montarPayloadNfe({ empresa, destinatario, itens, documento, transportadora, veiculo, localRetirada }) {
   const modalidadeFrete = CODIGO_MODALIDADE_FRETE[documento.modalidadeFrete] ?? 9;
 
   const semAcento = (t) =>
@@ -205,6 +221,7 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     placaComUf(veiculo) ? `CAVALO: ${placaComUf(veiculo)}` : null,
     placaComUf(documento.veiculoReboque) ? `REBOQUE: ${placaComUf(documento.veiculoReboque)}` : null,
     placaComUf(documento.veiculoReboque2) ? `REBOQUE 2: ${placaComUf(documento.veiculoReboque2)}` : null,
+    placaComUf(documento.veiculoReboque3) ? `REBOQUE 3: ${placaComUf(documento.veiculoReboque3)}` : null,
   ].filter(Boolean).join("\n") || null;
 
   return {
@@ -246,6 +263,26 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
     cep_destinatario: destinatario.endereco?.cep,
     telefone_destinatario: destinatario.telefone || undefined,
     email_destinatario: destinatario.email || undefined,
+
+    // Local de retirada: só quando a mercadoria sai de outro endereço que
+    // não o do emitente. Nomes dos campos conferidos na referência da Focus
+    // (campos.focusnfe.com.br, grupo "retirada").
+    ...(localRetirada ? {
+      cnpj_retirada: localRetirada.tipo === "pessoa_juridica" ? somenteDigitos(localRetirada.documento) : undefined,
+      cpf_retirada: localRetirada.tipo === "pessoa_fisica" ? somenteDigitos(localRetirada.documento) : undefined,
+      nome_retirada: limitarTexto(localRetirada.nomeRazaoSocial, 60),
+      inscricao_estadual_retirada: localRetirada.ie || undefined,
+      logradouro_retirada: localRetirada.endereco?.logradouro,
+      numero_retirada: localRetirada.endereco?.numero,
+      complemento_retirada: localRetirada.endereco?.complemento || undefined,
+      bairro_retirada: localRetirada.endereco?.bairro,
+      codigo_municipio_retirada: localRetirada.endereco?.codigoIbgeCidade || undefined,
+      municipio_retirada: localRetirada.endereco?.cidade,
+      uf_retirada: localRetirada.endereco?.uf,
+      cep_retirada: somenteDigitos(localRetirada.endereco?.cep) || undefined,
+      telefone_retirada: somenteDigitos(localRetirada.telefone) || undefined,
+      email_retirada: localRetirada.email || undefined,
+    } : {}),
 
     modalidade_frete: modalidadeFrete,
     nome_transportador: transportadora?.razaoSocial || undefined,
@@ -1157,6 +1194,7 @@ function urlCompleta(caminho, tipo) {
 module.exports = {
   ambienteDoTipo,
   montarPayloadNfe,
+  faltaNoLocalRetirada,
   montarPayloadCte,
   validarPayloadCte,
   validarPayloadMdfe,

@@ -40,7 +40,7 @@ Variáveis essenciais no Render (serviço `erp-biomassa-backend`):
 | `FOCUS_AMBIENTE_NFE` / `_CTE` / `_MDFE` | `producao` ou `homologacao`, **por documento** |
 | `TZ_FISCAL` | `America/Cuiaba` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CONTATO` | notificações push |
-| `CRON_TOKEN` | protege a rota de lembretes |
+| `CRON_TOKEN` | protege `POST /lembretes`, chamada a cada 5 min pelo cron-job.org (job "Lembretes da Agenda", fuso America/Cuiaba) com o cabeçalho `x-cron-token` |
 
 Endereços: `erp-biomassa-backend.onrender.com` e
 `erp-biomassa-frontend.onrender.com`.
@@ -172,9 +172,12 @@ porquê.
 - AFD e AEJ do ponto (layout da Portaria 671/2021) — não implementados
 - Regularização REP-P: INPI, certificado ICP-Brasil, responsável técnico
 - E-mail do comprovante de ponto (SMTP configurado, falta testar no plano pago)
-- Agendador dos lembretes da agenda: declarado no `render.yaml`
-  (`erp-biomassa-lembretes`, a cada 5 min), mas só vale depois de criado no
-  Render com o mesmo `CRON_TOKEN` do backend
+- Agendador dos lembretes da agenda: tem que ser externo (ex.: cron-job.org),
+  `POST /lembretes` a cada 5 min com o cabeçalho `x-cron-token` igual ao
+  `CRON_TOKEN` do backend. Sem ele, o resumo das 7h e o aviso de 1 hora antes
+  não saem. O intervalo precisa casar com `INTERVALO_CRON_MIN` em
+  `backend/src/routes/lembretes.js`. Não vai no `render.yaml`: com Auto Sync
+  ligado, isso criaria um serviço pago sozinho
 - MDF-e com carga fracionada: caminho testado, mas pouco rodado
 
 ---
@@ -188,7 +191,17 @@ mantenha esse padrão.
 
 **Versão** em `VERSAO_SISTEMA` no `index.html`, exibida na barra lateral.
 Terceiro dígito para correção, segundo para recurso novo. Atualize a cada
-entrega.
+entrega, e acrescente uma linha curta em `NOVIDADES` (logo abaixo), do ponto
+de vista de quem usa: ela aparece na tela de entrada.
+
+**Toda listagem mostra 50 por tela**, com o componente `Paginacao` (mesmo
+visual e contador em todas). Dado que cresce sem parar — NF-e, CT-e, MDF-e —
+pagina no servidor: `/documentos-fiscais?pagina=&porPagina=&busca=&de=&ate=`
+devolve `{ documentos, total, paginas }`; sem `pagina`, continua a lista
+simples que o CT-e e o MDF-e usam para escolher documentos. As demais usam
+`usePaginacaoLocal(lista, reiniciar)`, porque a mesma lista alimenta selects
+e contadores e precisa vir inteira. Não pagine listas de seleção ("marcar
+todas", totais) nem o que vai para impressão.
 
 **Exclusão é lógica** em cadastros (`ativo: false`): registro citado em
 documento fiscal precisa continuar existindo.

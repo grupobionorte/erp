@@ -21,7 +21,33 @@ const incluir = {
   categoria: { select: { id: true, nome: true } },
   centroCusto: { select: { id: true, nome: true } },
   operacao: { select: { id: true, codigo: true, descricao: true } },
+  contaBancaria: { select: { id: true, nome: true } },
 };
+
+// Formas aceitas na baixa. Lista fechada para o relatório poder somar por
+// forma sem "Pix", "PIX" e "pix" virarem três linhas.
+const FORMAS_PAGAMENTO = ["PIX", "Débito", "Crédito", "Boleto", "Transferência"];
+
+// A baixa precisa dizer de onde saiu o dinheiro e como. Devolve a mensagem
+// de erro, ou null quando está tudo certo.
+async function conferirPagamento({ contaBancariaId, formaPagamento }, empresaId) {
+  if (!contaBancariaId) return "Informe a conta de onde saiu o pagamento";
+  if (!FORMAS_PAGAMENTO.includes(formaPagamento)) return "Informe a forma de pagamento";
+  const conta = await prisma.contaBancaria.findFirst({ where: { id: Number(contaBancariaId), empresaId: empresaId || undefined } });
+  if (!conta) return "Conta bancária não encontrada";
+  return null;
+}
+
+// Conta em aberto pode já trazer a conta e a forma previstas para o
+// pagamento; aí são opcionais, mas, se vierem, têm de valer.
+async function conferirPrevisto({ contaBancariaId, formaPagamento }, empresaId) {
+  if (formaPagamento && !FORMAS_PAGAMENTO.includes(formaPagamento)) return "Forma de pagamento inválida";
+  if (contaBancariaId) {
+    const conta = await prisma.contaBancaria.findFirst({ where: { id: Number(contaBancariaId), empresaId: empresaId || undefined } });
+    if (!conta) return "Conta bancária não encontrada";
+  }
+  return null;
+}
 
 // "sem" = despesas gerais, sem operação; número = só daquela operação.
 function filtroOperacao(operacaoId) {
@@ -53,19 +79,69 @@ router.get("/categorias", asyncHandler(async (req, res) => {
 }));
 
 router.post("/categorias", asyncHandler(async (req, res) => {
-  if (!req.body.nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
   res.status(201).json(await prisma.categoriaDespesa.create({
-    data: { nome: req.body.nome, empresaId: req.usuario.empresaId || undefined },
+    data: { nome, empresaId: req.usuario.empresaId || undefined },
   }));
 }));
 
+// Só o nome muda: a tela agora permite renomear, e repassar o corpo inteiro
+// deixaria trocar a empresa ou reativar pelo caminho errado. As contas
+// apontam para o id, então o nome novo vale também para as já lançadas.
 router.put("/categorias/:id", asyncHandler(async (req, res) => {
-  const { empresaId, ...dados } = req.body;
-  res.json(await prisma.categoriaDespesa.update({ where: { id: Number(req.params.id) }, data: dados }));
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome da categoria" });
+  const id = Number(req.params.id);
+  const existe = await prisma.categoriaDespesa.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Categoria não encontrada" });
+  res.json(await prisma.categoriaDespesa.update({ where: { id }, data: { nome } }));
 }));
 
 router.delete("/categorias/:id", asyncHandler(async (req, res) => {
   await prisma.categoriaDespesa.update({ where: { id: Number(req.params.id) }, data: { ativo: false } });
+  res.status(204).send();
+}));
+
+// ---------------------------------------------------------------------------
+// Contas bancárias (de onde sai o dinheiro do pagamento)
+// ---------------------------------------------------------------------------
+function dadosContaBancaria(body) {
+  const texto = (v) => (String(v ?? "").trim() || null);
+  return { nome: texto(body.nome), banco: texto(body.banco), agencia: texto(body.agencia), numero: texto(body.numero) };
+}
+
+router.get("/contas-bancarias", asyncHandler(async (req, res) => {
+  res.json(await prisma.contaBancaria.findMany({
+    where: { empresaId: req.usuario.empresaId || undefined, ativo: req.query.inativas === "1" ? undefined : true },
+    orderBy: { nome: "asc" },
+  }));
+}));
+
+router.post("/contas-bancarias", asyncHandler(async (req, res) => {
+  const dados = dadosContaBancaria(req.body);
+  if (!dados.nome) return res.status(400).json({ erro: "Informe o nome da conta" });
+  res.status(201).json(await prisma.contaBancaria.create({
+    data: { ...dados, empresaId: req.usuario.empresaId || undefined },
+  }));
+}));
+
+router.put("/contas-bancarias/:id", asyncHandler(async (req, res) => {
+  const dados = dadosContaBancaria(req.body);
+  if (!dados.nome) return res.status(400).json({ erro: "Informe o nome da conta" });
+  const id = Number(req.params.id);
+  const existe = await prisma.contaBancaria.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Conta bancária não encontrada" });
+  res.json(await prisma.contaBancaria.update({ where: { id }, data: dados }));
+}));
+
+// Desativa em vez de apagar: os pagamentos já feitos continuam dizendo de
+// qual conta saíram.
+router.delete("/contas-bancarias/:id", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const existe = await prisma.contaBancaria.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Conta bancária não encontrada" });
+  await prisma.contaBancaria.update({ where: { id }, data: { ativo: false } });
   res.status(204).send();
 }));
 
@@ -94,11 +170,16 @@ router.post("/centros-custo", asyncHandler(async (req, res) => {
 }));
 
 router.put("/centros-custo/:id", asyncHandler(async (req, res) => {
-  const { empresaId, veiculoId, ...dados } = req.body;
+  const { veiculoId } = req.body;
+  const nome = String(req.body.nome || "").trim();
+  if (!nome) return res.status(400).json({ erro: "Informe o nome do centro de custo" });
+  const id = Number(req.params.id);
+  const existe = await prisma.centroCusto.findFirst({ where: { id, empresaId: req.usuario.empresaId || undefined } });
+  if (!existe) return res.status(404).json({ erro: "Centro de custo não encontrado" });
   res.json(await prisma.centroCusto.update({
-    where: { id: Number(req.params.id) },
+    where: { id },
     data: {
-      ...dados,
+      nome,
       veiculoId: veiculoId === null || veiculoId === "" ? null : (veiculoId ? Number(veiculoId) : undefined),
     },
     include: { veiculo: { select: { id: true, placa: true } } },
@@ -170,11 +251,16 @@ router.post("/", asyncHandler(async (req, res) => {
     repeticao, quantidade,
     // Conta que já nasce paga: acontece quando o lançamento é feito depois
     // do pagamento, que é o caso comum de despesa do dia a dia.
-    dataPagamento, valorPago, jurosMulta, desconto, formaPagamento,
+    dataPagamento, valorPago, jurosMulta, desconto, formaPagamento, contaBancariaId,
   } = req.body;
 
   if (!descricao || !valor || !vencimento) {
     return res.status(400).json({ erro: "Informe descrição, valor e vencimento" });
+  }
+  {
+    const conferir = dataPagamento ? conferirPagamento : conferirPrevisto;
+    const problema = await conferir({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
+    if (problema) return res.status(400).json({ erro: problema });
   }
 
   // A quantidade só vale para parcelado e mensal. A tela manda o número do
@@ -200,6 +286,9 @@ router.post("/", asyncHandler(async (req, res) => {
     operacaoId: operacaoId ? Number(operacaoId) : undefined,
     documento: documento || undefined,
     observacao: observacao || undefined,
+    // Previstas: valem para todas as parcelas, e a baixa já vem com elas.
+    formaPagamento: formaPagamento || undefined,
+    contaBancariaId: contaBancariaId ? Number(contaBancariaId) : undefined,
     empresaId: req.usuario.empresaId || undefined,
     grupo,
   };
@@ -212,7 +301,6 @@ router.post("/", asyncHandler(async (req, res) => {
     valorPago: valorPago !== undefined && valorPago !== "" ? Number(valorPago) : undefined,
     jurosMulta: jurosMulta ? Number(jurosMulta) : undefined,
     desconto: desconto ? Number(desconto) : undefined,
-    formaPagamento: formaPagamento || undefined,
   } : {};
 
   const registros = Array.from({ length: vezes }, (_, i) => ({
@@ -245,7 +333,7 @@ router.post("/", asyncHandler(async (req, res) => {
 router.put("/:id", asyncHandler(async (req, res) => {
   const {
     empresaId, fornecedorId, categoriaId, centroCustoId, operacaoId, vencimento, competencia,
-    dataPagamento, valorPago, jurosMulta, desconto,
+    dataPagamento, valorPago, jurosMulta, desconto, formaPagamento, contaBancariaId,
     // Só existem no lançamento (parcelar/repetir). A tela manda junto na
     // edição, e repassados ao banco faziam toda edição falhar.
     repeticao, quantidade,
@@ -255,6 +343,13 @@ router.put("/:id", asyncHandler(async (req, res) => {
   // Informar a data de pagamento aqui equivale a dar baixa; limpar a data
   // devolve a conta para em aberto.
   const statusPeloPagamento = dataPagamento ? "paga" : (dataPagamento === "" || dataPagamento === null ? "aberta" : undefined);
+  {
+    const conferir = dataPagamento ? conferirPagamento : conferirPrevisto;
+    const problema = await conferir({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
+    if (problema) return res.status(400).json({ erro: problema });
+  }
+  // Vazio limpa; ausente não mexe.
+  const opcional = (v, conv) => (v === "" || v === null ? null : (v !== undefined ? conv(v) : undefined));
 
   res.json(await prisma.contaPagar.update({
     where: { id: Number(req.params.id) },
@@ -268,6 +363,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorPago: valorPago === "" || valorPago === null ? null : (valorPago !== undefined ? Number(valorPago) : undefined),
       jurosMulta: jurosMulta === "" || jurosMulta === null ? null : (jurosMulta !== undefined ? Number(jurosMulta) : undefined),
       desconto: desconto === "" || desconto === null ? null : (desconto !== undefined ? Number(desconto) : undefined),
+      formaPagamento: opcional(formaPagamento, String),
+      contaBancariaId: opcional(contaBancariaId, Number),
       fornecedorId: fornecedorId === null || fornecedorId === "" ? null : (fornecedorId ? Number(fornecedorId) : undefined),
       categoriaId: categoriaId === null || categoriaId === "" ? null : (categoriaId ? Number(categoriaId) : undefined),
       centroCustoId: centroCustoId === null || centroCustoId === "" ? null : (centroCustoId ? Number(centroCustoId) : undefined),
@@ -282,11 +379,13 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // Baixa: registra o pagamento. Fica separado da edição porque é a operação
 // que a rotina repete, e porque ela muda o status.
 router.post("/:id/pagar", asyncHandler(async (req, res) => {
-  const { dataPagamento, valorPago, jurosMulta, desconto, formaPagamento } = req.body;
+  const { dataPagamento, valorPago, jurosMulta, desconto, formaPagamento, contaBancariaId } = req.body;
 
   const conta = await prisma.contaPagar.findUnique({ where: { id: Number(req.params.id) } });
   if (!conta) return res.status(404).json({ erro: "Conta não encontrada" });
   if (conta.status === "paga") return res.status(409).json({ erro: "Essa conta já está paga" });
+  const problema = await conferirPagamento({ contaBancariaId, formaPagamento }, req.usuario.empresaId);
+  if (problema) return res.status(400).json({ erro: problema });
 
   res.json(await prisma.contaPagar.update({
     where: { id: conta.id },
@@ -296,7 +395,8 @@ router.post("/:id/pagar", asyncHandler(async (req, res) => {
       valorPago: valorPago !== undefined && valorPago !== "" ? Number(valorPago) : conta.valor,
       jurosMulta: jurosMulta ? Number(jurosMulta) : undefined,
       desconto: desconto ? Number(desconto) : undefined,
-      formaPagamento: formaPagamento || undefined,
+      formaPagamento,
+      contaBancariaId: Number(contaBancariaId),
     },
     include: incluir,
   }));
@@ -308,7 +408,7 @@ router.post("/:id/estornar", asyncHandler(async (req, res) => {
     where: { id: Number(req.params.id) },
     data: {
       status: "aberta",
-      dataPagamento: null, valorPago: null, jurosMulta: null, desconto: null, formaPagamento: null,
+      dataPagamento: null, valorPago: null, jurosMulta: null, desconto: null,
     },
     include: incluir,
   }));

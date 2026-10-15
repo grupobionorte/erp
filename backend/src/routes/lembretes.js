@@ -6,7 +6,7 @@ const { enviarPushParaColaborador } = require("../lib/push");
 
 const router = express.Router();
 
-// Tem que ser igual ao intervalo do cron no render.yaml.
+// Tem que ser igual ao intervalo configurado no agendador externo (cron-job.org).
 const INTERVALO_CRON_MIN = 5;
 
 /* ---------------------------------------------------------------------------

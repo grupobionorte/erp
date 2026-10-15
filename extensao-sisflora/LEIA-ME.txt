@@ -1,0 +1,34 @@
+EXTENSÃO "ERP Biomassa — preencher GF no SISFLORA"
+
+O que faz
+  Na tela "Emitir GF" do SISFLORA, mostra um painel do ERP que preenche:
+  1. NF-e: marca "Nota Fiscal Eletrônica", chave de acesso e protocolo;
+  2. Destino: o empreendimento do CC-SEMA (pelo código no cadastro do
+     cliente no ERP, conferindo o CNPJ/CPF), o memorial descritivo e, se
+     houver no cadastro, a observação do ICMS (forma "Outros");
+  3. Transporte: tipo Rodoviário, UF e município de destino, placa do cavalo
+     e dos reboques (até 3);
+  4. Produto: preço total do item (e o volume, se a nota estiver em m³ ou st).
+  Lote, produto e essência continuam sendo escolhidos na própria tela. A extensão NUNCA clica em "Adicionar" nem em "Emitir".
+
+Instalar (uma vez, em cada computador)
+  1. No Chrome, abra:  chrome://extensions
+  2. Ligue "Modo do desenvolvedor" (canto superior direito).
+  3. Clique em "Carregar sem compactação" e escolha esta pasta:
+       Documentos\GitHub\erp\extensao-sisflora
+  4. Pronto. Ela só funciona dentro de sisflora.sema.mt.gov.br.
+
+Usar
+  1. No ERP, em Vendas/NF-e, no menu (⋮) de uma nota AUTORIZADA:
+     "Copiar para a GF (SISFLORA)".
+  2. No SISFLORA (logado com o certificado), abra a tela de emitir GF.
+  3. No painel verde do canto da tela, clique na caixa e cole (Ctrl+V).
+  4. Use os botões 1 a 4. Confira cada parte e clique em "Adicionar"
+     na própria tela. Emitir é sempre com vocês.
+
+Atualizar
+  Quando a pasta for atualizada, volte em chrome://extensions e clique no
+  botão de recarregar (seta circular) da extensão.
+
+Se a SEMA mudar a tela da GF, a extensão pode deixar de preencher algum
+campo. Nesse caso ela avisa no painel, e o campo é preenchido à mão.

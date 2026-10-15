@@ -163,6 +163,18 @@ router.post("/renovar", autenticar, asyncHandler(async (req, res) => {
   });
 }));
 
+// Ambiente de emissão de cada documento, para a tela de entrada. Público
+// como a logo: avisa antes do login se a NF-e está valendo de verdade —
+// emitir em produção achando que é teste (ou o contrário) é caro de desfazer.
+router.get("/ambiente", asyncHandler(async (req, res) => {
+  const { ambienteDoTipo } = require("../services/focusNfe");
+  res.json({
+    NFe: ambienteDoTipo("NFe"),
+    CTe: ambienteDoTipo("CTe"),
+    MDFe: ambienteDoTipo("MDFe"),
+  });
+}));
+
 router.get("/empresas/:id/logo", asyncHandler(async (req, res) => {
   const empresa = await prisma.empresa.findFirst({
     where: { id: Number(req.params.id), ativo: true },

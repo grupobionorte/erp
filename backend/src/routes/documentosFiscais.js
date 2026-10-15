@@ -91,14 +91,48 @@ router.get("/", asyncHandler(async (req, res) => {
   // documento, a tela busca a versão completa em /documentos-fiscais/:id.
   const limite = Math.min(Number(req.query.limite) || 300, 1000);
 
+  const where = {
+    ...(tipo ? { tipo } : {}),
+    // Diferente dos outros cadastros, documento fiscal sempre tem uma
+    // empresa (é obrigatório desde o início) — não existe "documento
+    // sem empresa" pra tratar aqui.
+    ...(empresaId ? { empresaId } : {}),
+  };
+
+  // Busca por número, cliente ou chave — os três jeitos de procurar uma
+  // nota na prática. Feita aqui, e não na tela, para alcançar todas as
+  // notas e não só as da página aberta.
+  const busca = String(req.query.busca || "").trim();
+  if (busca) {
+    const digitos = busca.replace(/\D/g, "");
+    where.OR = [
+      { destinatario: { nomeRazaoSocial: { contains: busca, mode: "insensitive" } } },
+      ...(digitos ? [{ chaveAcesso: { contains: digitos } }] : []),
+      ...(/^\d{1,9}$/.test(busca) ? [{ numero: Number(busca) }] : []),
+    ];
+  }
+
+  // Período pela data de emissão, em dias inteiros de Cuiabá. Rascunho
+  // entra sempre, qualquer que seja a data: sumir do filtro do mês faria
+  // ele ser esquecido.
+  const diaValido = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  if (diaValido(req.query.de) || diaValido(req.query.ate)) {
+    const { inicio, fim } = fuso.intervaloNoFuso(
+      diaValido(req.query.de) ? req.query.de : null,
+      diaValido(req.query.ate) ? req.query.ate : null
+    );
+    where.AND = [{ OR: [{ dataEmissao: { gte: inicio, lte: fim } }, { status: "rascunho" }] }];
+  }
+
+  // Com "pagina", a resposta vem paginada: { documentos, total, pagina,
+  // paginas }. Sem, continua a lista simples — o CT-e e o MDF-e usam esta
+  // mesma rota para escolher documentos.
+  const paginado = req.query.pagina !== undefined;
+  const porPagina = Math.min(Math.max(Number(req.query.porPagina) || 50, 1), 200);
+  const pagina = Math.max(Number(req.query.pagina) || 1, 1);
+
   const documentos = await prisma.documentoFiscal.findMany({
-    where: {
-      ...(tipo ? { tipo } : {}),
-      // Diferente dos outros cadastros, documento fiscal sempre tem uma
-      // empresa (é obrigatório desde o início) — não existe "documento
-      // sem empresa" pra tratar aqui.
-      ...(empresaId ? { empresaId } : {}),
-    },
+    where,
     include: {
       destinatario: { select: { id: true, nomeRazaoSocial: true, documento: true } },
       // Só o que o menu de ações precisa: enviar ao motorista pelo WhatsApp.
@@ -114,10 +148,25 @@ router.get("/", asyncHandler(async (req, res) => {
       // Contagem em vez das listas inteiras.
       _count: { select: { documentosTransportados: true, documentosVinculados: true } },
     },
-    orderBy: { dataEmissao: "desc" },
-    take: limite,
+    // Paginado: número maior primeiro, como a tela sempre ordenou — a nota
+    // recém-emitida é a que se procura, e o rascunho (sem número) fica no
+    // topo, onde precisa estar para virar nota.
+    // O CT-e deixa ordenar pelo número clicando no cabeçalho ("ordem"):
+    // crescente com o rascunho primeiro, decrescente com o rascunho por último.
+    orderBy: !paginado
+      ? { dataEmissao: "desc" }
+      : req.query.ordem === "numeroAsc"
+        ? [{ numero: { sort: "asc", nulls: "first" } }, { id: "asc" }]
+        : req.query.ordem === "numeroDesc"
+          ? [{ numero: { sort: "desc", nulls: "last" } }, { id: "desc" }]
+          : [{ numero: { sort: "desc", nulls: "first" } }, { id: "desc" }],
+    ...(paginado ? { skip: (pagina - 1) * porPagina, take: porPagina } : { take: limite }),
   });
-  res.json(documentos);
+
+  if (!paginado) return res.json(documentos);
+
+  const total = await prisma.documentoFiscal.count({ where });
+  res.json({ documentos, total, pagina, porPagina, paginas: Math.max(Math.ceil(total / porPagina), 1) });
 }));
 
 // Entrega o XML como arquivo para download. O link direto do provedor abre
@@ -156,11 +205,12 @@ router.get("/:id", asyncHandler(async (req, res) => {
     // Documento completo: é daqui que a tela de edição se abastece, já que
     // a listagem passou a trazer só o resumo.
     include: {
-      destinatario: true, remetente: true, expedidor: true, recebedor: true, transportadora: true,
+      destinatario: { include: { endereco: true } }, remetente: true, expedidor: true, recebedor: true, transportadora: true,
       veiculo: { include: { motorista: true } },
       veiculoReboque: true, veiculoReboque2: true, veiculoReboque3: true,
       colaboradorResponsavel: true, itens: { include: { produto: true } },
       documentosTransportados: { include: { notaFiscal: true } }, documentosVinculados: true,
+      localRetirada: { include: { endereco: true } },
     },
   });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
@@ -175,11 +225,11 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
-    destinatarioId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id,
+    destinatarioId, transportadoraId, veiculoId, veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
     naturezaOperacao, modalidadeFrete, dataSaida, horaSaida, informacoesComplementares, itens,
     finalidadeOperacao, chaveNfeReferenciada, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
-    dataEmissao, colaboradorResponsavelId,
+    dataEmissao, colaboradorResponsavelId, localRetiradaId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
   } = req.body;
 
@@ -237,7 +287,9 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
       veiculoId: veiculoId || undefined,
       veiculoReboqueId: veiculoReboqueId || undefined,
       veiculoReboque2Id: veiculoReboque2Id || undefined,
+      veiculoReboque3Id: veiculoReboque3Id || undefined,
       colaboradorResponsavelId: colaboradorResponsavelId || undefined,
+      localRetiradaId: localRetiradaId ? Number(localRetiradaId) : undefined,
       numero,
       serie: Number.isNaN(serie) ? undefined : serie,
       dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
@@ -790,11 +842,14 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   }
 
   // Tudo que identifica o documento original fica de fora: numeração,
-  // chave, protocolo, status e o vínculo com um MDFe. O resto é o que vale
-  // a pena aproveitar.
+  // chave, protocolo, status e o vínculo com um MDFe. A Guia Florestal
+  // também: cada nota tem a sua, e a copiada fazia a nota nova parecer já
+  // ter guia — com o número e os prazos da outra. O resto é o que vale a
+  // pena aproveitar.
   const {
     id, numero, serie, chaveAcesso, status, protocoloAutorizacao, dataEmissao, dataAutorizacao,
     xmlUrl, pdfUrl, motivoRejeicao, tentativaEnvio, justificativaCancelamento, mdfeId,
+    gfNumero, gfDataEmissao, gfValidade, gfDataRecebimento, gfObservacao,
     documentosTransportados, itens, ...dados
   } = origem;
 
@@ -883,6 +938,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
       veiculoReboque: true,
       veiculoReboque2: true,
       veiculoReboque3: true,
+      localRetirada: { include: { endereco: true } },
       documentosTransportados: { include: { notaFiscal: true } },
       // Os contratantes do MDF-e saem do tomador de cada CT-e vinculado, e
       // os CEPs de carga lotação saem dos endereços dessas pessoas.
@@ -918,6 +974,18 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     });
   }
 
+  // Local de retirada incompleto não vai para a SEFAZ: completar o
+  // cadastro é melhor do que inventar endereço.
+  if (documento.tipo === "NFe" && documento.localRetirada) {
+    const falta = focusNfe.faltaNoLocalRetirada(documento.localRetirada);
+    if (falta.length) {
+      return res.status(400).json({
+        erro: `O local de retirada (${documento.localRetirada.nomeRazaoSocial}) está sem ${falta.join(", ")}`,
+        detalhe: "Complete o cadastro dele antes de emitir, ou deixe a nota sem local de retirada se a mercadoria sai do endereço da empresa.",
+      });
+    }
+  }
+
   // Cada tipo de documento tem um payload diferente — NFe leva itens de
   // produto, CTe leva o tomador do frete, MDFe leva veículo/motorista e as
   // chaves de acesso dos documentos que está transportando.
@@ -930,6 +998,7 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
           documento,
           transportadora: documento.transportadora,
           veiculo: documento.veiculo,
+          localRetirada: documento.localRetirada,
         })
       : documento.tipo === "CTe"
       ? focusNfe.montarPayloadCte({
@@ -1182,7 +1251,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
     veiculoId, nomeMotorista, cpfMotorista, origemPercurso, destinoPercurso, valorTotal: valorTotalManual,
     finalidadeOperacao, chaveNfeReferenciada, consumidorFinal, indicadorPresenca, formaPagamento,
     valorFrete, valorSeguro, valorDesconto, quantidadeVolumes, especieVolumes, pesoBrutoTotal, pesoLiquidoTotal,
-    dataEmissao, colaboradorResponsavelId,
+    dataEmissao, colaboradorResponsavelId, localRetiradaId,
     baseCalculoIcms, valorIcms, baseCalculoIcmsSt, valorIcmsSt, outrasDespesas, valorIpi,
     veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id,
     produtoPredominante, valorTotalCarga, unidadeMedidaCarga, volumeM3Total,
@@ -1313,6 +1382,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
       valorIpi: valorIpi ?? undefined,
       dataEmissao: dataNoFusoComHoraAtual(dataEmissao),
       colaboradorResponsavelId: colaboradorResponsavelId === null ? null : colaboradorResponsavelId || undefined,
+      // null tira o local de retirada; ausente (CT-e, MDF-e) não mexe.
+      localRetiradaId: localRetiradaId === null || localRetiradaId === "" ? null : (localRetiradaId ? Number(localRetiradaId) : undefined),
       valorTotal,
       ...dadosItens,
     },

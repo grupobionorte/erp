@@ -183,6 +183,13 @@ model Empresa {
   // na operação, e digitar o mesmo código toda vez é onde o erro entra.
   cfopPadraoCte String? @map("cfop_padrao_cte")
 
+  // Seguro da carga que todo MDF-e novo já traz preenchido (obrigatório no
+  // modal rodoviário). A apólice muda pouco; o número da averbação, que é de
+  // cada viagem, continua sendo digitado no manifesto.
+  seguroNomeSeguradora String? @map("seguro_nome_seguradora")
+  seguroCnpjSeguradora String? @map("seguro_cnpj_seguradora")
+  seguroNumeroApolice  String? @map("seguro_numero_apolice")
+
   pixRecebimento String? @map("pix_recebimento")
   bancoNumero    String? @map("banco_numero")
   bancoAgencia   String? @map("banco_agencia")

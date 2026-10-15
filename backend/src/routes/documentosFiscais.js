@@ -657,6 +657,18 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   if (ctes.length !== cteIds.length) {
     return res.status(400).json({ erro: "Algum CT-e não foi encontrado nessa empresa" });
   }
+
+  // Seguradora, CNPJ e apólice: o que veio da tela vale; sem nada, usa o
+  // cadastro da empresa. Os três andam juntos — misturar o nome de uma fonte
+  // com o CNPJ de outra mandaria à SEFAZ um seguro que não existe.
+  const empresaEmitente = ctes[0].empresa;
+  const seguroDoManifesto = seguro?.nomeSeguradora
+    ? seguro
+    : {
+        nomeSeguradora: empresaEmitente.seguroNomeSeguradora,
+        cnpjSeguradora: empresaEmitente.seguroCnpjSeguradora,
+        numeroApolice: empresaEmitente.seguroNumeroApolice,
+      };
   // Um CT-e só pode estar em um manifesto: como o vínculo é uma FK no
   // próprio CT-e, gerar um segundo MDFe com ele o tiraria do primeiro sem
   // ninguém perceber.
@@ -765,9 +777,9 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       valorTotalCarga: valorCarga || undefined,
 
       seguroResponsavel: seguro?.responsavel || "1",
-      seguroNomeSeguradora: seguro?.nomeSeguradora || undefined,
-      seguroCnpjSeguradora: seguro?.cnpjSeguradora || undefined,
-      seguroNumeroApolice: seguro?.numeroApolice || undefined,
+      seguroNomeSeguradora: seguroDoManifesto.nomeSeguradora || undefined,
+      seguroCnpjSeguradora: seguroDoManifesto.cnpjSeguradora || undefined,
+      seguroNumeroApolice: seguroDoManifesto.numeroApolice || undefined,
       seguroNumeroAverbacao: seguro?.numeroAverbacao || undefined,
 
       documentosVinculados: { connect: ctes.map((c) => ({ id: c.id })) },

@@ -59,6 +59,10 @@ um cadastro é acrescentar uma entrada ali mais uma rota no servidor.
 Telas próprias: Vendas/NF-e, CT-e, MDF-e, Ponto, Agenda, Manutenção, Contas
 a pagar, Relatórios.
 
+O seguro da carga do MDF-e (seguradora, CNPJ, apólice) fica no cadastro da
+empresa (aba Fiscal) e preenche o MDF-e novo; a averbação é de cada viagem e
+é digitada no manifesto. Sem seguro no cadastro, vale o do último manifesto.
+
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra
 (`lib/copiarCadastros.js`). É cópia, nunca mudança de dono; pula quem já existe

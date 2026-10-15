@@ -1493,7 +1493,12 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   // Rejeitado já foi à SEFAZ e tem retorno registrado no provedor: some da
   // operação como cancelado, mas o histórico do que foi tentado fica.
   if (existente.status === "rascunho" || existente.status === "rejeitado") {
-    await prisma.documentoFiscal.update({ where: { id }, data: { status: "cancelado" } });
+    await prisma.$transaction([
+      prisma.documentoFiscal.update({ where: { id }, data: { status: "cancelado" } }),
+      // Manifesto descartado solta os CT-es: o vínculo preso deixava o CT-e
+      // com "MDF-e já gerado" e sem como emitir outro manifesto para ele.
+      prisma.documentoFiscal.updateMany({ where: { mdfeId: id }, data: { mdfeId: null } }),
+    ]);
     return res.status(204).send();
   }
 
@@ -1523,6 +1528,11 @@ router.delete("/:id", asyncHandler(async (req, res) => {
         where: { id },
         data: { status: "cancelado", justificativaCancelamento: justificativa.trim() },
       });
+      // MDF-e cancelado na SEFAZ libera o CT-e para um manifesto novo. O XML do
+      // cancelado continua guardando quais CT-es ele levava.
+      if (existente.tipo === "MDFe") {
+        await prisma.documentoFiscal.updateMany({ where: { mdfeId: id }, data: { mdfeId: null } });
+      }
       return res.json(atualizado);
     } catch (erro) {
       const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;

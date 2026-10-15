@@ -399,6 +399,20 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // série vêm automaticamente da numeração configurada em Configurações
 // para a empresa da sessão atual (e o contador já sai incrementado, pra
 // nunca repetir número mesmo com duas pessoas emitindo ao mesmo tempo).
+// Cavalo mecânico sempre puxa reboque. Sem reboque, o MDF-e da viagem é
+// recusado (rejeição 523) e a NF-e/CT-e sai com a composição incompleta —
+// então a regra vale já no cadastro da NF-e e do CT-e, não só na emissão.
+const ehCavalo = (tipoRodado) =>
+  String(tipoRodado || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("cavalo");
+
+async function problemaDeReboque(veiculoId, reboquesIds) {
+  if (!veiculoId) return null;
+  const veiculo = await prisma.veiculo.findUnique({ where: { id: Number(veiculoId) }, select: { placa: true, tipoRodado: true } });
+  if (!veiculo || !ehCavalo(veiculo.tipoRodado)) return null;
+  if ((reboquesIds || []).some(Boolean)) return null;
+  return `O veículo ${veiculo.placa} é cavalo mecânico: informe pelo menos uma placa de reboque.`;
+}
+
 router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const {
@@ -416,6 +430,8 @@ router.post("/nfe/rascunho", asyncHandler(async (req, res) => {
   if (!destinatarioId || !itens?.length) {
     return res.status(400).json({ erro: "destinatarioId e itens são obrigatórios" });
   }
+  const semReboqueNfe = await problemaDeReboque(veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
+  if (semReboqueNfe) return res.status(400).json({ erro: semReboqueNfe });
 
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
   if (!empresa) return res.status(400).json({ erro: "Empresa inválida" });
@@ -527,6 +543,8 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
   if (!tomadorId || !valorTotal) {
     return res.status(400).json({ erro: "tomadorId e valorTotal são obrigatórios" });
   }
+  const semReboqueCte = await problemaDeReboque(veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
+  if (semReboqueCte) return res.status(400).json({ erro: semReboqueCte });
 
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
   if (!empresa) return res.status(400).json({ erro: "Empresa inválida" });
@@ -756,6 +774,15 @@ router.post("/:id/gerar-cte", asyncHandler(async (req, res) => {
       ufFim: destino?.uf || undefined,
 
       veiculoId: nota.veiculoId || undefined,
+      // Reboques: os da nota; sem eles, os atrelados ao cavalo no cadastro.
+      // Cavalo sem reboque não passa na regra do CT-e.
+      ...(() => {
+        const daNota = [nota.veiculoReboqueId, nota.veiculoReboque2Id, nota.veiculoReboque3Id];
+        const ids = daNota.some(Boolean)
+          ? daNota
+          : [nota.veiculo?.reboque1Id, nota.veiculo?.reboque2Id, nota.veiculo?.reboque3Id];
+        return { veiculoReboqueId: ids[0] || undefined, veiculoReboque2Id: ids[1] || undefined, veiculoReboque3Id: ids[2] || undefined };
+      })(),
       nomeMotorista: nota.veiculo?.motorista?.nome || undefined,
       cpfMotorista: nota.veiculo?.motorista?.cpf || undefined,
 
@@ -1209,6 +1236,14 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
     });
   }
 
+  // Rascunhos de antes da regra do reboque também passam pela conferência.
+  if (documento.tipo === "NFe" || documento.tipo === "CTe") {
+    const semReboque = await problemaDeReboque(documento.veiculoId, [
+      documento.veiculoReboqueId, documento.veiculoReboque2Id, documento.veiculoReboque3Id,
+    ]);
+    if (semReboque) return res.status(422).json({ erro: semReboque, detalhe: "Edite o documento e escolha o reboque antes de emitir." });
+  }
+
   // Local de retirada incompleto não vai para a SEFAZ: completar o
   // cadastro é melhor do que inventar endereço.
   if (documento.tipo === "NFe" && documento.localRetirada) {
@@ -1492,6 +1527,16 @@ router.put("/:id", asyncHandler(async (req, res) => {
   }
   if (existente.status !== "rascunho" && existente.status !== "rejeitado") {
     return res.status(409).json({ erro: "Só é possível editar documentos em rascunho ou rejeitados" });
+  }
+
+  // Vale o que vier na edição; o que não vier continua como estava (null
+  // limpa). É essa combinação que precisa ter reboque se o veículo é cavalo.
+  if (existente.tipo === "NFe" || existente.tipo === "CTe") {
+    const efetivo = (campo) => (req.body[campo] !== undefined ? req.body[campo] : existente[campo]);
+    const semReboque = await problemaDeReboque(efetivo("veiculoId"), [
+      efetivo("veiculoReboqueId"), efetivo("veiculoReboque2Id"), efetivo("veiculoReboque3Id"),
+    ]);
+    if (semReboque) return res.status(400).json({ erro: semReboque });
   }
 
   const {

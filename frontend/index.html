@@ -142,6 +142,17 @@ const emptyEndereco = { cep: "", logradouro: "", numero: "", complemento: "", ba
 // ---------- Máscaras (CPF, CNPJ, CEP) ----------
 // Aplicadas conforme o usuário digita: guardamos só os dígitos por baixo,
 // mas mostramos com pontos/traço/barra formatados.
+// Cavalo mecânico sempre puxa reboque: NF-e e CT-e com cavalo exigem pelo
+// menos uma placa de reboque (o servidor confere de novo). Devolve a
+// mensagem de erro, ou null quando está tudo certo.
+function faltaReboqueDoCavalo(veiculos, veiculoId, reboquesIds) {
+  if (!veiculoId) return null;
+  const v = (veiculos || []).find(x => String(x.id) === String(veiculoId));
+  const cavalo = String(v?.tipoRodado || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("cavalo");
+  if (!cavalo || reboquesIds.some(Boolean)) return null;
+  return `O veículo ${v.placa} é cavalo mecânico: informe pelo menos uma placa de reboque.`;
+}
+
 function formatCPF(v) {
   const d = v.replace(/\D/g, "").slice(0, 11);
   if (d.length > 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`;
@@ -1056,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.110";
+const VERSAO_SISTEMA = "1.111";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.111", texto: "NF-e e CT-e: cavalo mecânico exige pelo menos uma placa de reboque" },
   { versao: "1.110", texto: "CT-e: buscar NF-e de outra empresa do grupo e trazer remetente, destinatário, trajeto, veículo e motorista" },
   { versao: "1.101", texto: "CT-e e MDF-e: listas com uma linha por registro, como a de NF-e" },
   { versao: "1.100", texto: "CT-e: emissão da carta frete (4 vias), com o proprietário do cadastro do veículo" },
@@ -6678,6 +6690,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
     if (!destinatarioId) { setErro("Selecione o cliente."); return; }
     const itensValidos = itens.filter(it => it.produtoId && Number(it.quantidade) > 0);
     if (itensValidos.length === 0) { setErro("Adicione pelo menos um item com produto e quantidade."); return; }
+    const semReboqueNfe = faltaReboqueDoCavalo(veiculos, veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
+    if (semReboqueNfe) { setErro(semReboqueNfe); return; }
     setErro("");
     setSalvando(true);
     try {
@@ -10749,6 +10763,13 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
     setVeiculoId(id);
     const veiculo = (veiculos || []).find(v => String(v.id) === String(id));
     if (veiculo?.motoristaId && !motoristaId) escolherMotorista(String(veiculo.motoristaId));
+    // Cavalo com reboques atrelados no cadastro traz os reboques, como na
+    // NF-e — só nos campos ainda vazios.
+    if (veiculo && !veiculoReboqueId && !veiculoReboque2Id && !veiculoReboque3Id) {
+      if (veiculo.reboque1Id) setVeiculoReboqueId(String(veiculo.reboque1Id));
+      if (veiculo.reboque2Id) setVeiculoReboque2Id(String(veiculo.reboque2Id));
+      if (veiculo.reboque3Id) setVeiculoReboque3Id(String(veiculo.reboque3Id));
+    }
   };
 
   // O documento guarda nome e CPF porque é isso que vai no XML; o vínculo
@@ -10795,6 +10816,8 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
   const salvar = async () => {
     if (!tomadorId) { setErro("Selecione o destinatário."); return; }
     if (!valorTotal || Number(valorTotal) <= 0) { setErro("Informe o valor da prestação de serviço."); return; }
+    const semReboqueCte = faltaReboqueDoCavalo(veiculos, veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
+    if (semReboqueCte) { setErro(semReboqueCte); return; }
     setErro("");
     setSalvando(true);
     try {

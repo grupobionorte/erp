@@ -186,6 +186,12 @@ model Empresa {
   // na operação, e digitar o mesmo código toda vez é onde o erro entra.
   cfopPadraoCte String? @map("cfop_padrao_cte")
 
+  // Também preenchem o CT-e novo (e o gerado da NF-e): a situação tributária
+  // da prestação e o texto que vai em todo CT-e da empresa. No documento
+  // continuam editáveis.
+  cstPadraoCte        String? @map("cst_padrao_cte")
+  observacaoPadraoCte String? @map("observacao_padrao_cte")
+
   // Seguro da carga que todo MDF-e novo já traz preenchido (obrigatório no
   // modal rodoviário). A apólice muda pouco; o número da averbação, que é de
   // cada viagem, continua sendo digitado no manifesto.

@@ -793,8 +793,11 @@ router.post("/:id/gerar-cte", asyncHandler(async (req, res) => {
       dataTransporte: nota.dataSaida || new Date(),
       colaboradorResponsavelId: nota.colaboradorResponsavelId || undefined,
 
-      // CFOP configurado em Configurações; sem ele, fica para preencher.
+      // CFOP, CST e informações complementares padrão de Configurações; sem
+      // eles, ficam para preencher.
       cfopPrestacao: empresa.cfopPadraoCte || undefined,
+      cstIcmsPrestacao: empresa.cstPadraoCte || undefined,
+      informacoesComplementares: empresa.observacaoPadraoCte || undefined,
 
       // Reforma Tributária: mesma combinação fixa usada nos demais CT-es.
       cstIbsCbsPrestacao: "000",

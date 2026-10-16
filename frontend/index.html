@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.117";
+const VERSAO_SISTEMA = "1.118";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.118", texto: "CT-e: sem os textos de explicação da carga, e os botões da nota alinhados à direita" },
   { versao: "1.117", texto: "CT-e: campos na nova arrumação, com a distância, o crédito presumido e as informações complementares dentro da grade" },
   { versao: "1.116", texto: "CT-e: cadastro numa grade de 5 colunas" },
   { versao: "1.115", texto: "CT-e: valores, pesos e outras informações da nota numa seção só" },
@@ -10998,7 +10999,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                   placeholder={sugestaoProduto || "Busque no cadastro de produtos"}
                   onChange={escolherProdutoPredominante}
                 />
-                <p className="hint">É o que aparece no DACTe e o que a fiscalização de estrada confere na carroceria.</p>
               </div>
               <div className="field-group">
                 <label className="field-label">Produto vendido por</label>
@@ -11007,11 +11007,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <option value="TON">Tonelada</option>
                   <option value="M3">Metro cúbico (m³)</option>
                 </select>
-                <p className="hint">
-                  {unidadeMedidaCarga === "M3"
-                    ? "O DACTe sai com peso bruto e volume em m³."
-                    : "O DACTe sai com peso bruto e peso líquido."}
-                </p>
               </div>
             </div>
           </div>
@@ -11132,11 +11127,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                   placeholder="Busque no cadastro de produtos"
                   onChange={v => setDocCampo("naturezaMercadoria", v)}
                 />
-                <p className="hint">
-                  {(produtos || []).length
-                    ? "Escolha um produto cadastrado ou escreva livremente."
-                    : "Nenhum produto cadastrado ainda — pode escrever livremente."}
-                </p>
               </div>
               <div className="field-group">
                 <label className="field-label">Data de emissão</label>
@@ -11220,7 +11210,7 @@ naturezaOperacao: naturezaOperacao || undefined,
             </div>
 
             {erroDocumento && <p className="error-text">{erroDocumento}</p>}
-            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 4, justifyContent: "flex-end" }}>
               <button type="button" className="btn" onClick={novoDocumento}>Novo</button>
               <button type="button" className="btn btn-primary" onClick={adicionarDocumento}>Adicionar à lista</button>
             </div>

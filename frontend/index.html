@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.113";
+const VERSAO_SISTEMA = "1.114";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.114", texto: "CT-e: sem os textos de explicação do tomador e do motorista" },
   { versao: "1.113", texto: "CT-e: remetente, expedidor, recebedor e destinatário mais compactos" },
   { versao: "1.112", texto: "CT-e: tela de cadastro mais compacta, como a NF-e" },
   { versao: "1.111", texto: "NF-e e CT-e: cavalo mecânico exige pelo menos uma placa de reboque" },
@@ -11306,10 +11307,6 @@ naturezaOperacao: naturezaOperacao || undefined,
 
           <div className="nf-section">
             <h4 className="nf-section-title">Pessoas e tomador</h4>
-            <p className="hint" style={{ marginTop: -6, marginBottom: 10 }}>
-              O tomador é quem contrata e paga o frete. Marque na linha de quem ele é — é esse cruzamento
-              que a SEFAZ confere contra o CFOP.
-            </p>
             <div className="cte-papeis">
               {[
                 { papel: "Remetente", descricao: "quem despacha", valor: remetenteId,
@@ -11441,10 +11438,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <input value={cpfMotorista} onChange={e => setCpfMotorista(formatCPF(e.target.value))} maxLength={14} />
               </div>
             </div>
-            <p className="hint">
-              O motorista vem do cadastro do veículo e é escolhido entre os colaboradores. Se quem estiver
-              dirigindo hoje for outro, troque aqui — o cadastro do veículo não muda.
-            </p>
           </div>
 
           </div>

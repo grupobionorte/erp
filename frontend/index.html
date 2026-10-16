@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.116";
+const VERSAO_SISTEMA = "1.117";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.117", texto: "CT-e: campos na nova arrumação, com a distância, o crédito presumido e as informações complementares dentro da grade" },
   { versao: "1.116", texto: "CT-e: cadastro numa grade de 5 colunas" },
   { versao: "1.115", texto: "CT-e: valores, pesos e outras informações da nota numa seção só" },
   { versao: "1.114", texto: "CT-e: sem os textos de explicação do tomador e do motorista" },
@@ -10986,7 +10987,7 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div className="nf-section">
             <h4 className="nf-section-title">Carga</h4>
             <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
                 <label className="field-label">Produto predominante</label>
                 {/* Busca no cadastro de produtos: escolher um produto já
                     define como a carga é medida. */}
@@ -11065,7 +11066,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
             <p className="nf-section-title" style={{ marginTop: 4 }}>Identificação do documento</p>
             <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
                 <label className="field-label">Tipo do documento</label>
                 <select value={docEmEdicao.tipo} onChange={e => setDocCampo("tipo", e.target.value)}>
                   <option value="Fiscal">Fiscal</option>
@@ -11076,7 +11077,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </select>
               </div>
               {docEmEdicao.tipo === "Fiscal" && (
-                <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <div className="field-group" style={{ gridColumn: "span 4" }}>
                   <label className="field-label">Buscar nota fiscal (chave ou número)</label>
                   <NfeCteField onSelecionar={selecionarNfeParaDocumento} />
                   {avisoImportacao && (
@@ -11090,9 +11091,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   )}
                 </div>
               )}
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
                 <label className="field-label">Chave de acesso</label>
                 <input
                   value={docEmEdicao.chaveAcesso}
@@ -11122,23 +11121,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <option value="Outro">Outro</option>
                 </select>
               </div>
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
-                <label className="field-label">Série</label>
-                <input value={docEmEdicao.serie} onChange={e => setDocCampo("serie", e.target.value)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">CFOP predominante</label>
-                <CfopField value={docEmEdicao.cfopPredominante} onChange={v => setDocCampo("cfopPredominante", v)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Data de emissão</label>
-                <input type="date" value={docEmEdicao.dataEmissao} onChange={e => setDocCampo("dataEmissao", e.target.value)} />
-              </div>
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
                 <label className="field-label">Natureza da mercadoria</label>
                 {/* É o produto que está sendo transportado: vem do cadastro
                     de produtos, com a lista filtrando conforme se digita. */}
@@ -11156,6 +11139,18 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </p>
               </div>
               <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={docEmEdicao.dataEmissao} onChange={e => setDocCampo("dataEmissao", e.target.value)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Série</label>
+                <input value={docEmEdicao.serie} onChange={e => setDocCampo("serie", e.target.value)} />
+              </div>
+              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
+                <label className="field-label">CFOP predominante</label>
+                <CfopField value={docEmEdicao.cfopPredominante} onChange={v => setDocCampo("cfopPredominante", v)} />
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Outras características da carga</label>
                 <input value={docEmEdicao.outrasCaracteristicasCarga} onChange={e => setDocCampo("outrasCaracteristicasCarga", e.target.value)} />
               </div>
@@ -11187,24 +11182,24 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <InputMoeda value={docEmEdicao.valorTotalProdutos} onChange={v => setDocCampo("valorTotalProdutos", v)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Valor total da nota fiscal<span className="req">*</span></label>
-                <InputMoeda value={docEmEdicao.valorTotalNota} onChange={v => setDocCampo("valorTotalNota", v)} />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Peso bruto (kg)</label>
-                <InputDecimal value={docEmEdicao.pesoBruto} onChange={v => setDocCampo("pesoBruto", v)} />
+                <label className="field-label">Quantidade de volumes</label>
+                <input type="number" value={docEmEdicao.quantidadeVolumes} onChange={e => setDocCampo("quantidadeVolumes", e.target.value)} />
               </div>
               <div className="field-group">
                 <label className="field-label">M3</label>
                 <InputDecimal value={docEmEdicao.m3} onChange={v => setDocCampo("m3", v)} />
               </div>
               <div className="field-group">
-                <label className="field-label">Quantidade de volumes</label>
-                <input type="number" value={docEmEdicao.quantidadeVolumes} onChange={e => setDocCampo("quantidadeVolumes", e.target.value)} />
+                <label className="field-label">Peso bruto (kg)</label>
+                <InputDecimal value={docEmEdicao.pesoBruto} onChange={v => setDocCampo("pesoBruto", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">Peso líquido (kg)</label>
                 <InputDecimal value={docEmEdicao.pesoLiquido} onChange={v => setDocCampo("pesoLiquido", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor total da nota fiscal<span className="req">*</span></label>
+                <InputMoeda value={docEmEdicao.valorTotalNota} onChange={v => setDocCampo("valorTotalNota", v)} />
               </div>
               <div className="field-group">
                 <label className="field-label">PIN Suframa</label>
@@ -11218,7 +11213,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Número do romaneio</label>
                 <input value={docEmEdicao.numeroRomaneio} onChange={e => setDocCampo("numeroRomaneio", e.target.value)} />
               </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Valor da carga p/ averbação</label>
                 <InputMoeda value={docEmEdicao.valorCargaAverbacao} onChange={v => setDocCampo("valorCargaAverbacao", v)} />
               </div>
@@ -11237,9 +11232,14 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
             <div className="nf-grade5">
-              <div className="field-group">
-                <label className="field-label">Data de emissão</label>
-                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
+                <label className="field-label">Tipo do CT-e</label>
+                <select value={tipoCte} onChange={e => setTipoCte(e.target.value)}>
+                  <option value="CT-e normal">CT-e normal</option>
+                  <option value="Complemento de Valores">Complemento de Valores</option>
+                  <option value="Anulação">Anulação</option>
+                  <option value="Substituto">Substituto</option>
+                </select>
               </div>
               <div className="field-group">
                 <label className="field-label">Tipo de serviço</label>
@@ -11252,6 +11252,10 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </select>
               </div>
               <div className="field-group">
+                <label className="field-label">Data de emissão</label>
+                <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
+              </div>
+              <div className="field-group">
                 <label className="field-label">Data do transporte</label>
                 <input type="date" value={dataTransporte} onChange={e => setDataTransporte(e.target.value)} />
               </div>
@@ -11259,34 +11263,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Hora do transporte</label>
                 <input type="time" value={horaTransporte} onChange={e => setHoraTransporte(e.target.value)} />
               </div>
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
-                <label className="field-label">Tipo do CT-e</label>
-                <select value={tipoCte} onChange={e => setTipoCte(e.target.value)}>
-                  <option value="CT-e normal">CT-e normal</option>
-                  <option value="Complemento de Valores">Complemento de Valores</option>
-                  <option value="Anulação">Anulação</option>
-                  <option value="Substituto">Substituto</option>
-                </select>
-              </div>
-              <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
-                <label className={`nf-toggle ${cteGlobalizado ? "nf-toggle-ativo" : ""}`}>
-                  <input type="checkbox" checked={cteGlobalizado} onChange={e => setCteGlobalizado(e.target.checked)} />
-                  <span>CT-e globalizado</span>
-                </label>
-              </div>
-              <div className="field-group">
-                <label className="field-label">Colaborador responsável</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1 }}>
-                    <option value="">Nenhum</option>
-                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
-                </div>
-              </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 3" }}>
                 <label className="field-label">CFOP da prestação</label>
                 <CfopField value={cfopPrestacao} onChange={setCfopPrestacao}
                   onDescricao={d => { if (d) setNaturezaOperacao(d); }} />
@@ -11296,6 +11273,22 @@ naturezaOperacao: naturezaOperacao || undefined,
                     com {interestadual ? "6" : "5"} — sugestão {cfopSugerido}.
                   </p>
                 )}
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
+                <label className="field-label">Colaborador responsável</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <select value={colaboradorResponsavelId} onChange={e => setColaboradorResponsavelId(e.target.value)} style={{ flex: 1 }}>
+                    <option value="">Nenhum</option>
+                    {(colaboradores || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                  <button type="button" tabIndex={-1} className="icon-btn nf-menu-trigger" title="Cadastrar colaborador novo" onClick={() => setQuickAdd({ tipo: "colaboradores", setter: setColaboradorResponsavelId })}><Plus size={14} /></button>
+                </div>
+              </div>
+              <div className="field-group" style={{ gridColumn: "1 / span 1", display: "flex", alignItems: "flex-end" }}>
+                <label className={`nf-toggle ${cteGlobalizado ? "nf-toggle-ativo" : ""}`}>
+                  <input type="checkbox" checked={cteGlobalizado} onChange={e => setCteGlobalizado(e.target.checked)} />
+                  <span>CT-e globalizado</span>
+                </label>
               </div>
             </div>
           </div>
@@ -11376,17 +11369,17 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <p className="hint" style={{ margin: "4px 0 0", fontSize: 11.5 }}>do endereço do destinatário</p>
                 )}
               </div>
-            </div>
-            <div className="field-group" style={{ marginBottom: 0, maxWidth: 200 }}>
-              <label className="field-label">Distância (km)</label>
-              <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
+              <div className="field-group">
+                <label className="field-label">Distância (km)</label>
+                <input type="number" value={distanciaKm} onChange={e => setDistanciaKm(e.target.value)} />
+              </div>
             </div>
           </div>
 
           <div className="nf-section">
             <h4 className="nf-section-title">Transporte</h4>
             <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Veículo transportador</label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={veiculoId} onChange={e => escolherVeiculo(e.target.value)} style={{ flex: 1 }}>
@@ -11413,9 +11406,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   </div>
                 </div>
               ))}
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
                 <label className="field-label">Motorista</label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <select value={motoristaId} onChange={e => escolherMotorista(e.target.value)} style={{ flex: 1 }}>
@@ -11428,7 +11419,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   </select>
                 </div>
               </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">CPF do motorista</label>
                 <input value={cpfMotorista} onChange={e => setCpfMotorista(formatCPF(e.target.value))} maxLength={14} />
               </div>
@@ -11441,7 +11432,7 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div className="nf-section">
             <h4 className="nf-section-title">Prestação e impostos</h4>
             <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 2" }}>
                 <label className="field-label">Forma de pagamento</label>
                 <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
                   <option value="A pagar (FOB)">A pagar (FOB)</option>
@@ -11453,7 +11444,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Valor da prestação (R$)<span className="req">*</span></label>
                 <InputMoeda value={valorTotal} onChange={setValorTotal} />
               </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Situação tributária (CST)</label>
                 <select value={cstIcmsPrestacao} onChange={e => setCstIcmsPrestacao(e.target.value)}>
                   <option value="">Selecione…</option>
@@ -11469,9 +11460,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <option value="90_simples_nacional">90 - Outras (Simples Nacional)</option>
                 </select>
               </div>
-            </div>
-            <div className="nf-grade5">
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
                 <label className="field-label">Base de cálculo do ICMS (R$)</label>
                 <InputMoeda value={baseCalculoIcmsPrestacao} onChange={setBaseCalculoIcmsPrestacao} />
               </div>
@@ -11487,30 +11476,22 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">% Redução da base</label>
                 <input type="number" value={percentualReducaoBaseIcms} onChange={e => setPercentualReducaoBaseIcms(e.target.value)} />
               </div>
-            </div>
-            <div className="field-group">
-              <label className="field-label">Valor de crédito presumido (R$)</label>
-              <InputMoeda value={valorCreditoPresumidoIcms} onChange={setValorCreditoPresumidoIcms} style={{ maxWidth: 220 }} />
-            </div>
-            <div className="nf-grade5">
               <div className="field-group">
+                <label className="field-label">Valor de crédito presumido (R$)</label>
+                <InputMoeda value={valorCreditoPresumidoIcms} onChange={setValorCreditoPresumidoIcms} />
+              </div>
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
                 <label className="field-label">IBS/CBS — CST (Reforma Tributária)</label>
                 <input value={cstIbsCbsPrestacao} disabled />
               </div>
-              <div className="field-group">
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
                 <label className="field-label">IBS/CBS — Classificação (cClassTrib)</label>
                 <input value={classificacaoTributariaIbsCbsPrestacao} disabled />
               </div>
-              <div className="field-group">
-                <p className="hint" style={{ marginTop: 22 }}>
-                  Fixos enquanto a Reforma Tributária não entra em vigor. Quando a cobrança começar, esses
-                  dois campos voltam a ser editáveis e devem ser conferidos com o contador.
-                </p>
+              <div className="field-group" style={{ gridColumn: "1 / span 5" }}>
+                <label className="field-label">Informações complementares</label>
+                <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
               </div>
-            </div>
-            <div className="field-group" style={{ marginBottom: 0 }}>
-              <label className="field-label">Informações complementares</label>
-              <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
             </div>
           </div>
 

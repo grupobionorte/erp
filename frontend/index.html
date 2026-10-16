@@ -416,6 +416,21 @@ function mapEndereco(endereco) {
 // formulário (em português, como o usuário vê) e os campos do backend
 // (que seguem o schema.prisma). Isso fica isolado aqui para o resto da
 // tela não precisar saber dessa diferença.
+// Situação tributária do ICMS na prestação do CT-e. Lista única: o mesmo
+// select aparece no CT-e e no padrão da empresa, e as duas precisam bater.
+const OPCOES_CST_CTE = [
+  { value: "00", label: "00 - Tributada integralmente" },
+  { value: "20", label: "20 - Tributada com redução de base de cálculo" },
+  { value: "30", label: "30 - Isenta/não tributada com ICMS ST" },
+  { value: "40", label: "40 - Isenta" },
+  { value: "41", label: "41 - Não tributada" },
+  { value: "51", label: "51 - Diferimento" },
+  { value: "60", label: "60 - Cobrado anteriormente por substituição tributária" },
+  { value: "70", label: "70 - Tributada com redução de base e ICMS ST" },
+  { value: "90", label: "90 - Outras (Regime Normal)" },
+  { value: "90_simples_nacional", label: "90 - Outras (Simples Nacional)" },
+];
+
 const MODULES = {
   clientes: {
     label: "Clientes",
@@ -988,6 +1003,9 @@ const MODULES = {
       { key: "cteProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
       // CFOP que todo CT-e novo já traz preenchido.
       { key: "cfopPadraoCte", label: "CFOP padrão da prestação", type: "cfop-busca", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
+      // Também preenchem o CT-e novo; no documento continuam editáveis.
+      { key: "cstPadraoCte", label: "Situação tributária (CST) padrão", type: "select", options: OPCOES_CST_CTE, aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
+      { key: "observacaoPadraoCte", label: "Informações complementares padrão", type: "texto-longo", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
       { key: "mdfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       { key: "mdfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Manifesto (MDF-e)" },
       { key: "cartaFreteProximoNumero", label: "Próximo número da carta frete", type: "number", aba: "fiscal", secao: "Carta frete" },
@@ -1007,6 +1025,9 @@ const MODULES = {
       im: data.im || undefined,
       rntrc: data.rntrc || undefined,
       cfopPadraoCte: data.cfopPadraoCte || undefined,
+      // null para o padrão poder ser apagado na edição.
+      cstPadraoCte: data.cstPadraoCte || null,
+      observacaoPadraoCte: data.observacaoPadraoCte || null,
       pixRecebimento: data.pixRecebimento || undefined,
       bancoNumero: data.bancoNumero || undefined,
       bancoAgencia: data.bancoAgencia || undefined,
@@ -1036,6 +1057,8 @@ const MODULES = {
       im: r.im,
       rntrc: r.rntrc,
       cfopPadraoCte: r.cfopPadraoCte,
+      cstPadraoCte: r.cstPadraoCte,
+      observacaoPadraoCte: r.observacaoPadraoCte,
       pixRecebimento: r.pixRecebimento,
       bancoNumero: r.bancoNumero,
       bancoAgencia: r.bancoAgencia,
@@ -1067,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.119";
+const VERSAO_SISTEMA = "1.120";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.120", texto: "Configurações: CST e informações complementares padrão do CT-e, que já vêm preenchidos no CT-e novo" },
   { versao: "1.119", texto: "CT-e: informações complementares com o mesmo tamanho da NF-e" },
   { versao: "1.118", texto: "CT-e: sem os textos de explicação da carga, e os botões da nota alinhados à direita" },
   { versao: "1.117", texto: "CT-e: campos na nova arrumação, com a distância, o crédito presumido e as informações complementares dentro da grade" },
@@ -1349,6 +1373,8 @@ const colaboradorDoUsuario = () =>
 // Configuração fiscal da empresa, para os documentos novos já nascerem
 // preenchidos.
 const cfopPadraoCte = () => usuarioLogado?.empresa?.cfopPadraoCte || "";
+const cstPadraoCte = () => usuarioLogado?.empresa?.cstPadraoCte || "";
+const observacaoPadraoCte = () => usuarioLogado?.empresa?.observacaoPadraoCte || "";
 
 // Nome seguido do CNPJ/CPF. Nas listas de seleção, empresa com nome
 // parecido — ou a mesma razão social em duas filiais — só se distingue pelo
@@ -10802,7 +10828,9 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
 
   const [formaPagamento, setFormaPagamento] = useState(cte?.formaPagamento || "A pagar (FOB)");
   const [valorTotal, setValorTotal] = useState(cte?.valorTotal ?? "");
-  const [cstIcmsPrestacao, setCstIcmsPrestacao] = useState(cte?.cstIcmsPrestacao || "");
+  // CST e informações complementares: o CT-e novo nasce com o padrão da
+  // empresa; o rascunho já salvo abre como foi gravado, mesmo em branco.
+  const [cstIcmsPrestacao, setCstIcmsPrestacao] = useState(cte ? (cte.cstIcmsPrestacao || "") : cstPadraoCte());
   const [baseCalculoIcmsPrestacao, setBaseCalculoIcmsPrestacao] = useState(cte?.baseCalculoIcmsPrestacao ?? "");
   const [aliquotaIcmsPrestacao, setAliquotaIcmsPrestacao] = useState(cte?.aliquotaIcmsPrestacao ?? "");
   const [valorIcms, setValorIcms] = useState(cte?.valorIcms ?? "");
@@ -10817,7 +10845,7 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
   const [classificacaoTributariaIbsCbsPrestacao, setClassificacaoTributariaIbsCbsPrestacao] =
     useState(cte?.classificacaoTributariaIbsCbsPrestacao || IBS_CBS_CLASSIFICACAO_PADRAO);
 
-  const [informacoesComplementares, setInformacoesComplementares] = useState(cte?.informacoesComplementares || "");
+  const [informacoesComplementares, setInformacoesComplementares] = useState(cte ? (cte.informacoesComplementares || "") : observacaoPadraoCte());
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -11439,16 +11467,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Situação tributária (CST)</label>
                 <select value={cstIcmsPrestacao} onChange={e => setCstIcmsPrestacao(e.target.value)}>
                   <option value="">Selecione…</option>
-                  <option value="00">00 - Tributada integralmente</option>
-                  <option value="20">20 - Tributada com redução de base de cálculo</option>
-                  <option value="30">30 - Isenta/não tributada com ICMS ST</option>
-                  <option value="40">40 - Isenta</option>
-                  <option value="41">41 - Não tributada</option>
-                  <option value="51">51 - Diferimento</option>
-                  <option value="60">60 - Cobrado anteriormente por substituição tributária</option>
-                  <option value="70">70 - Tributada com redução de base e ICMS ST</option>
-                  <option value="90">90 - Outras (Regime Normal)</option>
-                  <option value="90_simples_nacional">90 - Outras (Simples Nacional)</option>
+                  {OPCOES_CST_CTE.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div className="field-group" style={{ gridColumn: "1 / span 1" }}>

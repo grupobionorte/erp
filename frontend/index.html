@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.111";
+const VERSAO_SISTEMA = "1.112";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.112", texto: "CT-e: tela de cadastro mais compacta, como a NF-e" },
   { versao: "1.111", texto: "NF-e e CT-e: cavalo mecânico exige pelo menos uma placa de reboque" },
   { versao: "1.110", texto: "CT-e: buscar NF-e de outra empresa do grupo e trazer remetente, destinatário, trajeto, veículo e motorista" },
   { versao: "1.101", texto: "CT-e e MDF-e: listas com uma linha por registro, como a de NF-e" },
@@ -10957,7 +10958,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
   return (
     <div className="modal-backdrop">
-      <div className="modal modal-cadastro modal-documento">
+      <div className="modal modal-cadastro modal-documento modal-cte">
         <div className="modal-header" style={{ display: "block", paddingBottom: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
             <h3>{cte?.id ? "Editar" : "Novo"} CTe</h3>
@@ -12755,25 +12756,26 @@ function ErpBiomassa() {
         /* Formulário de Nota Fiscal / CTe — seções com título e tabela de itens */
         .nf-section { margin-bottom: 20px; padding-bottom: 18px; border-bottom: 1px solid #eeece4; }
         .nf-section:last-of-type { border-bottom: none; margin-bottom: 4px; padding-bottom: 0; }
-        /* NF-e compacta: sem as linhas entre as seções (o título de cada uma
-           já separa), menos respiro e campos mais baixos — a nota tem muitos
-           campos, e assim cabe mais sem rolar. A letra fica do mesmo tamanho. */
-        .modal-nfe .nf-section { border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
-        .modal-nfe .nf-section-title { margin-bottom: 4px; }
-        .modal-nfe .field-group { margin-bottom: 4px; }
-        .modal-nfe .field-label { margin-bottom: 1px; font-size: 11.5px; }
-        .modal-nfe .field-group input, .modal-nfe .field-group select, .modal-nfe .field-group textarea { padding: 3px 8px; }
-        .modal-nfe .hint { margin: 1px 0 0; font-size: 11px; }
-        .modal-nfe .nf-toggle { padding-top: 3px; padding-bottom: 3px; }
-        .modal-nfe .endereco-grid, .modal-nfe .nf-grid-3, .modal-nfe .nf-grid-4 { gap: 6px; }
+        /* NF-e e CT-e compactos: sem as linhas entre as seções (o título de
+           cada uma já separa), menos respiro e campos mais baixos — os dois
+           têm muitos campos, e assim cabe mais sem rolar. A letra fica do
+           mesmo tamanho. */
+        .modal-nfe .nf-section, .modal-cte .nf-section { border-bottom: none; padding-bottom: 0; margin-bottom: 6px; }
+        .modal-nfe .nf-section-title, .modal-cte .nf-section-title { margin-bottom: 4px; }
+        .modal-nfe .field-group, .modal-cte .field-group { margin-bottom: 4px; }
+        .modal-nfe .field-label, .modal-cte .field-label { margin-bottom: 1px; font-size: 11.5px; }
+        .modal-nfe .field-group input, .modal-cte .field-group input, .modal-nfe .field-group select, .modal-cte .field-group select, .modal-nfe .field-group textarea, .modal-cte .field-group textarea { padding: 3px 8px; }
+        .modal-nfe .hint, .modal-cte .hint { margin: 1px 0 0; font-size: 11px; }
+        .modal-nfe .nf-toggle, .modal-cte .nf-toggle { padding-top: 3px; padding-bottom: 3px; }
+        .modal-nfe .endereco-grid, .modal-cte .endereco-grid, .modal-nfe .nf-grid-3, .modal-cte .nf-grid-3, .modal-nfe .nf-grid-4, .modal-cte .nf-grid-4 { gap: 6px; }
         .nf-grade4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; }
-        .modal-nfe .nf-grade4 { gap: 0 6px; }
+        .modal-nfe .nf-grade4, .modal-cte .nf-grade4 { gap: 0 6px; }
         @media (max-width: 640px) {
           .nf-grade4 { grid-template-columns: 1fr; }
           .nf-grade4 > * { grid-column: 1 / -1 !important; }
         }
         /* O botão + ao lado do campo acompanha a altura menor. */
-        .modal-nfe .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }
+        .modal-nfe .field-group .nf-menu-trigger, .modal-cte .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }
         .nf-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #a09e94; margin: 0 0 12px; }
         /* overflow visível: senão a lista de sugestões de CFOP e NCM é
            cortada pela borda da tabela de itens. */

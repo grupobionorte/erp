@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.120";
+const VERSAO_SISTEMA = "1.121";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.121", texto: "CT-e: notas transportadas no topo da aba, com rolagem a partir da terceira; produto predominante junto da identificação do documento" },
   { versao: "1.120", texto: "Configurações: CST e informações complementares padrão do CT-e, que já vêm preenchidos no CT-e novo" },
   { versao: "1.119", texto: "CT-e: informações complementares com o mesmo tamanho da NF-e" },
   { versao: "1.118", texto: "CT-e: sem os textos de explicação da carga, e os botões da nota alinhados à direita" },
@@ -10965,6 +10966,16 @@ naturezaOperacao: naturezaOperacao || undefined,
   // corrigir quando a soma não representa o que está no caminhão.
   const somarNotas = (campo) => documentosTransportados.reduce((t, d) => t + (Number(d[campo]) || 0), 0);
   const somaNotas = somarNotas("valorTotalNota");
+  // A lista de notas mostra duas linhas; da terceira em diante, rola dentro
+  // dela, para os campos de identificação não descerem a cada nota somada.
+  // A altura sai das linhas desenhadas (a fonte e o ícone decidem); com a
+  // aba escondida elas medem zero, e aí a lista fica livre até ser vista.
+  const limitarADuasNotas = (el) => {
+    if (!el) return;
+    const [l1, l2] = el.children;
+    const altura = el.children.length > 2 ? l1.offsetHeight + l2.offsetHeight : 0;
+    el.style.maxHeight = altura ? `${altura}px` : "";
+  };
   const somaPesoBruto = somarNotas("pesoBruto");
   const somaPesoLiquido = somarNotas("pesoLiquido");
   const somaM3 = somarNotas("m3");
@@ -11015,32 +11026,6 @@ naturezaOperacao: naturezaOperacao || undefined,
         <div className="modal-body cte-corpo" ref={corpo}>
           <div data-painel="carga" hidden={aba !== "carga"}>
           <div className="nf-section">
-            <h4 className="nf-section-title">Carga</h4>
-            <div className="nf-grade5">
-              <div className="field-group" style={{ gridColumn: "span 3" }}>
-                <label className="field-label">Produto predominante</label>
-                {/* Busca no cadastro de produtos: escolher um produto já
-                    define como a carga é medida. */}
-                <CampoComLista
-                  value={produtoPredominante}
-                  opcoes={opcoesProdutos}
-                  ariaLabel="Produto predominante"
-                  placeholder={sugestaoProduto || "Busque no cadastro de produtos"}
-                  onChange={escolherProdutoPredominante}
-                />
-              </div>
-              <div className="field-group">
-                <label className="field-label">Produto vendido por</label>
-                <select value={unidadeMedidaCarga} onChange={e => setUnidadeMedidaCarga(e.target.value)}>
-                  <option value="KG">Quilo (kg)</option>
-                  <option value="TON">Tonelada</option>
-                  <option value="M3">Metro cúbico (m³)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="nf-section">
             <h4 className="nf-section-title">Notas fiscais transportadas</h4>
             {documentosTransportados.length > 0 ? (
               <div className="nf-itens-table" style={{ marginBottom: 14 }}>
@@ -11056,6 +11041,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <span style={{ textAlign: "right" }}>Valor</span>
                   <span></span>
                 </div>
+                <div ref={limitarADuasNotas} style={{ overflowY: "auto" }}>
                 {documentosTransportados.map(d => (
                   <div key={d._key} className="nf-item-row" style={{ gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px" }}>
                     <span>{d.numeroDocumento || "—"}</span>
@@ -11072,6 +11058,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                     </button>
                   </div>
                 ))}
+                </div>
                 {/* Estes totais são o que vai para o DACTe quando os campos
                     de carga são deixados em branco. */}
                 <div style={{ display: "grid", gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px", padding: "8px 10px", borderTop: "1px solid #e5e3da", fontSize: 12, fontWeight: 600, color: "#55534c" }}>
@@ -11145,7 +11132,19 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <option value="Outro">Outro</option>
                 </select>
               </div>
-              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
+              <div className="field-group" style={{ gridColumn: "1 / span 2" }}>
+                <label className="field-label">Produto predominante</label>
+                {/* Busca no cadastro de produtos: escolher um produto já
+                    define como a carga é medida. */}
+                <CampoComLista
+                  value={produtoPredominante}
+                  opcoes={opcoesProdutos}
+                  ariaLabel="Produto predominante"
+                  placeholder={sugestaoProduto || "Busque no cadastro de produtos"}
+                  onChange={escolherProdutoPredominante}
+                />
+              </div>
+              <div className="field-group">
                 <label className="field-label">Natureza da mercadoria</label>
                 {/* É o produto que está sendo transportado: vem do cadastro
                     de produtos, com a lista filtrando conforme se digita. */}
@@ -11165,7 +11164,15 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Série</label>
                 <input value={docEmEdicao.serie} onChange={e => setDocCampo("serie", e.target.value)} />
               </div>
-              <div className="field-group" style={{ gridColumn: "1 / span 3" }}>
+              <div className="field-group" style={{ gridColumn: "1 / span 1" }}>
+                <label className="field-label">Produto vendido por</label>
+                <select value={unidadeMedidaCarga} onChange={e => setUnidadeMedidaCarga(e.target.value)}>
+                  <option value="KG">Quilo (kg)</option>
+                  <option value="TON">Tonelada</option>
+                  <option value="M3">Metro cúbico (m³)</option>
+                </select>
+              </div>
+              <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">CFOP predominante</label>
                 <CfopField value={docEmEdicao.cfopPredominante} onChange={v => setDocCampo("cfopPredominante", v)} />
               </div>

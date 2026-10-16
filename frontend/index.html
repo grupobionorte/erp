@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.115";
+const VERSAO_SISTEMA = "1.116";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.116", texto: "CT-e: cadastro numa grade de 5 colunas" },
   { versao: "1.115", texto: "CT-e: valores, pesos e outras informações da nota numa seção só" },
   { versao: "1.114", texto: "CT-e: sem os textos de explicação do tomador e do motorista" },
   { versao: "1.113", texto: "CT-e: remetente, expedidor, recebedor e destinatário mais compactos" },
@@ -10984,7 +10985,7 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div data-painel="carga" hidden={aba !== "carga"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Carga</h4>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Produto predominante</label>
                 {/* Busca no cadastro de produtos: escolher um produto já
@@ -11063,7 +11064,7 @@ naturezaOperacao: naturezaOperacao || undefined,
             )}
 
             <p className="nf-section-title" style={{ marginTop: 4 }}>Identificação do documento</p>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Tipo do documento</label>
                 <select value={docEmEdicao.tipo} onChange={e => setDocCampo("tipo", e.target.value)}>
@@ -11090,7 +11091,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </div>
               )}
             </div>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Chave de acesso</label>
                 <input
@@ -11122,7 +11123,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </select>
               </div>
             </div>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Série</label>
                 <input value={docEmEdicao.serie} onChange={e => setDocCampo("serie", e.target.value)} />
@@ -11136,7 +11137,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <input type="date" value={docEmEdicao.dataEmissao} onChange={e => setDocCampo("dataEmissao", e.target.value)} />
               </div>
             </div>
-            <div className="endereco-grid">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Natureza da mercadoria</label>
                 {/* É o produto que está sendo transportado: vem do cadastro
@@ -11164,7 +11165,7 @@ naturezaOperacao: naturezaOperacao || undefined,
             {/* Valores, pesos e demais informações da nota numa grade só: as
                 seções "Outros valores" e "Outras informações" só somavam título
                 e espaço. */}
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Base de cálc. do ICMS</label>
                 <InputMoeda value={docEmEdicao.baseCalculoIcms} onChange={v => setDocCampo("baseCalculoIcms", v)} />
@@ -11235,7 +11236,7 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div data-painel="rota" hidden={aba !== "rota"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Dados gerais</h4>
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Data de emissão</label>
                 <input type="date" value={dataEmissao} onChange={e => setDataEmissao(e.target.value)} />
@@ -11259,7 +11260,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <input type="time" value={horaTransporte} onChange={e => setHoraTransporte(e.target.value)} />
               </div>
             </div>
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Tipo do CT-e</label>
                 <select value={tipoCte} onChange={e => setTipoCte(e.target.value)}>
@@ -11338,7 +11339,7 @@ naturezaOperacao: naturezaOperacao || undefined,
             </div>
             {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
 
-            <div className="nf-grid-4" style={{ marginTop: 14 }}>
+            <div className="nf-grade5" style={{ marginTop: 14 }}>
               <div className="field-group">
                 <label className="field-label">UF início<span className="req">*</span></label>
                 <select value={ufInicio} onChange={e => {
@@ -11384,7 +11385,7 @@ naturezaOperacao: naturezaOperacao || undefined,
 
           <div className="nf-section">
             <h4 className="nf-section-title">Transporte</h4>
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Veículo transportador</label>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -11413,7 +11414,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </div>
               ))}
             </div>
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Motorista</label>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -11439,7 +11440,7 @@ naturezaOperacao: naturezaOperacao || undefined,
           <div data-painel="valores" hidden={aba !== "valores"}>
           <div className="nf-section">
             <h4 className="nf-section-title">Prestação e impostos</h4>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Forma de pagamento</label>
                 <select value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)}>
@@ -11469,7 +11470,7 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </select>
               </div>
             </div>
-            <div className="nf-grid-4">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">Base de cálculo do ICMS (R$)</label>
                 <InputMoeda value={baseCalculoIcmsPrestacao} onChange={setBaseCalculoIcmsPrestacao} />
@@ -11491,7 +11492,7 @@ naturezaOperacao: naturezaOperacao || undefined,
               <label className="field-label">Valor de crédito presumido (R$)</label>
               <InputMoeda value={valorCreditoPresumidoIcms} onChange={setValorCreditoPresumidoIcms} style={{ maxWidth: 220 }} />
             </div>
-            <div className="nf-grid-3">
+            <div className="nf-grade5">
               <div className="field-group">
                 <label className="field-label">IBS/CBS — CST (Reforma Tributária)</label>
                 <input value={cstIbsCbsPrestacao} disabled />
@@ -12763,10 +12764,17 @@ function ErpBiomassa() {
         .modal-nfe .nf-toggle, .modal-cte .nf-toggle { padding-top: 3px; padding-bottom: 3px; }
         .modal-nfe .endereco-grid, .modal-cte .endereco-grid, .modal-nfe .nf-grid-3, .modal-cte .nf-grid-3, .modal-nfe .nf-grid-4, .modal-cte .nf-grid-4 { gap: 6px; }
         .nf-grade4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; }
+        /* CT-e: todas as seções numa grade de 5 colunas, para cada campo ter
+           posição e largura próprias (gridColumn: "span N") em vez de seguir
+           grades de 3 ou 4 diferentes em cada seção. */
+        .nf-grade5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0 8px; }
+        .modal-cte .nf-grade5 { gap: 0 6px; }
         .modal-nfe .nf-grade4, .modal-cte .nf-grade4 { gap: 0 6px; }
         @media (max-width: 640px) {
           .nf-grade4 { grid-template-columns: 1fr; }
           .nf-grade4 > * { grid-column: 1 / -1 !important; }
+          .nf-grade5 { grid-template-columns: 1fr; }
+          .nf-grade5 > * { grid-column: 1 / -1 !important; }
         }
         /* O botão + ao lado do campo acompanha a altura menor. */
         .modal-nfe .field-group .nf-menu-trigger, .modal-cte .field-group .nf-menu-trigger { display: flex; align-items: center; justify-content: center; line-height: 0; padding: 0 5px; }

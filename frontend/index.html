@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.121";
+const VERSAO_SISTEMA = "1.122";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.122", texto: "CT-e: letra menor na lista de notas transportadas" },
   { versao: "1.121", texto: "CT-e: notas transportadas no topo da aba, com rolagem a partir da terceira; produto predominante junto da identificação do documento" },
   { versao: "1.120", texto: "Configurações: CST e informações complementares padrão do CT-e, que já vêm preenchidos no CT-e novo" },
   { versao: "1.119", texto: "CT-e: informações complementares com o mesmo tamanho da NF-e" },
@@ -11041,13 +11042,13 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <span style={{ textAlign: "right" }}>Valor</span>
                   <span></span>
                 </div>
-                <div ref={limitarADuasNotas} style={{ overflowY: "auto" }}>
+                <div ref={limitarADuasNotas} className="cte-notas-lista" style={{ overflowY: "auto" }}>
                 {documentosTransportados.map(d => (
                   <div key={d._key} className="nf-item-row" style={{ gridTemplateColumns: "0.8fr 0.6fr 0.45fr 1fr 0.85fr 0.75fr 0.75fr 0.65fr 1fr 28px" }}>
                     <span>{d.numeroDocumento || "—"}</span>
                     <span>{d.modelo || "—"}</span>
                     <span>{d.serie || "—"}</span>
-                    <span style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.cfopPredominante || "—"}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.cfopPredominante || "—"}</span>
                     <span>{d.dataEmissao ? dataSemHoraBr(d.dataEmissao) : "—"}</span>
                     <span>{d.pesoBruto || "0"}</span>
                     <span>{d.pesoLiquido || "0"}</span>
@@ -12801,6 +12802,10 @@ function ErpBiomassa() {
         .nf-item-row { border-top: 1px solid #eeece4; }
         .nf-item-row input, .nf-item-row select { width: 100%; box-sizing: border-box; font-size: 13px; padding: 7px 8px; }
         .nf-item-total { font-size: 13px; text-align: right; color: #33332f; white-space: nowrap; }
+        /* Notas do CT-e: mesma letra da linha de total, para a lista caber
+           compacta acima dos campos. */
+        .cte-notas-lista .nf-item-row { font-size: 12px; padding-top: 5px; padding-bottom: 5px; }
+        .cte-notas-lista .nf-item-total { font-size: 12px; }
         .nf-total-card { background: #f7f6f2; border-radius: 8px; padding: 14px 16px; }
         .nf-total-row { display: flex; justify-content: space-between; font-size: 13px; color: #6b6b68; padding: 3px 0; }
         .nf-total-final { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; font-weight: 700; color: #1F3B57; padding-top: 10px; margin-top: 8px; border-top: 1px solid #e0ded4; }

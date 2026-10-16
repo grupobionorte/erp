@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.114";
+const VERSAO_SISTEMA = "1.115";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.115", texto: "CT-e: valores, pesos e outras informações da nota numa seção só" },
   { versao: "1.114", texto: "CT-e: sem os textos de explicação do tomador e do motorista" },
   { versao: "1.113", texto: "CT-e: remetente, expedidor, recebedor e destinatário mais compactos" },
   { versao: "1.112", texto: "CT-e: tela de cadastro mais compacta, como a NF-e" },
@@ -11160,7 +11161,10 @@ naturezaOperacao: naturezaOperacao || undefined,
             </div>
 
             <p className="nf-section-title" style={{ marginTop: 14 }}>Valores do documento fiscal</p>
-            <div className="nf-grid-3">
+            {/* Valores, pesos e demais informações da nota numa grade só: as
+                seções "Outros valores" e "Outras informações" só somavam título
+                e espaço. */}
+            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Base de cálc. do ICMS</label>
                 <InputMoeda value={docEmEdicao.baseCalculoIcms} onChange={v => setDocCampo("baseCalculoIcms", v)} />
@@ -11173,8 +11177,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Base de cálc. ICMS S.T.</label>
                 <InputMoeda value={docEmEdicao.baseCalculoIcmsSt} onChange={v => setDocCampo("baseCalculoIcmsSt", v)} />
               </div>
-            </div>
-            <div className="nf-grid-3">
               <div className="field-group">
                 <label className="field-label">Valor do ICMS S.T.</label>
                 <InputMoeda value={docEmEdicao.valorIcmsSt} onChange={v => setDocCampo("valorIcmsSt", v)} />
@@ -11187,10 +11189,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Valor total da nota fiscal<span className="req">*</span></label>
                 <InputMoeda value={docEmEdicao.valorTotalNota} onChange={v => setDocCampo("valorTotalNota", v)} />
               </div>
-            </div>
-
-            <p className="nf-section-title" style={{ marginTop: 14 }}>Outros valores</p>
-            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">Peso bruto (kg)</label>
                 <InputDecimal value={docEmEdicao.pesoBruto} onChange={v => setDocCampo("pesoBruto", v)} />
@@ -11207,10 +11205,6 @@ naturezaOperacao: naturezaOperacao || undefined,
                 <label className="field-label">Peso líquido (kg)</label>
                 <InputDecimal value={docEmEdicao.pesoLiquido} onChange={v => setDocCampo("pesoLiquido", v)} />
               </div>
-            </div>
-
-            <p className="nf-section-title" style={{ marginTop: 14 }}>Outras informações</p>
-            <div className="nf-grid-4">
               <div className="field-group">
                 <label className="field-label">PIN Suframa</label>
                 <input value={docEmEdicao.pinSuframa} onChange={e => setDocCampo("pinSuframa", e.target.value)} />

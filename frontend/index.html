@@ -1067,12 +1067,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.118";
+const VERSAO_SISTEMA = "1.119";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.119", texto: "CT-e: informações complementares com o mesmo tamanho da NF-e" },
   { versao: "1.118", texto: "CT-e: sem os textos de explicação da carga, e os botões da nota alinhados à direita" },
   { versao: "1.117", texto: "CT-e: campos na nova arrumação, com a distância, o crédito presumido e as informações complementares dentro da grade" },
   { versao: "1.116", texto: "CT-e: cadastro numa grade de 5 colunas" },
@@ -11480,7 +11481,13 @@ naturezaOperacao: naturezaOperacao || undefined,
               </div>
               <div className="field-group" style={{ gridColumn: "1 / span 5" }}>
                 <label className="field-label">Informações complementares</label>
-                <input value={informacoesComplementares} onChange={e => setInformacoesComplementares(e.target.value)} />
+                {/* Mesmo campo da NF-e: texto longo, várias linhas à vista. */}
+                <textarea
+                  rows={4}
+                  value={informacoesComplementares}
+                  onChange={e => setInformacoesComplementares(e.target.value)}
+                  style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }}
+                />
               </div>
             </div>
           </div>

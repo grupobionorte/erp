@@ -676,6 +676,40 @@ async function ncmDoProduto(descricao, empresaId) {
   return produto?.ncm || null;
 }
 
+// Produto predominante e NCM do MDF-e. O cadastro de produtos é por empresa:
+// a NF-e da Comércio traz um produto que a Transportes pode não ter, e o
+// CT-e às vezes traz no lugar do produto a natureza da operação ("Venda de
+// mercadoria"), que não é produto nenhum — sem NCM, o manifesto de carga
+// lotação não passa. Sem achar pelo nome no cadastro, vale o item da própria
+// NF-e transportada pelos CT-es: descrição e NCM de documento autorizado,
+// nada inventado. Entre vários itens, o de maior valor é o predominante.
+async function produtoDoManifesto(descricao, empresaId, cteIds) {
+  const ncm = await ncmDoProduto(descricao, empresaId);
+  if (ncm || !cteIds?.length) return { descricao, ncm };
+
+  const docs = await prisma.cteDocumento.findMany({
+    where: { cteId: { in: cteIds } },
+    select: { notaFiscalId: true, chaveAcesso: true },
+  });
+  const ids = docs.map((d) => d.notaFiscalId).filter(Boolean);
+  const chaves = docs.filter((d) => !d.notaFiscalId && d.chaveAcesso)
+    .map((d) => String(d.chaveAcesso).replace(/\D/g, ""));
+  if (!ids.length && !chaves.length) return { descricao, ncm: null };
+
+  const itens = await prisma.documentoItem.findMany({
+    where: { documento: { tipo: "NFe", OR: [{ id: { in: ids } }, { chaveAcesso: { in: chaves } }] } },
+    include: { produto: { select: { descricao: true, ncm: true } } },
+    orderBy: { valorTotal: "desc" },
+  });
+  const ncmDe = (i) => String(i.ncmUtilizado || i.produto?.ncm || "").replace(/\D/g, "") || null;
+  const alvo = String(descricao || "").trim().toLowerCase();
+  const mesmo = itens.find((i) => ncmDe(i) && String(i.produto?.descricao || "").trim().toLowerCase() === alvo);
+  if (mesmo) return { descricao, ncm: ncmDe(mesmo) };
+  const predominante = itens.find(ncmDe);
+  if (predominante) return { descricao: predominante.produto.descricao, ncm: ncmDe(predominante) };
+  return { descricao, ncm: null };
+}
+
 // Data escolhida na tela + hora atual, no fuso da operação.
 //
 // A tela manda só "2026-10-01". Gravar isso direto vira meia-noite em UTC,
@@ -947,10 +981,12 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   const valorCarga = somar("valorTotalNota") || somar("valorTotalProdutos");
 
   const ufsTrajeto = [...new Set(ctes.flatMap((c) => [c.ufInicio, c.ufFim]).filter(Boolean))];
-  const produtoPredominanteMdfe = primeiro.produtoPredominante
+  const produtoDoCte = primeiro.produtoPredominante
     || primeiro.documentosTransportados?.[0]?.naturezaMercadoria
     || primeiro.especieVolumes
     || null;
+  const { descricao: produtoPredominanteMdfe, ncm: ncmPredominanteMdfe } =
+    await produtoDoManifesto(produtoDoCte, req.usuario.empresaId, ctes.map((c) => c.id));
 
   const documento = await prisma.documentoFiscal.create({
     data: {
@@ -976,7 +1012,7 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       tipoEmitenteMdfe: "1", // prestador de serviço de transporte
       tipoCarga: tipoCarga || undefined,
       produtoPredominante: produtoPredominanteMdfe || undefined,
-      ncmProdutoPredominante: await ncmDoProduto(produtoPredominanteMdfe, req.usuario.empresaId),
+      ncmProdutoPredominante: ncmPredominanteMdfe || undefined,
       unidadeMedidaPeso: "01", // KG
       pesoBrutoCarga: pesoBruto || undefined,
       valorTotalCarga: valorCarga || undefined,
@@ -1306,13 +1342,21 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
 
   // Validação local do CT-e: evita mandar pra SEFAZ algo que já dá pra ver
   // que vai voltar rejeitado, e explica o motivo em português na hora.
-  if (documento.tipo === "MDFe" && documento.produtoPredominante && !documento.ncmProdutoPredominante) {
-    // Rascunhos criados antes deste campo existir ainda não têm o NCM.
-    const ncm = await ncmDoProduto(documento.produtoPredominante, documento.empresaId);
-    if (ncm) {
-      documento.ncmProdutoPredominante = ncm;
-      await prisma.documentoFiscal.update({ where: { id }, data: { ncmProdutoPredominante: ncm } });
-      payload.codigo_ncm_produto = ncm.replace(/\D/g, "");
+  if (documento.tipo === "MDFe" && !documento.ncmProdutoPredominante) {
+    // Rascunhos de antes deste campo, ou com o produto que não está no
+    // cadastro da empresa: busca de novo, agora também na NF-e transportada.
+    const achado = await produtoDoManifesto(
+      documento.produtoPredominante, documento.empresaId, (documento.documentosVinculados || []).map((c) => c.id)
+    );
+    if (achado.ncm) {
+      documento.produtoPredominante = achado.descricao;
+      documento.ncmProdutoPredominante = achado.ncm;
+      await prisma.documentoFiscal.update({
+        where: { id },
+        data: { produtoPredominante: achado.descricao, ncmProdutoPredominante: achado.ncm },
+      });
+      payload.descricao_produto = achado.descricao || undefined;
+      payload.codigo_ncm_produto = achado.ncm;
     }
   }
 

@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.124";
+const VERSAO_SISTEMA = "1.125";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.125", texto: "CT-e e MDF-e: o produto da NF-e (e o NCM dele) no lugar de \"Venda de mercadoria\"" },
   { versao: "1.124", texto: "MDF-e: status \"Encerrado\" na lista depois do encerramento" },
   { versao: "1.123", texto: "MDF-e: proprietário do veículo sem inscrição estadual não dá mais erro de schema" },
   { versao: "1.122", texto: "CT-e: letra menor na lista de notas transportadas" },
@@ -10673,6 +10674,10 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
 
   const selecionarNfeParaDocumento = (nota) => {
     const primeiroItem = nota.itens?.[0];
+    // A mercadoria é o produto da nota (o item de maior valor), não a
+    // natureza da operação: "Venda de mercadoria" ia parar no produto
+    // predominante do CT-e e do MDF-e, e o MDF-e não achava NCM para ela.
+    const itemPredominante = [...(nota.itens || [])].sort((a, b) => (b.valorTotal || 0) - (a.valorTotal || 0))[0];
     setDocEmEdicao({
       tipo: "Fiscal",
       notaFiscalId: nota.id,
@@ -10682,7 +10687,7 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
       serie: String(nota.serie || "1"),
       cfopPredominante: primeiroItem?.cfopUtilizado || primeiroItem?.produto?.cfopPadrao || "",
       dataEmissao: nota.dataEmissao ? diaDoInstante(nota.dataEmissao) : "",
-      naturezaMercadoria: nota.naturezaOperacao || "",
+      naturezaMercadoria: itemPredominante?.produto?.descricao || "",
       outrasCaracteristicasCarga: "",
       baseCalculoIcms: nota.baseCalculoIcms ?? "",
       valorIcms: nota.valorIcms ?? "",

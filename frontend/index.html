@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.123";
+const VERSAO_SISTEMA = "1.124";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.124", texto: "MDF-e: status \"Encerrado\" na lista depois do encerramento" },
   { versao: "1.123", texto: "MDF-e: proprietário do veículo sem inscrição estadual não dá mais erro de schema" },
   { versao: "1.122", texto: "CT-e: letra menor na lista de notas transportadas" },
   { versao: "1.121", texto: "CT-e: notas transportadas no topo da aba, com rolagem a partir da terceira; produto predominante junto da identificação do documento" },
@@ -6474,7 +6475,7 @@ function MdfeView() {
                 </td>
                 <td>{mdfe._count?.documentosVinculados ?? mdfe.documentosVinculados?.length ?? 0} CT-e</td>
                 <td>
-                  <StatusDocumento status={mdfe.status} />
+                  <StatusDocumento status={mdfe.status === "autorizado" && mdfe.dataEncerramento ? "encerrado" : mdfe.status} />
                   {processando === mdfe.id && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· aguardando…</span>
                   )}
@@ -6550,10 +6551,15 @@ function MdfeView() {
                               <Search size={14} /> Encerrar MDFe
                             </button>
                           )}
-                          <button className="nf-dropdown-item nf-dropdown-item-danger" disabled={processando === mdfe.id}
-                            onClick={() => { setMenuAberto(null); cancelarAutorizado(mdfe.id); }}>
-                            <Trash2 size={14} /> Cancelar MDFe (SEFAZ)
-                          </button>
+                          {/* Manifesto encerrado não pode mais ser cancelado
+                              na SEFAZ: a opção só existe enquanto ele está
+                              em aberto. */}
+                          {!mdfe.dataEncerramento && (
+                            <button className="nf-dropdown-item nf-dropdown-item-danger" disabled={processando === mdfe.id}
+                              onClick={() => { setMenuAberto(null); cancelarAutorizado(mdfe.id); }}>
+                              <Trash2 size={14} /> Cancelar MDFe (SEFAZ)
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
@@ -7146,6 +7152,10 @@ const STATUS_DOCUMENTO_LABEL = {
   autorizado: "Autorizado",
   rejeitado: "Rejeitado",
   cancelado: "Cancelado",
+  // Só para exibição: no banco o MDF-e encerrado continua "autorizado" (o
+  // encerramento é um evento sobre o documento autorizado) e a data fica em
+  // dataEncerramento.
+  encerrado: "Encerrado",
 };
 
 // Cor por status — "Rejeitado" precisa saltar aos olhos: quem olha a lista
@@ -7158,6 +7168,7 @@ const STATUS_DOCUMENTO_COR = {
   // Vermelho como o rejeitado: documento cancelado precisa saltar aos
   // olhos na lista, não passar por cinza de desativado.
   cancelado: "#c62828",
+  encerrado: "#1F3B57",
 };
 
 function StatusDocumento({ status }) {

@@ -1041,7 +1041,14 @@ function montarPayloadMdfe({
     // separado). Reboques e condutores são coleções.
     modal_rodoviario: {
       registro_nacional_transporte: somenteDigitos(empresa.rntrc),
-      contratantes: contratantesDosCtes(ctes),
+      // Com o cavalo de terceiro (proprietário declarado), quem contrata o
+      // transporte é a própria empresa emitente — ela subcontrata o dono do
+      // veículo. Mandar o tomador do CT-e nesse caso dá a rejeição 741 ("O
+      // contratante deve ser igual ao emitente do MDF-e quando indicado
+      // proprietário do veículo").
+      contratantes: Object.keys(proprietarioDoVeiculo(veiculo, "veiculo")).length
+        ? [{ nome: empresa.razaoSocial, cnpj: somenteDigitos(empresa.cnpj) }]
+        : contratantesDosCtes(ctes),
       pagamentos: pagamentosDosCtes(ctes, empresa),
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]

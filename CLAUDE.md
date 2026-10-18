@@ -189,6 +189,8 @@ porquê.
 - **578 / 711 / 726 / 745** — contratantes, manifesto em aberto, CEPs da
   carga lotação, tipo de transportador
 - **868** — grupo do veículo proibido fora do mesmo município
+- **741** — com cavalo de terceiro (proprietário declarado), o contratante
+  do MDF-e é a própria emitente, não o tomador do CT-e
 - **301** — NCM do produto predominante no MDF-e
 - **523** — MDF-e com cavalo mecânico exige reboque; sem reboque no CT-e,
   vale a composição do cavalo no cadastro de veículos

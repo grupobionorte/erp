@@ -790,8 +790,12 @@ function proprietarioDoVeiculo(v, sufixo = "") {
     [campo("cnpj_proprietario")]: doc.length === 14 ? doc : undefined,
     [campo("rntrc_proprietario")]: somenteDigitos(v.proprietarioRntrc),
     [campo("razao_social_proprietario")]: v.proprietarioNome || undefined,
-    [campo("inscricao_estadual_proprietario")]: v.proprietarioIe || undefined,
-    [campo("uf_proprietario")]: v.proprietarioUf || undefined,
+    // IE e UF andam juntas no schema do MDF-e (sequência opcional IE+UF):
+    // UF sem IE é erro de schema ("Element UF: This element is not
+    // expected"). Sem IE no cadastro, nenhuma das duas vai — a UF continua
+    // no cadastro, só não sai sozinha.
+    [campo("inscricao_estadual_proprietario")]: textoLimpo(v.proprietarioIe) || undefined,
+    [campo("uf_proprietario")]: textoLimpo(v.proprietarioIe) ? (v.proprietarioUf || undefined) : undefined,
     [campo("tipo_proprietario")]: v.proprietarioTipo || undefined,
   };
 }
@@ -816,6 +820,10 @@ function conferirProprietarios(veiculos) {
     }
     if (!/^\d{8}$/.test(somenteDigitos(v.proprietarioRntrc) || "")) {
       problemas.push(`O veículo ${placa} está como "de terceiro", mas sem o RNTRC do proprietário (8 números).`);
+    }
+    // O par IE+UF do proprietário: IE sem UF também é erro de schema.
+    if (textoLimpo(v.proprietarioIe) && !v.proprietarioUf) {
+      problemas.push(`O veículo ${placa} tem a inscrição estadual do proprietário, mas não a UF dele. Preencha a UF no cadastro do veículo.`);
     }
   }
   return problemas;

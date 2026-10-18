@@ -938,11 +938,20 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
 
   // O MDFe exige município COM código IBGE nos dois extremos; o CTe guarda
   // só o nome, então resolvemos pela tabela de municípios.
+  // O nome vem do endereço do cadastro, digitado à mão, e muitas vezes sem
+  // acento ("Querencia" para Querência). Sem achar pelo nome exato, compara
+  // sem acento dentro da UF — e só aceita se sobrar um município só.
+  const semAcento = (t) =>
+    String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
   const buscarMunicipio = async (nome, uf) => {
     if (!nome || !uf) return null;
-    return prisma.municipio.findFirst({
+    const exato = await prisma.municipio.findFirst({
       where: { nome: { equals: nome.trim(), mode: "insensitive" }, uf: uf.toUpperCase() },
     });
+    if (exato) return exato;
+    const daUf = await prisma.municipio.findMany({ where: { uf: uf.toUpperCase() } });
+    const iguais = daUf.filter((m) => semAcento(m.nome) === semAcento(nome));
+    return iguais.length === 1 ? iguais[0] : null;
   };
 
   const [carregamento, descarregamento] = await Promise.all([

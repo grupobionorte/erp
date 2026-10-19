@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.127";
+const VERSAO_SISTEMA = "1.128";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.128", texto: "MDF-e: campo CIOT, exigido quando o veículo é de caminhoneiro autônomo (rejeição 684)" },
   { versao: "1.127", texto: "MDF-e: acha o município mesmo escrito sem acento (ex.: Querencia)" },
   { versao: "1.126", texto: "MDF-e com cavalo de terceiro: a empresa emitente vai como contratante (rejeição 741)" },
   { versao: "1.125", texto: "CT-e e MDF-e: o produto da NF-e (e o NCM dele) no lugar de \"Venda de mercadoria\"" },
@@ -5993,6 +5994,7 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
   const [selecionados, setSelecionados] = useState(ctePreSelecionado ? [ctePreSelecionado.id] : []);
   const [tipoCarga, setTipoCarga] = useState("01");
   const [seguro, setSeguro] = useState({ responsavel: "1", nomeSeguradora: "", cnpjSeguradora: "", numeroApolice: "", numeroAverbacao: "" });
+  const [ciot, setCiot] = useState("");
   const [erro, setErro] = useState("");
   const [gerando, setGerando] = useState(false);
 
@@ -6060,10 +6062,15 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
       setErro("Informe o CNPJ da seguradora completo (14 números).");
       return;
     }
+    const ciotDigitos = ciot.replace(/\D/g, "");
+    if (ciotDigitos && ciotDigitos.length !== 12) {
+      setErro("O CIOT tem 12 números.");
+      return;
+    }
     setErro("");
     setGerando(true);
     try {
-      await onGerar({ cteIds: selecionados, tipoCarga, seguro });
+      await onGerar({ cteIds: selecionados, tipoCarga, seguro, ciot: ciotDigitos || undefined });
     } catch (e) {
       setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
     } finally {
@@ -6136,6 +6143,15 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
                   <label className="field-label">Número da averbação</label>
                   <input value={seguro.numeroAverbacao} onChange={e => setSeguro(s => ({ ...s, numeroAverbacao: e.target.value }))} />
                 </div>
+              </div>
+
+              {/* A SEFAZ exige o CIOT quando o dono do veículo é caminhoneiro
+                  autônomo (TAC) na ANTT — rejeição 684. O número vem da
+                  administradora do frete; aqui só se digita. */}
+              <div className="field-group" style={{ maxWidth: 260 }}>
+                <label className="field-label">CIOT (veículo de autônomo)</label>
+                <input value={ciot} inputMode="numeric" maxLength={14} placeholder="12 números"
+                  onChange={e => setCiot(e.target.value)} />
               </div>
             </>
           )}
@@ -6334,6 +6350,19 @@ function MdfeView() {
     }
   };
 
+  // CIOT digitado depois de gerar, para o manifesto recusado com a rejeição
+  // 684 (dono do veículo é TAC na ANTT). Em branco apaga.
+  const informarCiot = async (mdfe) => {
+    const digitado = window.prompt("CIOT da operação (12 números). Deixe em branco para tirar:", mdfe.ciot || "");
+    if (digitado === null) return;
+    try {
+      await apiRequest(`/documentos-fiscais/${mdfe.id}/ciot`, { method: "PUT", body: JSON.stringify({ ciot: digitado }) });
+      carregar();
+    } catch (e) {
+      alert(`Não foi possível gravar o CIOT: ${e.message}`);
+    }
+  };
+
   // Encerrar não é opcional: enquanto o manifesto ficar aberto, a SEFAZ
   // recusa o próximo MDF-e da mesma placa.
   const encerrar = async (mdfe) => {
@@ -6513,6 +6542,10 @@ function MdfeView() {
                           <button className="nf-dropdown-item"
                             onClick={() => { setMenuAberto(null); setCorrigindoSeguro(mdfe.id); }}>
                             <Pencil size={14} /> Corrigir seguro
+                          </button>
+                          <button className="nf-dropdown-item"
+                            onClick={() => { setMenuAberto(null); informarCiot(mdfe); }}>
+                            <Pencil size={14} /> {mdfe.ciot ? `CIOT ${mdfe.ciot}` : "Informar CIOT"}
                           </button>
                           <button className="nf-dropdown-item nf-dropdown-item-danger"
                             onClick={() => { setMenuAberto(null); excluirRascunho(mdfe.id); }}>

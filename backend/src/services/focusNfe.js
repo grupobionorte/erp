@@ -1050,6 +1050,7 @@ function montarPayloadMdfe({
         ? [{ nome: empresa.razaoSocial, cnpj: somenteDigitos(empresa.cnpj) }]
         : contratantesDosCtes(ctes),
       pagamentos: pagamentosDosCtes(ctes, empresa),
+      // Responsável pela geração do CIOT: quem contratou o TAC, a emitente.
       ciot: documento.ciot
         ? [{ ciot: somenteDigitos(documento.ciot), cnpj_responsavel: somenteDigitos(empresa.cnpj) }]
         : undefined,

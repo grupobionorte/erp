@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.128";
+const VERSAO_SISTEMA = "1.129";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.129", texto: "Ponto: tablet em outro fuso mostra a hora do local, e o espelho conta a jornada nela" },
   { versao: "1.128", texto: "MDF-e: campo CIOT, exigido quando o veículo é de caminhoneiro autônomo (rejeição 684)" },
   { versao: "1.127", texto: "MDF-e: acha o município mesmo escrito sem acento (ex.: Querencia)" },
   { versao: "1.126", texto: "MDF-e com cavalo de terceiro: a empresa emitente vai como contratante (rejeição 741)" },
@@ -5102,7 +5103,8 @@ function PontoEspelho() {
     try {
       await apiRequest("/ponto/tratamentos", {
         method: "POST",
-        body: JSON.stringify({ tipo, colaboradorId: Number(filtro.colaboradorId), dataHora: `${dia}T${hora}:00`, motivo }),
+        // A hora digitada é a do local do colaborador, no fuso do espelho.
+        body: JSON.stringify({ tipo, colaboradorId: Number(filtro.colaboradorId), dataHora: `${dia}T${hora}:00`, motivo, fuso: espelho?.fuso }),
       });
       buscar();
     } catch (e) { alert(`Não foi possível: ${e.message}`); }
@@ -5145,6 +5147,15 @@ function PontoEspelho() {
       </div>
 
       {erro && <p className="error-text">{erro}</p>}
+
+      {/* Tablet em outro fuso: as horas do espelho são as do local, não as
+          de Cuiabá. Dito na tela para ninguém estranhar a diferença. */}
+      {espelho?.fuso && espelho.fuso !== FUSO_OPERACAO && (
+        <p className="hint" style={{ background: "#eaf1f8", color: "#1F3B57", padding: "10px 12px", borderRadius: 8 }}>
+          Horários no fuso do local das batidas ({espelho.fuso.split("/").pop().replace(/_/g, " ")}), não no de Cuiabá.
+          Tratamentos digitados aqui também valem nesse horário.
+        </p>
+      )}
 
       {espelho && !espelho.temJornada && (
         <p className="hint" style={{ background: "#fbf3e2", color: "#7a5205", padding: "10px 12px", borderRadius: 8 }}>

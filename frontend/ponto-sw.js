@@ -14,7 +14,7 @@
      Assim um deploy novo chega no tablet sem ninguém precisar reinstalar.
    =========================================================================== */
 
-const VERSAO = "ponto-v2";
+const VERSAO = "ponto-v3";
 const CACHE_APP = `${VERSAO}-app`;
 const CACHE_MODELOS = `${VERSAO}-modelos`;
 

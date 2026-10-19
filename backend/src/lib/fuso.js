@@ -33,8 +33,8 @@ const hojeNoFuso = () => partesNoFuso(new Date()).dia;
 
 // Diferença do fuso para UTC naquele dia, como "-04:00". Calculada pelo
 // Intl em vez de fixa, para continuar certa se o fuso mudar de regra.
-function offsetDoDia(dia) {
-  const nome = new Intl.DateTimeFormat("en-US", { timeZone: FUSO, timeZoneName: "longOffset" })
+function offsetDoDia(dia, timeZone = FUSO) {
+  const nome = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
     .formatToParts(new Date(`${dia}T12:00:00Z`))
     .find((p) => p.type === "timeZoneName").value.replace("GMT", "");
   return nome || "+00:00";
@@ -42,17 +42,17 @@ function offsetDoDia(dia) {
 
 // Instante de "dia + hora" no fuso. Sem isso, "2026-09-25" vira meia-noite
 // em UTC, que é 20h do dia anterior em Mato Grosso.
-function dataHoraNoFuso(dia, hora) {
+function dataHoraNoFuso(dia, hora, timeZone = FUSO) {
   if (!dia) return undefined;
-  return new Date(`${dia}T${hora || "00:00"}:00${offsetDoDia(dia)}`);
+  return new Date(`${dia}T${hora || "00:00"}:00${offsetDoDia(dia, timeZone)}`);
 }
 
 // Início e fim de um período de dias, no fuso. É o que todo filtro "de/até"
 // precisa: sem isso, o que acontece depois das 20h do último dia fica de fora.
-function intervaloNoFuso(de, ate) {
+function intervaloNoFuso(de, ate, timeZone = FUSO) {
   return {
-    inicio: de ? new Date(`${de}T00:00:00${offsetDoDia(de)}`) : undefined,
-    fim: ate ? new Date(`${ate}T23:59:59.999${offsetDoDia(ate)}`) : undefined,
+    inicio: de ? new Date(`${de}T00:00:00${offsetDoDia(de, timeZone)}`) : undefined,
+    fim: ate ? new Date(`${ate}T23:59:59.999${offsetDoDia(ate, timeZone)}`) : undefined,
   };
 }
 
@@ -71,14 +71,27 @@ function diaDoCampo(valor) {
 
 // Data e hora sem fuso ("2026-10-01T08:00") vindas da tela são hora de
 // Cuiabá. Com fuso explícito (Z ou ±hh:mm), valem como vieram.
-function instanteDaTela(valor) {
+function instanteDaTela(valor, timeZone = FUSO) {
   if (!valor) return undefined;
   const texto = String(valor);
   const semFuso = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(:\d{2}(\.\d+)?)?$/.exec(texto);
-  if (semFuso) return dataHoraNoFuso(semFuso[1], semFuso[2]);
+  if (semFuso) return dataHoraNoFuso(semFuso[1], semFuso[2], timeZone);
   return new Date(texto);
 }
 
+// Nome de fuso IANA que o Intl reconhece ("America/Sao_Paulo"); qualquer
+// outra coisa vira null. O valor vem do tablet: não pode quebrar o cálculo.
+function fusoValido(nome) {
+  if (!nome || typeof nome !== "string" || nome.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: nome });
+    return nome;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
+  fusoValido,
   FUSO, partesNoFuso, hojeNoFuso, offsetDoDia, dataHoraNoFuso, intervaloNoFuso, diaDoCampo, instanteDaTela,
 };

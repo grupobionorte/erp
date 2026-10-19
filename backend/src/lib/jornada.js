@@ -117,9 +117,9 @@ function minutosPrevistos(config) {
 /**
  * Apura um dia: casa as batidas em pares e compara com o previsto.
  */
-function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new Date() }) {
+function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new Date(), fuso = FUSO_PADRAO }) {
   const marcacoes = batidas
-    .map((b) => ({ ...b, ...partesNoFuso(new Date(b.dataHora)) }))
+    .map((b) => ({ ...b, ...partesNoFuso(new Date(b.dataHora), fuso) }))
     .sort((a, b) => a.minutos - b.minutos);
 
   // Batidas em número ímpar significam registro faltando (esqueceu a saída,
@@ -139,7 +139,7 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new
   // batida às 10h não é falta de quem entra às 13h, e o saldo do dia só
   // existe quando ele termina. Fica fora dos totais até lá. Turno que vira
   // a noite (saída antes da entrada) fica em andamento o dia todo.
-  const agoraNoFuso = partesNoFuso(agora);
+  const agoraNoFuso = partesNoFuso(agora, fuso);
   const saidaPrevista = previsto && !previsto.folga ? paraMinutos(previsto.saida) : null;
   const entradaPrevistaMin = previsto && !previsto.folga ? paraMinutos(previsto.entrada) : null;
   const viraANoite = saidaPrevista !== null && entradaPrevistaMin !== null && saidaPrevista <= entradaPrevistaMin;
@@ -212,13 +212,15 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new
 /**
  * Espelho do período: um registro por dia, mais os totais.
  */
-function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos }) {
+function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = FUSO_PADRAO }) {
   const tolerancia = toleranciaMinutos ?? jornada?.toleranciaMinutos ?? 10;
 
-  // Agrupa as batidas pelo dia no fuso da operação.
+  // Agrupa as batidas pelo dia no fuso do local das batidas. Quem bate o
+  // ponto num tablet de outro estado tem a jornada contada na hora de lá:
+  // a entrada às 07:00 do relógio dele não pode aparecer como 06:00.
   const porDia = {};
   for (const m of marcacoes) {
-    const { dia } = partesNoFuso(new Date(m.dataHora));
+    const { dia } = partesNoFuso(new Date(m.dataHora), fuso);
     (porDia[dia] = porDia[dia] || []).push(m);
   }
 
@@ -228,6 +230,7 @@ function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos }) {
       batidas: porDia[dia] || [],
       previsto: previstoNoDia(jornada, dia),
       toleranciaMinutos: tolerancia,
+      fuso,
     })
   );
 
@@ -236,7 +239,7 @@ function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos }) {
   const previsto = somar("previstoMinutos");
 
   return {
-    de, ate, tolerancia,
+    de, ate, tolerancia, fuso,
     temJornada: Boolean(jornada),
     dias,
     totais: {

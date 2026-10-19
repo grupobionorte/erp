@@ -451,12 +451,20 @@ function horaLocalIso(d = agora()) {
          `${sinal}${p(Math.floor(abs / 60))}:${p(abs % 60)}`;
 }
 
-// Hora de Cuiabá para mostrar e falar, mesmo que o tablet esteja em outro
-// fuso. O instante gravado já vai com o fuso do aparelho (horaLocalIso) e é
-// convertido certo no servidor; aqui é só o que a pessoa vê e ouve.
+// Fuso do próprio tablet. Há tablet em local com outro horário que o de
+// Cuiabá: quem bate o ponto lá precisa ver e ouvir a hora do relógio de lá.
+// O fuso vai junto em cada batida, e o espelho de ponto conta a jornada nele.
+// Sem fuso configurado no aparelho, vale Cuiabá, como era antes.
+const FUSO_APARELHO = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Cuiaba"; }
+  catch { return "America/Cuiaba"; }
+})();
+
+// Hora do local do tablet, para mostrar e falar. A hora em si vem corrigida
+// pelo relógio do servidor (agora()); o fuso é o do aparelho.
 function noFuso(d) {
   const x = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Cuiaba", year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: FUSO_APARELHO, year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
   }).formatToParts(d).map((v) => [v.type, v.value]));
   return { h: x.hour, m: x.minute, s: x.second, dataBr: `${x.day}/${x.month}/${x.year}` };
@@ -628,6 +636,7 @@ function registrarBatida(colaborador, metodo, { ignorarJanela = false, foto = nu
     idLocal: (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
     colaboradorId: colaborador.id,
     dataHora: horaLocalIso(),
+    fuso: FUSO_APARELHO,
     metodoIdentificacao: metodo,
     origemOffline: !navigator.onLine,
     // Vai junto na fila: offline, a foto espera a conexão com a batida.

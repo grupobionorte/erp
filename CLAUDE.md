@@ -191,6 +191,9 @@ porquê.
 - **868** — grupo do veículo proibido fora do mesmo município
 - **741** — com cavalo de terceiro (proprietário declarado), o contratante
   do MDF-e é a própria emitente, não o tomador do CT-e
+- **684** — CIOT obrigatório quando o RNTRC do dono do veículo é de TAC na
+  ANTT. O CIOT vem da administradora do frete: é digitado no MDF-e (na
+  geração ou no menu do rejeitado), nunca gerado pelo sistema
 - **301** — NCM do produto predominante no MDF-e
 - **523** — MDF-e com cavalo mecânico exige reboque; sem reboque no CT-e,
   vale a composição do cavalo no cadastro de veículos

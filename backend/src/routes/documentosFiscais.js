@@ -871,6 +871,10 @@ router.post("/:id/gerar-cte", asyncHandler(async (req, res) => {
 // no CT-e — trajeto, veículo, motorista, carga. O usuário só confere.
 router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
   const { cteIds, tipoCarga, seguro } = req.body;
+  const ciot = String(req.body.ciot || "").replace(/\D/g, "");
+  if (ciot && ciot.length !== 12) {
+    return res.status(400).json({ erro: "O CIOT tem 12 números" });
+  }
 
   if (!cteIds?.length) {
     return res.status(400).json({ erro: "Informe ao menos um CT-e (cteIds)" });
@@ -1019,6 +1023,7 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       codigoMunicipioDescarregamento: descarregamento.codigoIbge,
 
       tipoEmitenteMdfe: "1", // prestador de serviço de transporte
+      ciot: ciot || undefined,
       tipoCarga: tipoCarga || undefined,
       produtoPredominante: produtoPredominanteMdfe || undefined,
       ncmProdutoPredominante: ncmPredominanteMdfe || undefined,
@@ -1162,6 +1167,29 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
         : "Rascunho criado. Vincule as notas fiscais desta viagem antes de emitir.");
 
   res.status(201).json({ ...clone, aviso });
+}));
+
+// CIOT do manifesto ainda não autorizado. É o código da operação de frete
+// gerado na contratação do caminhoneiro autônomo (TAC) ou equiparado, por uma
+// administradora de pagamento de frete. A SEFAZ confere o RNTRC do dono do
+// veículo na ANTT e, sendo TAC, exige o CIOT (rejeição 684). O número só
+// existe lá fora: o sistema guarda o que foi digitado, nunca inventa.
+router.put("/:id/ciot", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "MDFe") return res.status(400).json({ erro: "CIOT só existe no MDF-e" });
+  if (documento.status !== "rascunho" && documento.status !== "rejeitado") {
+    return res.status(409).json({ erro: "Só dá para informar o CIOT de MDF-e em rascunho ou rejeitado" });
+  }
+  const ciot = String(req.body.ciot || "").replace(/\D/g, "");
+  if (ciot && ciot.length !== 12) return res.status(400).json({ erro: "O CIOT tem 12 números" });
+
+  const atualizado = await prisma.documentoFiscal.update({ where: { id }, data: { ciot: ciot || null } });
+  res.json(atualizado);
 }));
 
 // Corrige o seguro da carga de um MDF-e ainda não autorizado. O manifesto

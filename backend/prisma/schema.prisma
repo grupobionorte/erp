@@ -766,6 +766,8 @@ model Rep {
   token         String    @unique
   descricao     String?
   localizacao   String?
+  // Fuso informado pelo próprio tablet na última batida.
+  fuso          String?
   ultimoNsr     Int       @default(0) @map("ultimo_nsr")
   ativo         Boolean   @default(true)
   criadoEm      DateTime  @default(now()) @map("criado_em")
@@ -792,6 +794,11 @@ model MarcacaoPonto {
   rep       Rep      @relation(fields: [repId], references: [id])
   cpf       String                                     // gravado junto: o AFD usa o CPF
   dataHora  DateTime @map("data_hora")                 // momento da batida, com fuso
+  // Fuso do aparelho na hora da batida (ex.: "America/Sao_Paulo"). O
+  // instante acima é absoluto; este campo diz em que hora local ele foi
+  // visto, e o AFD pede o fuso de cada marcação. Nulo nas batidas antigas,
+  // que eram todas de Cuiabá.
+  fuso      String?
 
   colaboradorId Int         @map("colaborador_id")
   colaborador   Colaborador @relation(fields: [colaboradorId], references: [id])

@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { apurarPeriodo } = require("../lib/jornada");
-const { intervaloNoFuso, instanteDaTela } = require("../lib/fuso");
+const { FUSO, intervaloNoFuso, instanteDaTela, fusoValido, partesNoFuso } = require("../lib/fuso");
 const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
 
@@ -115,6 +115,14 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
 
   const resultados = [];
 
+  // O tablet diz o próprio fuso. Fica no REP (para o espelho de quem ainda
+  // não bateu ponto no período) e em cada batida.
+  const fusoDoLote = fusoValido(marcacoes.find((x) => fusoValido(x.fuso))?.fuso);
+  if (fusoDoLote && fusoDoLote !== rep.fuso) {
+    await prisma.rep.update({ where: { id: rep.id }, data: { fuso: fusoDoLote } });
+    rep.fuso = fusoDoLote;
+  }
+
   for (const m of marcacoes) {
     if (!m.idLocal || !m.colaboradorId || !m.dataHora) {
       resultados.push({ idLocal: m.idLocal, situacao: "invalida", motivo: "idLocal, colaboradorId e dataHora são obrigatórios" });
@@ -163,6 +171,7 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
             repId: rep.id,
             cpf: colaborador.cpf,
             dataHora: new Date(m.dataHora),
+            fuso: fusoValido(m.fuso),
             colaboradorId: colaborador.id,
             metodoIdentificacao: m.metodoIdentificacao === "pin" ? "pin" : "facial",
             origemOffline: Boolean(m.origemOffline),
@@ -192,7 +201,7 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
         const empresa = rep.empresaId
           ? await prisma.empresa.findUnique({ where: { id: rep.empresaId }, select: { razaoSocial: true, cnpj: true } })
           : null;
-        enviarComprovantePonto({ colaborador, marcacao: gravada, rep, empresa })
+        enviarComprovantePonto({ colaborador, marcacao: gravada, rep, empresa, fuso: gravada.fuso || undefined })
           .catch((e) => console.error("[ponto] comprovante não enviado:", e.message));
       }
 
@@ -208,6 +217,7 @@ routerTablet.post("/marcacoes", asyncHandler(async (req, res) => {
           nome: colaborador.nome,
           cpf: colaborador.cpf,
           dataHora: gravada.dataHora,
+          fuso: gravada.fuso,
           hash: gravada.hash,
         },
       });
@@ -288,6 +298,9 @@ router.get("/integridade/:repIdentificador", asyncHandler(async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post("/tratamentos", asyncHandler(async (req, res) => {
   const { tipo, dataHora, motivo, colaboradorId, marcacaoId } = req.body;
+  // A hora digitada no tratamento é a do local do colaborador: o espelho
+  // manda o fuso em que está mostrando as batidas.
+  const fuso = fusoValido(req.body.fuso) || FUSO;
 
   if (!["inclusao", "desconsideracao", "pre_assinalado"].includes(tipo)) {
     return res.status(400).json({ erro: "tipo deve ser inclusao, desconsideracao ou pre_assinalado" });
@@ -302,9 +315,10 @@ router.post("/tratamentos", asyncHandler(async (req, res) => {
   const tratamento = await prisma.tratamentoPonto.create({
     data: {
       tipo,
-      // A tela manda "dia + hora" sem fuso: é hora de Cuiabá. Lido como UTC,
-      // um tratamento às 08:00 era gravado como 04:00.
-      dataHora: instanteDaTela(dataHora),
+      // A tela manda "dia + hora" sem fuso: é a hora do local, no fuso do
+      // espelho (Cuiabá, salvo tablet em outro fuso). Lido como UTC, um
+      // tratamento às 08:00 era gravado como 04:00.
+      dataHora: instanteDaTela(dataHora, fuso),
       motivo: motivo.trim(),
       colaboradorId: Number(colaboradorId),
       marcacaoId: marcacaoId ? Number(marcacaoId) : null,
@@ -489,20 +503,41 @@ router.get("/espelho", asyncHandler(async (req, res) => {
     orderBy: { vigenciaInicio: "desc" },
   });
 
-  const marcacoes = await prisma.marcacaoPonto.findMany({
+  // Busca com um dia de folga de cada lado: o período é contado no fuso do
+  // local das batidas, que pode não ser o de Cuiabá. Depois filtra pelo dia
+  // local.
+  const umDia = 24 * 60 * 60 * 1000;
+  const faixa = intervaloNoFuso(de, ate);
+  const encontradas = await prisma.marcacaoPonto.findMany({
     where: {
       colaboradorId: colaborador.id,
-      dataHora: { gte: intervaloNoFuso(de, ate).inicio, lte: intervaloNoFuso(de, ate).fim },
+      dataHora: { gte: new Date(faixa.inicio.getTime() - umDia), lte: new Date(faixa.fim.getTime() + umDia) },
     },
     include: {
       tratamentos: true,
       // Só a existência e o resultado: a imagem vem por rota própria.
       foto: { select: { conferencia: true } },
+      rep: { select: { fuso: true } },
     },
     orderBy: { dataHora: "asc" },
   });
 
-  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada });
+  // Um fuso por espelho: o mais frequente nas batidas. Cada batida nova diz
+  // o seu; as antigas, gravadas antes disso, valem pelo fuso que o tablet
+  // informou depois. Sem nada, Cuiabá. Misturar fusos dentro do mesmo
+  // espelho deixaria entrada e saída de um dia incomparáveis.
+  const contagem = {};
+  for (const m of encontradas) {
+    const f = fusoValido(m.fuso) || fusoValido(m.rep?.fuso) || FUSO;
+    contagem[f] = (contagem[f] || 0) + 1;
+  }
+  const fuso = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0] || FUSO;
+  const marcacoes = encontradas.filter((m) => {
+    const { dia } = partesNoFuso(new Date(m.dataHora), fuso);
+    return dia >= de && dia <= ate;
+  });
+
+  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada, fuso });
   res.json({ colaborador, jornada, ...apuracao });
 }));
 

@@ -16,7 +16,7 @@ const router = express.Router();
 
 // Início e fim do dia no fuso da operação. Sem isso, uma nota emitida às 21h
 // de Mato Grosso cairia no dia seguinte e sumiria do relatório do mês.
-const { intervaloNoFuso } = require("../lib/fuso");
+const { intervaloNoFuso, partesNoFuso } = require("../lib/fuso");
 
 /**
  * Relação de NF-e emitidas, por período e opcionalmente por cliente.
@@ -86,6 +86,101 @@ router.get("/nfe", asyncHandler(async (req, res) => {
         return acc;
       }, {})
     ).sort((a, b) => b.valor - a.valor),
+  });
+}));
+
+/**
+ * Relatório de CT-e emitidos, no layout do sistema anterior: uma linha por
+ * conhecimento, com pesos, valor das notas, ICMS e valor do serviço, e os
+ * totais no fim. Cancelado aparece na lista, mas sem valores e fora das
+ * somas — como no modelo.
+ */
+router.get("/cte", asyncHandler(async (req, res) => {
+  const { de, ate, status: statusPedido } = req.query;
+  if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+
+  const { inicio, fim } = intervaloNoFuso(de, ate);
+  const status = statusPedido === "autorizado" ? ["autorizado"]
+    : statusPedido === "cancelado" ? ["cancelado"]
+    : ["autorizado", "cancelado"];
+
+  const pessoa = { select: { id: true, nomeRazaoSocial: true } };
+  const [ctes, empresa] = await Promise.all([
+    prisma.documentoFiscal.findMany({
+      where: {
+        tipo: "CTe",
+        empresaId: req.usuario.empresaId || undefined,
+        status: { in: status },
+        dataEmissao: { gte: inicio, lte: fim },
+      },
+      include: {
+        remetente: pessoa, destinatario: pessoa, expedidor: pessoa, recebedor: pessoa,
+        documentosTransportados: {
+          select: { pesoBruto: true, pesoLiquido: true, quantidadeVolumes: true, valorTotalNota: true },
+        },
+      },
+      orderBy: [{ numero: "asc" }, { dataEmissao: "asc" }],
+    }),
+    req.usuario.empresaId
+      ? prisma.empresa.findUnique({
+          where: { id: req.usuario.empresaId },
+          select: { razaoSocial: true, cnpj: true, ie: true, endereco: { select: { cep: true, cidade: true, uf: true } } },
+        })
+      : null,
+  ]);
+
+  const somar = (docs, campo) => docs.reduce((t, d) => t + (Number(d[campo]) || 0), 0);
+  const linhas = ctes.map((c) => {
+    // Cliente do relatório é o tomador: quem contrata e paga o frete.
+    const tomador = {
+      Remetente: c.remetente, Expedidor: c.expedidor, Recebedor: c.recebedor, Destinatário: c.destinatario,
+    }[c.definicaoTomador] || c.destinatario || c.remetente;
+    const cancelado = c.status === "cancelado";
+    const docs = c.documentosTransportados || [];
+    return {
+      id: c.id,
+      dia: c.dataEmissao ? partesNoFuso(new Date(c.dataEmissao)).dia : null,
+      numero: c.numero,
+      serie: c.serie,
+      cliente: tomador?.nomeRazaoSocial || "—",
+      clienteId: tomador?.id || null,
+      situacao: cancelado ? "Cancelado" : "Normal",
+      cancelado,
+      pesoBruto: somar(docs, "pesoBruto"),
+      pesoLiquido: somar(docs, "pesoLiquido"),
+      volumes: somar(docs, "quantidadeVolumes"),
+      // O CT-e do sistema não tem componente de pedágio: sai zero, que é o
+      // que foi para a SEFAZ.
+      pedagio: 0,
+      valorNotas: somar(docs, "valorTotalNota"),
+      valorIcms: Number(c.valorIcms) || 0,
+      aliquotaIcms: Number(c.aliquotaIcmsPrestacao) || 0,
+      valorServico: Number(c.valorTotal) || 0,
+      // Valor a receber é o da prestação: é o que o payload manda à SEFAZ.
+      valorReceber: Number(c.valorTotal) || 0,
+    };
+  });
+
+  const validas = linhas.filter((l) => !l.cancelado);
+  const total = (campo) => validas.reduce((t, l) => t + l[campo], 0);
+
+  res.json({
+    periodo: { de, ate },
+    empresa,
+    linhas,
+    totais: {
+      quantidade: linhas.length,
+      autorizados: validas.length,
+      cancelados: linhas.length - validas.length,
+      pesoBruto: total("pesoBruto"),
+      pesoLiquido: total("pesoLiquido"),
+      volumes: total("volumes"),
+      pedagio: total("pedagio"),
+      valorNotas: total("valorNotas"),
+      valorIcms: total("valorIcms"),
+      valorServico: total("valorServico"),
+      valorReceber: total("valorReceber"),
+    },
   });
 }));
 

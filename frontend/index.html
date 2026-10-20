@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.131";
+const VERSAO_SISTEMA = "1.132";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.132", texto: "Relatório de CT-e: baixar os XMLs do período num zip, como na NF-e" },
   { versao: "1.131", texto: "Relatório de CT-e: filtro por cliente" },
   { versao: "1.130", texto: "CT-e: relatório de CT-e emitidos no modelo do sistema anterior (botão Relatório)" },
   { versao: "1.129", texto: "Ponto: tablet em outro fuso mostra a hora do local, e o espelho conta a jornada nela" },
@@ -7665,13 +7666,28 @@ function RelatorioCteModal({ onFechar }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+
+  const parametros = () => {
+    const { clienteId, ...resto } = filtro;
+    return new URLSearchParams({ ...resto, ...(clienteId ? { clienteId } : {}) });
+  };
+
+  // Pacote dos XMLs com os mesmos filtros do relatório, como na NF-e. O zip
+  // é montado no servidor, que busca cada XML no provedor.
+  const baixarXmls = async () => {
+    setErro(""); setBaixando(true);
+    try {
+      await apiDownload(`/relatorios/cte/xmls?${parametros()}`, `XMLs-CTe-${filtro.de}-a-${filtro.ate}.zip`);
+    } catch (e) {
+      setErro(e.message);
+    } finally { setBaixando(false); }
+  };
 
   const gerar = async () => {
     setErro(""); setCarregando(true);
     try {
-      const { clienteId, ...resto } = filtro;
-      const params = new URLSearchParams({ ...resto, ...(clienteId ? { clienteId } : {}) });
-      const resultado = await apiRequest(`/relatorios/cte?${params}`);
+      const resultado = await apiRequest(`/relatorios/cte?${parametros()}`);
       setDados(resultado);
       if (!resultado.linhas.length) { setErro("Nenhum CT-e encontrado nesse período."); return; }
       imprimir(resultado);
@@ -7814,6 +7830,9 @@ function RelatorioCteModal({ onFechar }) {
               {carregando ? "Buscando…" : "Gerar"}
             </button>
             {dados && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
+            <button className="btn" onClick={baixarXmls} disabled={baixando}>
+              {baixando ? "Compactando…" : "Baixar XMLs do período"}
+            </button>
           </div>
           {erro && <p className="error-text">{erro}</p>}
         </div>

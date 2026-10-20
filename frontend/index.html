@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.130";
+const VERSAO_SISTEMA = "1.131";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.131", texto: "Relatório de CT-e: filtro por cliente" },
   { versao: "1.130", texto: "CT-e: relatório de CT-e emitidos no modelo do sistema anterior (botão Relatório)" },
   { versao: "1.129", texto: "Ponto: tablet em outro fuso mostra a hora do local, e o espelho conta a jornada nela" },
   { versao: "1.128", texto: "MDF-e: campo CIOT, exigido quando o veículo é de caminhoneiro autônomo (rejeição 684)" },
@@ -7659,7 +7660,8 @@ function RelatorioNfeModal({ onFechar }) {
 // totais no fim. As contas vêm prontas do servidor.
 function RelatorioCteModal({ onFechar }) {
   const hoje = hojeNoFuso();
-  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas" });
+  const { items: clientes } = useApiCollection("clientes");
+  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", clienteId: "" });
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -7667,7 +7669,9 @@ function RelatorioCteModal({ onFechar }) {
   const gerar = async () => {
     setErro(""); setCarregando(true);
     try {
-      const resultado = await apiRequest(`/relatorios/cte?${new URLSearchParams(filtro)}`);
+      const { clienteId, ...resto } = filtro;
+      const params = new URLSearchParams({ ...resto, ...(clienteId ? { clienteId } : {}) });
+      const resultado = await apiRequest(`/relatorios/cte?${params}`);
       setDados(resultado);
       if (!resultado.linhas.length) { setErro("Nenhum CT-e encontrado nesse período."); return; }
       imprimir(resultado);
@@ -7693,6 +7697,8 @@ function RelatorioCteModal({ onFechar }) {
     const agora = new Date().toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO }).replace(",", "");
     const quem = usuarioLogado?.nome || "";
     const T = r.totais;
+    // Com um cliente só, o nome dele vai no cabeçalho, ao lado do período.
+    const clienteFiltro = filtro.clienteId && r.linhas[0] ? r.linhas[0].cliente : "";
 
     const linhas = r.linhas.map(l => l.cancelado ? `
       <tr><td>${dia(l.dia)}</td><td>${esc(l.numero)}</td><td>${esc(l.serie)}</td>
@@ -7743,7 +7749,7 @@ function RelatorioCteModal({ onFechar }) {
               </td>
               <td colspan="6" class="dir">&nbsp;<br>Emissão em: ${esc(agora)}<br>Emitido por: ${esc(quem)}</td></tr>
             <tr class="topo"><td colspan="14" class="titulo">Relatório de Documentos de Transporte Emitidos (CT-e)</td></tr>
-            <tr class="topo"><td colspan="14" class="periodo">Período: de ${dia(r.periodo.de)} a ${dia(r.periodo.ate)}</td></tr>
+            <tr class="topo"><td colspan="14" class="periodo">${clienteFiltro ? `Cliente: ${esc(clienteFiltro)} &nbsp;·&nbsp; ` : ""}Período: de ${dia(r.periodo.de)} a ${dia(r.periodo.ate)}</td></tr>
             <tr><th>Emissão</th><th>N° doc.</th><th>Série</th><th>Cliente</th><th>Situação</th>
               <th class="n">Peso bruto</th><th class="n">Peso líquido</th><th class="n">Qtde. vol.</th>
               <th class="n">Pedágio</th><th class="n">Valor NF.</th><th class="n">Vl. ICMS</th>
@@ -7795,6 +7801,13 @@ function RelatorioCteModal({ onFechar }) {
                 <option value="cancelado">Só cancelados</option>
               </select>
             </div>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Cliente (tomador do frete)</label>
+            <select value={filtro.clienteId} onChange={ev => setFiltro(f => ({ ...f, clienteId: ev.target.value }))}>
+              <option value="">Todos</option>
+              {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
+            </select>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <button className="btn btn-primary" onClick={gerar} disabled={carregando}>

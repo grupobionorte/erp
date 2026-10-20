@@ -97,6 +97,7 @@ router.get("/nfe", asyncHandler(async (req, res) => {
  */
 router.get("/cte", asyncHandler(async (req, res) => {
   const { de, ate, status: statusPedido } = req.query;
+  const clienteId = req.query.clienteId ? Number(req.query.clienteId) : null;
   if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
 
   const { inicio, fim } = intervaloNoFuso(de, ate);
@@ -130,7 +131,7 @@ router.get("/cte", asyncHandler(async (req, res) => {
   ]);
 
   const somar = (docs, campo) => docs.reduce((t, d) => t + (Number(d[campo]) || 0), 0);
-  const linhas = ctes.map((c) => {
+  const todas = ctes.map((c) => {
     // Cliente do relatório é o tomador: quem contrata e paga o frete.
     const tomador = {
       Remetente: c.remetente, Expedidor: c.expedidor, Recebedor: c.recebedor, Destinatário: c.destinatario,
@@ -160,6 +161,10 @@ router.get("/cte", asyncHandler(async (req, res) => {
       valorReceber: Number(c.valorTotal) || 0,
     };
   });
+
+  // Filtro por cliente depois de saber quem é o tomador de cada CT-e: o
+  // tomador pode ser o remetente, o destinatário, o expedidor ou o recebedor.
+  const linhas = clienteId ? todas.filter((l) => l.clienteId === clienteId) : todas;
 
   const validas = linhas.filter((l) => !l.cancelado);
   const total = (campo) => validas.reduce((t, l) => t + l[campo], 0);

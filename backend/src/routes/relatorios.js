@@ -220,8 +220,53 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
   if (!notas.length) {
     return res.status(404).json({ erro: "Nenhuma nota com XML no período" });
   }
+  await enviarZipDeXmls(res, notas, { sigla: "NFe", nomeArquivo: `XMLs-NFe-${de}-a-${ate}.zip` });
+}));
 
-  const nomeArquivo = `XMLs-NFe-${de}-a-${ate}.zip`;
+/**
+ * Mesmo pacote de XMLs, para os CT-e do período — com o filtro de cliente
+ * (tomador) do relatório de CT-e.
+ */
+router.get("/cte/xmls", asyncHandler(async (req, res) => {
+  const { de, ate, status: statusPedido } = req.query;
+  if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+  const clienteId = req.query.clienteId ? Number(req.query.clienteId) : null;
+
+  const { inicio, fim } = intervaloNoFuso(de, ate);
+  const status = statusPedido === "autorizado" ? ["autorizado"]
+    : statusPedido === "cancelado" ? ["cancelado"]
+    : ["autorizado", "cancelado"];
+
+  const ctes = await prisma.documentoFiscal.findMany({
+    where: {
+      tipo: "CTe",
+      empresaId: req.usuario.empresaId || undefined,
+      status: { in: status },
+      dataEmissao: { gte: inicio, lte: fim },
+      xmlUrl: { not: null },
+    },
+    select: {
+      numero: true, chaveAcesso: true, xmlUrl: true, status: true, definicaoTomador: true,
+      remetenteId: true, destinatarioId: true, expedidorId: true, recebedorId: true,
+    },
+    orderBy: { numero: "asc" },
+  });
+
+  // Mesmo critério do relatório: o cliente é o tomador do CT-e.
+  const tomadorId = (c) => ({
+    Remetente: c.remetenteId, Expedidor: c.expedidorId, Recebedor: c.recebedorId, Destinatário: c.destinatarioId,
+  }[c.definicaoTomador] || c.destinatarioId || c.remetenteId);
+  const escolhidos = clienteId ? ctes.filter((c) => tomadorId(c) === clienteId) : ctes;
+
+  if (!escolhidos.length) {
+    return res.status(404).json({ erro: "Nenhum CT-e com XML no período" });
+  }
+  await enviarZipDeXmls(res, escolhidos, { sigla: "CTe", nomeArquivo: `XMLs-CTe-${de}-a-${ate}.zip` });
+}));
+
+// Monta o zip baixando cada XML do provedor. Os arquivos ficam lá; aqui eles
+// passam direto para o pacote, em memória.
+async function enviarZipDeXmls(res, documentos, { sigla, nomeArquivo }) {
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
 
@@ -231,18 +276,18 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
   pacote.on("error", (e) => { console.error("[xmls]", e); res.destroy(); });
   pacote.pipe(res);
 
-  for (const nota of notas) {
+  for (const doc of documentos) {
     try {
-      const resposta = await fetch(nota.xmlUrl);
+      const resposta = await fetch(doc.xmlUrl);
       if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
       const xml = Buffer.from(await resposta.arrayBuffer());
       // Nome com número e chave: o contador acha pelo número, e a chave
       // garante que dois arquivos nunca colidam.
-      const nome = `${nota.status === "cancelado" ? "CANCELADA-" : ""}` +
-        `NFe-${String(nota.numero || "s-n").padStart(6, "0")}-${nota.chaveAcesso || ""}.xml`;
+      const nome = `${doc.status === "cancelado" ? "CANCELADA-" : ""}` +
+        `${sigla}-${String(doc.numero || "s-n").padStart(6, "0")}-${doc.chaveAcesso || ""}.xml`;
       pacote.append(xml, { name: nome });
     } catch (erro) {
-      falhas.push(`NF-e ${nota.numero}: ${erro.message}`);
+      falhas.push(`${sigla} ${doc.numero}: ${erro.message}`);
     }
   }
 
@@ -256,7 +301,7 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
   }
 
   await pacote.finalize();
-}));
+}
 
 /**
  * Total de NF-e por cliente no mês corrente. Serve ao painel inicial: a

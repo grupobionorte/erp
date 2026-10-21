@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.133";
+const VERSAO_SISTEMA = "1.134";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.134", texto: "Relatório de CT-e: o cliente se escolhe pelo nome, num campo com o nome do tipo (Remetente, Tomador…)" },
   { versao: "1.133", texto: "Relatório de CT-e: filtro por tipo do cliente (tomador, remetente, destinatário…) e código; código na lista de clientes" },
   { versao: "1.132", texto: "Relatório de CT-e: baixar os XMLs do período num zip, como na NF-e" },
   { versao: "1.131", texto: "Relatório de CT-e: filtro por cliente" },
@@ -7666,23 +7667,34 @@ function RelatorioNfeModal({ onFechar }) {
 function RelatorioCteModal({ onFechar }) {
   const hoje = hojeNoFuso();
   const { items: clientes } = useApiCollection("clientes");
-  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", papel: "tomador", codigo: "" });
+  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", papel: "tomador", cliente: "" });
   const PAPEIS = { tomador: "Tomador", remetente: "Remetente", destinatario: "Destinatário", expedidor: "Expedidor", recebedor: "Recebedor" };
-  const codigo = String(filtro.codigo || "").replace(/\D/g, "");
-  const clienteDoCodigo = codigo ? (clientes || []).find(c => String(c.id) === codigo) : null;
+  // O cliente é escolhido pelo nome (a lista mostra nome e CNPJ, que não se
+  // repetem); digitar só o código também acha. Em branco: todos.
+  const opcoesClientes = (clientes || []).map(c => ({ chave: c.id, valor: rotuloPessoa(c), detalhe: `Cód. ${c.id}` }));
+  const textoCliente = String(filtro.cliente || "").trim();
+  const clienteEscolhido = !textoCliente ? null
+    : /^\d+$/.test(textoCliente) ? (clientes || []).find(c => String(c.id) === textoCliente)
+    : (clientes || []).find(c => rotuloPessoa(c) === textoCliente)
+      || (() => {
+        const mesmoNome = (clientes || []).filter(c => textoDeBusca(c.nome) === textoDeBusca(textoCliente));
+        return mesmoNome.length === 1 ? mesmoNome[0] : null;
+      })();
+  const codigo = clienteEscolhido ? String(clienteEscolhido.id) : "";
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [baixando, setBaixando] = useState(false);
 
   const parametros = () => {
-    const { codigo: _codigo, ...resto } = filtro;
+    const { cliente: _cliente, ...resto } = filtro;
     return new URLSearchParams({ ...resto, ...(codigo ? { clienteId: codigo } : {}) });
   };
 
   // Pacote dos XMLs com os mesmos filtros do relatório, como na NF-e. O zip
   // é montado no servidor, que busca cada XML no provedor.
   const baixarXmls = async () => {
+    if (textoCliente && !clienteEscolhido) { setErro(`${PAPEIS[filtro.papel]} não encontrado na lista de clientes.`); return; }
     setErro(""); setBaixando(true);
     try {
       await apiDownload(`/relatorios/cte/xmls?${parametros()}`, `XMLs-CTe-${filtro.de}-a-${filtro.ate}.zip`);
@@ -7692,6 +7704,8 @@ function RelatorioCteModal({ onFechar }) {
   };
 
   const gerar = async () => {
+    // Nome digitado que não bate com ninguém viraria "todos" sem aviso.
+    if (textoCliente && !clienteEscolhido) { setErro(`${PAPEIS[filtro.papel]} não encontrado na lista de clientes.`); return; }
     setErro(""); setCarregando(true);
     try {
       const resultado = await apiRequest(`/relatorios/cte?${parametros()}`);
@@ -7725,7 +7739,7 @@ function RelatorioCteModal({ onFechar }) {
     // Com um cliente só, papel, código e nome vão no cabeçalho, ao lado do
     // período.
     const clienteFiltro = codigo
-      ? `${PAPEIS[filtro.papel]}: ${codigo}${clienteDoCodigo ? ` - ${clienteDoCodigo.nome}` : ""}`
+      ? `${PAPEIS[filtro.papel]}: ${codigo} - ${clienteEscolhido.nome}`
       : "";
 
     const linhas = r.linhas.map(l => l.cancelado ? `
@@ -7830,8 +7844,8 @@ function RelatorioCteModal({ onFechar }) {
               </select>
             </div>
           </div>
-          {/* Papel do cliente no CT-e e o código dele (o número do cadastro,
-              que aparece na lista de clientes). Código em branco: todos. */}
+          {/* Papel do cliente no CT-e e, ao lado, o cliente nesse papel —
+              o campo leva o nome do tipo escolhido. Em branco: todos. */}
           <div className="nf-grid-3">
             <div className="field-group">
               <label className="field-label">Tipo do cliente</label>
@@ -7839,15 +7853,14 @@ function RelatorioCteModal({ onFechar }) {
                 {Object.entries(PAPEIS).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
               </select>
             </div>
-            <div className="field-group">
-              <label className="field-label">Código</label>
-              <input value={filtro.codigo} inputMode="numeric" placeholder="Todos"
-                onChange={ev => setFiltro(f => ({ ...f, codigo: ev.target.value }))} />
-            </div>
-            <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
-              <span style={{ fontSize: 12.5, paddingBottom: 8, color: codigo && !clienteDoCodigo ? "#c62828" : "#55534c" }}>
-                {!codigo ? "Todos os clientes" : clienteDoCodigo ? clienteDoCodigo.nome : "Código não encontrado"}
-              </span>
+            <div className="field-group" style={{ gridColumn: "span 2" }}>
+              <label className="field-label">{PAPEIS[filtro.papel]}</label>
+              <CampoComLista value={filtro.cliente} opcoes={opcoesClientes} ariaLabel={PAPEIS[filtro.papel]}
+                placeholder="Todos — digite o nome ou o código"
+                onChange={v => setFiltro(f => ({ ...f, cliente: v }))} />
+              {textoCliente && !clienteEscolhido && (
+                <p className="hint" style={{ color: "#c62828", margin: "4px 0 0" }}>Não encontrado na lista de clientes.</p>
+              )}
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>

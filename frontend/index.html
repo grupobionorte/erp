@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.136";
+const VERSAO_SISTEMA = "1.137";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.137", texto: "Ponto: a foto da batida por PIN mostra a hora local do tablet" },
   { versao: "1.136", texto: "CT-e: trocar o veículo troca os reboques pelos do cadastro dele" },
   { versao: "1.135", texto: "NF-e: trocar o cavalo troca os reboques pelos do cadastro dele" },
   { versao: "1.134", texto: "Relatório de CT-e: o cliente se escolhe pelo nome, num campo com o nome do tipo (Remetente, Tomador…)" },
@@ -4603,10 +4604,12 @@ function LoginScreen({ onLogin }) {
 // uma hora de diferença — e num espelho de ponto isso vira discussão
 // trabalhista.
 
-const horaPonto = (iso) => new Date(iso).toLocaleTimeString("pt-BR", {
-  timeZone: FUSO_OPERACAO, hour: "2-digit", minute: "2-digit",
+// Hora e dia de uma batida. O fuso é o do tablet que registrou (vem do
+// servidor); sem ele, Cuiabá.
+const horaPonto = (iso, fuso) => new Date(iso).toLocaleTimeString("pt-BR", {
+  timeZone: fuso || FUSO_OPERACAO, hour: "2-digit", minute: "2-digit",
 });
-const diaPonto = (iso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO_OPERACAO });
+const diaPonto = (iso, fuso) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: fuso || FUSO_OPERACAO });
 
 // Três frentes, na ordem em que o RH usa: os tablets (que geram as batidas),
 // as pessoas (PIN e biometria) e o espelho (o que foi registrado).
@@ -5062,7 +5065,8 @@ function FotoDaBatidaModal({ batida, onFechar }) {
                 style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid #e5e3da" }} />
               <p style={{ marginBottom: 2, fontWeight: 500 }}>{dados.colaborador}</p>
               <p className="subtle" style={{ marginTop: 0 }}>
-                {diaPonto(dados.dataHora)} {horaPonto(dados.dataHora)}
+                {diaPonto(dados.dataHora, dados.fuso)} {horaPonto(dados.dataHora, dados.fuso)}
+                {dados.fuso && dados.fuso !== FUSO_OPERACAO && ` (hora local — ${dados.fuso.split("/").pop().replace(/_/g, " ")})`}
               </p>
               <p style={{ color: situacao.cor, fontSize: 13 }}>{situacao.texto}</p>
             </>

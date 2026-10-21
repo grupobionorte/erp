@@ -35,6 +35,16 @@ async function vincularUsuario(colaboradorId, usuarioId) {
   return usuario;
 }
 
+// Situação e data de demissão andam juntas: demitido sem data não diz até
+// quando o ponto vale, e ativo com data de demissão é contradição.
+function problemaNaSituacao(dados) {
+  if (dados.situacao === undefined && dados.dataDemissao === undefined) return null;
+  if (dados.situacao && !["ativo", "demitido"].includes(dados.situacao)) return "Situação deve ser Ativo ou Demitido";
+  if (dados.situacao === "demitido" && !dados.dataDemissao) return "Informe a data de demissão";
+  if (dados.situacao !== "demitido" && dados.dataDemissao) return "Data de demissão só vale para colaborador demitido";
+  return null;
+}
+
 router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const colaboradores = await prisma.colaborador.findMany({
@@ -53,6 +63,8 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!dados.nome || !dados.cpf) {
     return res.status(400).json({ erro: "nome e cpf são obrigatórios" });
   }
+  const problema = problemaNaSituacao(dados);
+  if (problema) return res.status(400).json({ erro: problema });
 
   const colaborador = await prisma.colaborador.create({
     data: { ...dados, empresaId: req.usuario.empresaId || undefined },
@@ -84,6 +96,8 @@ router.put("/:id", asyncHandler(async (req, res) => {
   }
 
   const { usuarioId, ...camposColaborador } = dados;
+  const problema = problemaNaSituacao(camposColaborador);
+  if (problema) return res.status(400).json({ erro: problema });
 
   const colaborador = await prisma.colaborador.update({ where: { id }, data: camposColaborador });
 

@@ -540,6 +540,10 @@ const MODULES = {
       { key: "cargo", label: "Cargo", type: "text" },
       { key: "setor", label: "Setor", type: "select", options: ["Produção", "Logística", "Administrativo", "Comercial", "Fiscal", "Manutenção"] },
       { key: "admissao", label: "Data de admissão", type: "date" },
+      // Demitido continua no cadastro (batidas e espelho), mas sai do tablet
+      // de ponto depois da data de demissão.
+      { key: "situacao", label: "Situação", type: "select", options: ["Ativo", "Demitido"], default: "Ativo" },
+      { key: "demissao", label: "Data de demissão", type: "date" },
       { key: "telefone", label: "Telefone", type: "text" },
       { key: "email", label: "E-mail", type: "text" },
       {
@@ -549,13 +553,17 @@ const MODULES = {
         rotulo: (u) => `${u.nome} (${u.email})`,
       },
     ],
-    columns: ["nome", "cargo", "setor", "telefone"],
+    columns: ["nome", "cargo", "setor", "situacao", "telefone"],
     toApi: (data) => ({
       nome: data.nome,
       cpf: data.cpf,
       cargo: data.cargo || undefined,
       setor: data.setor || undefined,
       dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
+      situacao: data.situacao === "Demitido" ? "demitido" : "ativo",
+      // null (e não undefined) para a data sair quando o colaborador volta a
+      // ativo.
+      dataDemissao: data.demissao ? new Date(data.demissao).toISOString() : null,
       telefone: data.telefone || undefined,
       email: data.email || undefined,
       usuarioId: data.usuarioId ?? null,
@@ -567,6 +575,8 @@ const MODULES = {
       cargo: r.cargo,
       setor: r.setor,
       admissao: r.dataAdmissao ? r.dataAdmissao.slice(0, 10) : "",
+      situacao: r.situacao === "demitido" ? "Demitido" : "Ativo",
+      demissao: r.dataDemissao ? r.dataDemissao.slice(0, 10) : "",
       telefone: r.telefone,
       email: r.email,
       usuarioId: r.usuarioId ?? r.usuario?.id ?? null,
@@ -1090,12 +1100,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.138";
+const VERSAO_SISTEMA = "1.139";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.139", texto: "Colaboradores: situação (Ativo/Demitido) e data de demissão; demitido sai do tablet de ponto" },
   { versao: "1.138", texto: "Ponto: escala com folga fixa na semana (ex.: 25 dias no serviço com folga aos domingos e 5 em casa)" },
   { versao: "1.137", texto: "Ponto: a foto da batida por PIN mostra a hora local do tablet" },
   { versao: "1.136", texto: "CT-e: trocar o veículo troca os reboques pelos do cadastro dele" },

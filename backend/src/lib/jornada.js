@@ -218,7 +218,7 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new
 /**
  * Espelho do período: um registro por dia, mais os totais.
  */
-function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = FUSO_PADRAO }) {
+function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = FUSO_PADRAO, ultimoDia = null }) {
   const tolerancia = toleranciaMinutos ?? jornada?.toleranciaMinutos ?? 10;
 
   // Agrupa as batidas pelo dia no fuso do local das batidas. Quem bate o
@@ -234,7 +234,7 @@ function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = 
     apurarDia({
       dia,
       batidas: porDia[dia] || [],
-      previsto: previstoNoDia(jornada, dia),
+      previsto: ultimoDia && dia > ultimoDia ? null : previstoNoDia(jornada, dia),
       toleranciaMinutos: tolerancia,
       fuso,
     })

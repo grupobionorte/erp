@@ -286,6 +286,11 @@ model Colaborador {
   cargo         String?
   setor         String?
   dataAdmissao  DateTime? @map("data_admissao")
+  // Situação no emprego, separada do "ativo" (que é a exclusão lógica do
+  // cadastro): o demitido continua existindo, com batidas e espelho, mas
+  // deixa de bater ponto depois do último dia.
+  situacao      String    @default("ativo")              // ativo | demitido
+  dataDemissao  DateTime? @map("data_demissao")
   telefone      String?
   email         String?
   ativo         Boolean   @default(true)

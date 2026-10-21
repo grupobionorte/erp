@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.135";
+const VERSAO_SISTEMA = "1.136";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.136", texto: "CT-e: trocar o veículo troca os reboques pelos do cadastro dele" },
   { versao: "1.135", texto: "NF-e: trocar o cavalo troca os reboques pelos do cadastro dele" },
   { versao: "1.134", texto: "Relatório de CT-e: o cliente se escolhe pelo nome, num campo com o nome do tipo (Remetente, Tomador…)" },
   { versao: "1.133", texto: "Relatório de CT-e: filtro por tipo do cliente (tomador, remetente, destinatário…) e código; código na lista de clientes" },
@@ -11092,13 +11093,12 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
     setVeiculoId(id);
     const veiculo = (veiculos || []).find(v => String(v.id) === String(id));
     if (veiculo?.motoristaId && !motoristaId) escolherMotorista(String(veiculo.motoristaId));
-    // Cavalo com reboques atrelados no cadastro traz os reboques, como na
-    // NF-e — só nos campos ainda vazios.
-    if (veiculo && !veiculoReboqueId && !veiculoReboque2Id && !veiculoReboque3Id) {
-      if (veiculo.reboque1Id) setVeiculoReboqueId(String(veiculo.reboque1Id));
-      if (veiculo.reboque2Id) setVeiculoReboque2Id(String(veiculo.reboque2Id));
-      if (veiculo.reboque3Id) setVeiculoReboque3Id(String(veiculo.reboque3Id));
-    }
+    // Trocar o veículo troca os reboques pelos do cadastro dele, como na
+    // NF-e: reboque do cavalo anterior ficando no CT-e é placa errada no
+    // DACTe e no MDF-e. Sem reboque no cadastro (ou "Nenhum"), limpa os três.
+    setVeiculoReboqueId(veiculo?.reboque1Id ? String(veiculo.reboque1Id) : "");
+    setVeiculoReboque2Id(veiculo?.reboque2Id ? String(veiculo.reboque2Id) : "");
+    setVeiculoReboque3Id(veiculo?.reboque3Id ? String(veiculo.reboque3Id) : "");
   };
 
   // O documento guarda nome e CPF porque é isso que vai no XML; o vínculo

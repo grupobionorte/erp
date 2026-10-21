@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.134";
+const VERSAO_SISTEMA = "1.135";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.135", texto: "NF-e: trocar o cavalo troca os reboques pelos do cadastro dele" },
   { versao: "1.134", texto: "Relatório de CT-e: o cliente se escolhe pelo nome, num campo com o nome do tipo (Remetente, Tomador…)" },
   { versao: "1.133", texto: "Relatório de CT-e: filtro por tipo do cliente (tomador, remetente, destinatário…) e código; código na lista de clientes" },
   { versao: "1.132", texto: "Relatório de CT-e: baixar os XMLs do período num zip, como na NF-e" },
@@ -6671,16 +6672,16 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [veiculoReboqueId, setVeiculoReboqueId] = useState(nota?.veiculoReboqueId ? String(nota.veiculoReboqueId) : "");
   const [veiculoReboque2Id, setVeiculoReboque2Id] = useState(nota?.veiculoReboque2Id ? String(nota.veiculoReboque2Id) : "");
   const [veiculoReboque3Id, setVeiculoReboque3Id] = useState(nota?.veiculoReboque3Id ? String(nota.veiculoReboque3Id) : "");
-  // Cavalo com reboques atrelados no cadastro: escolher o cavalo preenche
-  // os três reboques, que continuam podendo ser trocados à mão.
+  // Trocar o cavalo troca os reboques pelos do cadastro dele, mesmo que já
+  // houvesse outros escolhidos: reboque do cavalo anterior ficando na nota
+  // é placa errada no DANFE. Cavalo sem reboque no cadastro (ou "Nenhum")
+  // limpa os três. Depois disso, continuam podendo ser trocados à mão.
   const escolherCavalo = (id) => {
     setVeiculoId(id);
     const cavalo = (veiculos || []).find(v => String(v.id) === String(id));
-    if (cavalo && (cavalo.reboque1Id || cavalo.reboque2Id || cavalo.reboque3Id)) {
-      setVeiculoReboqueId(cavalo.reboque1Id ? String(cavalo.reboque1Id) : "");
-      setVeiculoReboque2Id(cavalo.reboque2Id ? String(cavalo.reboque2Id) : "");
-      setVeiculoReboque3Id(cavalo.reboque3Id ? String(cavalo.reboque3Id) : "");
-    }
+    setVeiculoReboqueId(cavalo?.reboque1Id ? String(cavalo.reboque1Id) : "");
+    setVeiculoReboque2Id(cavalo?.reboque2Id ? String(cavalo.reboque2Id) : "");
+    setVeiculoReboque3Id(cavalo?.reboque3Id ? String(cavalo.reboque3Id) : "");
   };
 
   // Local de retirada: de onde a mercadoria sai, quando não é o endereço da

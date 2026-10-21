@@ -631,7 +631,7 @@ router.get("/marcacoes/:id/foto", asyncHandler(async (req, res) => {
     where: { marcacaoId: Number(req.params.id) },
     include: {
       marcacao: {
-        select: { dataHora: true, colaborador: { select: { nome: true } } },
+        select: { dataHora: true, fuso: true, rep: { select: { fuso: true } }, colaborador: { select: { nome: true } } },
       },
     },
   });
@@ -643,6 +643,9 @@ router.get("/marcacoes/:id/foto", asyncHandler(async (req, res) => {
     conferencia: foto.conferencia,
     distancia: foto.distancia,
     dataHora: foto.marcacao.dataHora,
+    // Hora da foto no fuso do tablet que a tirou, não no de Cuiabá: é a
+    // hora que a pessoa viu no relógio na hora de bater.
+    fuso: fusoValido(foto.marcacao.fuso) || fusoValido(foto.marcacao.rep?.fuso) || FUSO,
     colaborador: foto.marcacao.colaborador?.nome,
   });
 }));

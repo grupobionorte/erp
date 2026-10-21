@@ -408,6 +408,9 @@ router.post("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
     diasTrabalho, diasFolga, deslocamentoPorCiclo, dataReferencia,
     entrada, intervaloInicio, intervaloFim, saida, dias,
   } = req.body;
+  // Dia da semana da folga fixa (0 = domingo a 6 = sábado); vazio = nenhum.
+  const folgaSemanal = [0, 1, 2, 3, 4, 5, 6].includes(Number(req.body.folgaSemanal)) && req.body.folgaSemanal !== ""
+    && req.body.folgaSemanal !== null ? Number(req.body.folgaSemanal) : null;
 
   if (!vigenciaInicio) return res.status(400).json({ erro: "Informe a partir de quando a jornada vale" });
 
@@ -452,6 +455,7 @@ router.post("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
       diasTrabalho: diasTrabalho ? Number(diasTrabalho) : null,
       diasFolga: diasFolga ? Number(diasFolga) : null,
       deslocamentoPorCiclo: Number(deslocamentoPorCiclo || 0),
+      folgaSemanal: tipo === "semanal" ? null : folgaSemanal,
       dataReferencia: dataReferencia ? new Date(dataReferencia) : null,
       entrada: hora(entrada), intervaloInicio: hora(intervaloInicio),
       intervaloFim: hora(intervaloFim), saida: hora(saida),

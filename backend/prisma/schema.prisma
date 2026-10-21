@@ -886,6 +886,10 @@ model JornadaTrabalho {
   diasTrabalho         Int?      @map("dias_trabalho")
   diasFolga            Int?      @map("dias_folga")
   deslocamentoPorCiclo Int       @default(0) @map("deslocamento_por_ciclo")
+  // Folga fixa num dia da semana dentro dos dias de trabalho do ciclo
+  // (0 = domingo). Ex.: 25 dias no serviço com folga aos domingos, depois 5
+  // em casa. Nulo: todos os dias de trabalho do ciclo são trabalhados.
+  folgaSemanal         Int?      @map("folga_semanal")
   dataReferencia       DateTime? @map("data_referencia")
 
   // Horários do dia trabalhado na escala (formato "HH:MM").

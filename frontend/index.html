@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.137";
+const VERSAO_SISTEMA = "1.138";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.138", texto: "Ponto: escala com folga fixa na semana (ex.: 25 dias no serviço com folga aos domingos e 5 em casa)" },
   { versao: "1.137", texto: "Ponto: a foto da batida por PIN mostra a hora local do tablet" },
   { versao: "1.136", texto: "CT-e: trocar o veículo troca os reboques pelos do cadastro dele" },
   { versao: "1.135", texto: "NF-e: trocar o cavalo troca os reboques pelos do cadastro dele" },
@@ -2244,7 +2245,7 @@ function JornadaAba({ colaboradorId }) {
     tipo: "escala",
     vigenciaInicio: hoje,
     toleranciaMinutos: 10,
-    diasTrabalho: 6, diasFolga: 1, deslocamentoPorCiclo: 0, dataReferencia: hoje,
+    diasTrabalho: 6, diasFolga: 1, deslocamentoPorCiclo: 0, folgaSemanal: "", dataReferencia: hoje,
     entrada: "07:00", intervaloInicio: "11:00", intervaloFim: "12:00", saida: "17:00",
     dias: DIAS_SEMANA.map((_, i) => ({
       diaSemana: i, folga: i === 0,
@@ -2307,7 +2308,8 @@ function JornadaAba({ colaboradorId }) {
                   <td>{[j.entrada, j.intervaloInicio, j.intervaloFim, j.saida].filter(Boolean).join(" · ") || "por dia da semana"}</td>
                   <td>
                     {j.tipo === "escala"
-                      ? `${j.diasTrabalho}x${j.diasFolga}${j.deslocamentoPorCiclo ? ` · folga anda ${j.deslocamentoPorCiclo}d` : " · folga fixa"}`
+                      ? `${j.diasTrabalho}x${j.diasFolga}${j.deslocamentoPorCiclo ? ` · folga anda ${j.deslocamentoPorCiclo}d` : " · folga fixa"}${
+                          j.folgaSemanal !== null && j.folgaSemanal !== undefined ? ` · folga ${DIAS_SEMANA[j.folgaSemanal].toLowerCase()}` : ""}`
                       : "—"}
                   </td>
                   <td className="actions-col">
@@ -2352,11 +2354,11 @@ function JornadaAba({ colaboradorId }) {
             <div className="pf-grade" style={{ marginTop: 12 }}>
               <label className="pf-campo pf-c3">
                 <span className="field-label">Dias de trabalho</span>
-                <input type="number" min="1" max="30" value={nova.diasTrabalho} onChange={e => setCampo("diasTrabalho", e.target.value)} />
+                <input type="number" min="1" max="60" value={nova.diasTrabalho} onChange={e => setCampo("diasTrabalho", e.target.value)} />
               </label>
               <label className="pf-campo pf-c3">
                 <span className="field-label">Dias de folga</span>
-                <input type="number" min="1" max="30" value={nova.diasFolga} onChange={e => setCampo("diasFolga", e.target.value)} />
+                <input type="number" min="1" max="60" value={nova.diasFolga} onChange={e => setCampo("diasFolga", e.target.value)} />
               </label>
               <label className="pf-campo pf-c3">
                 <span className="field-label">Primeiro dia trabalhado<span className="req">*</span></span>
@@ -2368,6 +2370,22 @@ function JornadaAba({ colaboradorId }) {
                 <input type="number" min="0" max="6" value={nova.deslocamentoPorCiclo}
                   onChange={e => setCampo("deslocamentoPorCiclo", e.target.value)} />
                 <p className="pf-ajuda">0 = folga sempre no mesmo dia da semana.</p>
+              </label>
+            </div>
+
+            {/* Folga fixa dentro dos dias de trabalho: quem fica 25 dias no
+                serviço e folga aos domingos lá, antes dos 5 dias em casa. */}
+            <div className="pf-grade" style={{ marginTop: 12 }}>
+              <label className="pf-campo pf-c6">
+                <span className="field-label">Folga fixa na semana (durante os dias de trabalho)</span>
+                <select value={nova.folgaSemanal} onChange={e => setCampo("folgaSemanal", e.target.value)}>
+                  <option value="">Nenhuma</option>
+                  {DIAS_SEMANA.map((d, i) => <option key={i} value={i}>{d}</option>)}
+                </select>
+                <p className="pf-ajuda">
+                  Ex.: 25 dias de trabalho e 5 de folga, com folga aos domingos — o domingo dentro dos 25 dias
+                  não é cobrado, e os 5 dias seguem como folga em casa.
+                </p>
               </label>
             </div>
 

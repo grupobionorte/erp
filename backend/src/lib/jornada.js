@@ -77,6 +77,12 @@ function previstoNoDia(jornada, dia) {
     const trabalha = posicao < diasTrabalho;
 
     if (!trabalha) return { folga: true, minutos: 0, posicaoCiclo: posicao + 1, cicloDias };
+    // Folga fixa na semana dentro do período de trabalho: 25 dias no
+    // serviço com o domingo de folga lá mesmo, por exemplo.
+    if (jornada.folgaSemanal !== null && jornada.folgaSemanal !== undefined
+        && diaDaSemana(dia) === jornada.folgaSemanal) {
+      return { folga: true, folgaSemanal: true, minutos: 0, posicaoCiclo: posicao + 1, cicloDias };
+    }
     return {
       folga: false,
       posicaoCiclo: posicao + 1,

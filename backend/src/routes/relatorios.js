@@ -89,6 +89,25 @@ router.get("/nfe", asyncHandler(async (req, res) => {
   });
 }));
 
+// Papéis de uma pessoa no CT-e, para o filtro dos relatórios.
+const PAPEIS_CTE = ["tomador", "remetente", "destinatario", "expedidor", "recebedor"];
+
+// Id da pessoa que ocupa o papel no CT-e. O tomador não tem campo próprio:
+// é quem a definicaoTomador aponta (sem ela, o destinatário).
+function idDoPapel(c, papel) {
+  const id = (x) => x?.id ?? null;
+  const pessoas = {
+    remetente: c.remetenteId ?? id(c.remetente),
+    destinatario: c.destinatarioId ?? id(c.destinatario),
+    expedidor: c.expedidorId ?? id(c.expedidor),
+    recebedor: c.recebedorId ?? id(c.recebedor),
+  };
+  if (papel !== "tomador") return pessoas[papel] ?? null;
+  return {
+    Remetente: pessoas.remetente, Expedidor: pessoas.expedidor, Recebedor: pessoas.recebedor, Destinatário: pessoas.destinatario,
+  }[c.definicaoTomador] || pessoas.destinatario || pessoas.remetente;
+}
+
 /**
  * Relatório de CT-e emitidos, no layout do sistema anterior: uma linha por
  * conhecimento, com pesos, valor das notas, ICMS e valor do serviço, e os
@@ -98,6 +117,7 @@ router.get("/nfe", asyncHandler(async (req, res) => {
 router.get("/cte", asyncHandler(async (req, res) => {
   const { de, ate, status: statusPedido } = req.query;
   const clienteId = req.query.clienteId ? Number(req.query.clienteId) : null;
+  const papel = PAPEIS_CTE.includes(req.query.papel) ? req.query.papel : "tomador";
   if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
 
   const { inicio, fim } = intervaloNoFuso(de, ate);
@@ -140,6 +160,7 @@ router.get("/cte", asyncHandler(async (req, res) => {
     const docs = c.documentosTransportados || [];
     return {
       id: c.id,
+      pessoaDoPapel: idDoPapel(c, papel),
       dia: c.dataEmissao ? partesNoFuso(new Date(c.dataEmissao)).dia : null,
       numero: c.numero,
       serie: c.serie,
@@ -162,9 +183,9 @@ router.get("/cte", asyncHandler(async (req, res) => {
     };
   });
 
-  // Filtro por cliente depois de saber quem é o tomador de cada CT-e: o
-  // tomador pode ser o remetente, o destinatário, o expedidor ou o recebedor.
-  const linhas = clienteId ? todas.filter((l) => l.clienteId === clienteId) : todas;
+  // Filtro pelo cliente no papel escolhido. O tomador é calculado: pode ser
+  // o remetente, o destinatário, o expedidor ou o recebedor de cada CT-e.
+  const linhas = clienteId ? todas.filter((l) => l.pessoaDoPapel === clienteId) : todas;
 
   const validas = linhas.filter((l) => !l.cancelado);
   const total = (campo) => validas.reduce((t, l) => t + l[campo], 0);
@@ -231,6 +252,7 @@ router.get("/cte/xmls", asyncHandler(async (req, res) => {
   const { de, ate, status: statusPedido } = req.query;
   if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
   const clienteId = req.query.clienteId ? Number(req.query.clienteId) : null;
+  const papel = PAPEIS_CTE.includes(req.query.papel) ? req.query.papel : "tomador";
 
   const { inicio, fim } = intervaloNoFuso(de, ate);
   const status = statusPedido === "autorizado" ? ["autorizado"]
@@ -252,11 +274,8 @@ router.get("/cte/xmls", asyncHandler(async (req, res) => {
     orderBy: { numero: "asc" },
   });
 
-  // Mesmo critério do relatório: o cliente é o tomador do CT-e.
-  const tomadorId = (c) => ({
-    Remetente: c.remetenteId, Expedidor: c.expedidorId, Recebedor: c.recebedorId, Destinatário: c.destinatarioId,
-  }[c.definicaoTomador] || c.destinatarioId || c.remetenteId);
-  const escolhidos = clienteId ? ctes.filter((c) => tomadorId(c) === clienteId) : ctes;
+  // Mesmo critério do relatório.
+  const escolhidos = clienteId ? ctes.filter((c) => idDoPapel(c, papel) === clienteId) : ctes;
 
   if (!escolhidos.length) {
     return res.status(404).json({ erro: "Nenhum CT-e com XML no período" });

@@ -450,7 +450,7 @@ const MODULES = {
       { key: "telefone", label: "Telefone", type: "text" },
       { key: "email", label: "E-mail", type: "text" },
     ],
-    columns: ["nome", "documento", "endereco.cidade", "telefone"],
+    columns: ["id", "nome", "documento", "endereco.cidade", "telefone"],
     toApi: (data) => ({
       tipo: data.tipo === "Pessoa Física" ? "pessoa_fisica" : "pessoa_juridica",
       nomeRazaoSocial: data.nome,
@@ -501,7 +501,7 @@ const MODULES = {
       { key: "telefone", label: "Telefone", type: "text" },
       { key: "email", label: "E-mail", type: "text" },
     ],
-    columns: ["nome", "documento", "endereco.cidade", "telefone"],
+    columns: ["id", "nome", "documento", "endereco.cidade", "telefone"],
     toApi: (data) => ({
       tipo: data.tipo === "Pessoa Física" ? "pessoa_fisica" : "pessoa_juridica",
       nomeRazaoSocial: data.nome,
@@ -1090,12 +1090,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.132";
+const VERSAO_SISTEMA = "1.133";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.133", texto: "Relatório de CT-e: filtro por tipo do cliente (tomador, remetente, destinatário…) e código; código na lista de clientes" },
   { versao: "1.132", texto: "Relatório de CT-e: baixar os XMLs do período num zip, como na NF-e" },
   { versao: "1.131", texto: "Relatório de CT-e: filtro por cliente" },
   { versao: "1.130", texto: "CT-e: relatório de CT-e emitidos no modelo do sistema anterior (botão Relatório)" },
@@ -1346,6 +1347,9 @@ const COLOR_MAP = {
 // campo do formulário) — por exemplo, o nome da transportadora dona do
 // veículo, que vem calculado no fromApi.
 const COLUMN_LABELS = {
+  // O número do cadastro é o código do cliente/fornecedor: é por ele que o
+  // relatório de CT-e filtra, como o sistema anterior fazia.
+  id: "Código",
   transportadoraNome: "Transportadora",
   // A coluna mostra o nome do motorista, mas o campo do formulário é o
   // vínculo com o colaborador — daí o rótulo próprio.
@@ -7662,15 +7666,18 @@ function RelatorioNfeModal({ onFechar }) {
 function RelatorioCteModal({ onFechar }) {
   const hoje = hojeNoFuso();
   const { items: clientes } = useApiCollection("clientes");
-  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", clienteId: "" });
+  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", papel: "tomador", codigo: "" });
+  const PAPEIS = { tomador: "Tomador", remetente: "Remetente", destinatario: "Destinatário", expedidor: "Expedidor", recebedor: "Recebedor" };
+  const codigo = String(filtro.codigo || "").replace(/\D/g, "");
+  const clienteDoCodigo = codigo ? (clientes || []).find(c => String(c.id) === codigo) : null;
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [baixando, setBaixando] = useState(false);
 
   const parametros = () => {
-    const { clienteId, ...resto } = filtro;
-    return new URLSearchParams({ ...resto, ...(clienteId ? { clienteId } : {}) });
+    const { codigo: _codigo, ...resto } = filtro;
+    return new URLSearchParams({ ...resto, ...(codigo ? { clienteId: codigo } : {}) });
   };
 
   // Pacote dos XMLs com os mesmos filtros do relatório, como na NF-e. O zip
@@ -7713,14 +7720,19 @@ function RelatorioCteModal({ onFechar }) {
     const agora = new Date().toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO }).replace(",", "");
     const quem = usuarioLogado?.nome || "";
     const T = r.totais;
-    // Com um cliente só, o nome dele vai no cabeçalho, ao lado do período.
-    const clienteFiltro = filtro.clienteId && r.linhas[0] ? r.linhas[0].cliente : "";
+    // Código na frente do nome, como no modelo ("3 - BIONORTE ...").
+    const nomeComCodigo = (l) => l.clienteId ? `${l.clienteId} - ${l.cliente}` : l.cliente;
+    // Com um cliente só, papel, código e nome vão no cabeçalho, ao lado do
+    // período.
+    const clienteFiltro = codigo
+      ? `${PAPEIS[filtro.papel]}: ${codigo}${clienteDoCodigo ? ` - ${clienteDoCodigo.nome}` : ""}`
+      : "";
 
     const linhas = r.linhas.map(l => l.cancelado ? `
       <tr><td>${dia(l.dia)}</td><td>${esc(l.numero)}</td><td>${esc(l.serie)}</td>
-        <td class="cli">${esc(l.cliente)}</td><td>Cancelado</td><td colspan="9"></td></tr>` : `
+        <td class="cli">${esc(nomeComCodigo(l))}</td><td>Cancelado</td><td colspan="9"></td></tr>` : `
       <tr><td>${dia(l.dia)}</td><td>${esc(l.numero)}</td><td>${esc(l.serie)}</td>
-        <td class="cli">${esc(l.cliente)}</td><td>Normal</td>
+        <td class="cli">${esc(nomeComCodigo(l))}</td><td>Normal</td>
         <td class="n">${peso(l.pesoBruto)}</td><td class="n">${peso(l.pesoLiquido)}</td>
         <td class="n">${peso(l.volumes)}</td><td class="n">${din(l.pedagio)}</td>
         <td class="n">${din(l.valorNotas)}</td><td class="n">${din(l.valorIcms)}</td>
@@ -7765,7 +7777,7 @@ function RelatorioCteModal({ onFechar }) {
               </td>
               <td colspan="6" class="dir">&nbsp;<br>Emissão em: ${esc(agora)}<br>Emitido por: ${esc(quem)}</td></tr>
             <tr class="topo"><td colspan="14" class="titulo">Relatório de Documentos de Transporte Emitidos (CT-e)</td></tr>
-            <tr class="topo"><td colspan="14" class="periodo">${clienteFiltro ? `Cliente: ${esc(clienteFiltro)} &nbsp;·&nbsp; ` : ""}Período: de ${dia(r.periodo.de)} a ${dia(r.periodo.ate)}</td></tr>
+            <tr class="topo"><td colspan="14" class="periodo">${clienteFiltro ? `${esc(clienteFiltro)} &nbsp;·&nbsp; ` : ""}Período: de ${dia(r.periodo.de)} a ${dia(r.periodo.ate)}</td></tr>
             <tr><th>Emissão</th><th>N° doc.</th><th>Série</th><th>Cliente</th><th>Situação</th>
               <th class="n">Peso bruto</th><th class="n">Peso líquido</th><th class="n">Qtde. vol.</th>
               <th class="n">Pedágio</th><th class="n">Valor NF.</th><th class="n">Vl. ICMS</th>
@@ -7818,12 +7830,25 @@ function RelatorioCteModal({ onFechar }) {
               </select>
             </div>
           </div>
-          <div className="field-group">
-            <label className="field-label">Cliente (tomador do frete)</label>
-            <select value={filtro.clienteId} onChange={ev => setFiltro(f => ({ ...f, clienteId: ev.target.value }))}>
-              <option value="">Todos</option>
-              {(clientes || []).map(c => <option key={c.id} value={c.id}>{rotuloPessoa(c)}</option>)}
-            </select>
+          {/* Papel do cliente no CT-e e o código dele (o número do cadastro,
+              que aparece na lista de clientes). Código em branco: todos. */}
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Tipo do cliente</label>
+              <select value={filtro.papel} onChange={ev => setFiltro(f => ({ ...f, papel: ev.target.value }))}>
+                {Object.entries(PAPEIS).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+              </select>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Código</label>
+              <input value={filtro.codigo} inputMode="numeric" placeholder="Todos"
+                onChange={ev => setFiltro(f => ({ ...f, codigo: ev.target.value }))} />
+            </div>
+            <div className="field-group" style={{ display: "flex", alignItems: "flex-end" }}>
+              <span style={{ fontSize: 12.5, paddingBottom: 8, color: codigo && !clienteDoCodigo ? "#c62828" : "#55534c" }}>
+                {!codigo ? "Todos os clientes" : clienteDoCodigo ? clienteDoCodigo.nome : "Código não encontrado"}
+              </span>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <button className="btn btn-primary" onClick={gerar} disabled={carregando}>

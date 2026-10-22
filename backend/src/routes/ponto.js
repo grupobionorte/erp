@@ -322,6 +322,17 @@ router.post("/tratamentos", asyncHandler(async (req, res) => {
   if (!colaboradorId || !dataHora) {
     return res.status(400).json({ erro: "colaboradorId e dataHora são obrigatórios" });
   }
+  // Correção de ponto só para colaborador da empresa logada, e a batida
+  // desconsiderada tem de ser dele.
+  const colaborador = await prisma.colaborador.findFirst({
+    where: { id: Number(colaboradorId), empresaId: req.usuario.empresaId ?? undefined },
+    select: { id: true },
+  });
+  if (!colaborador) return res.status(404).json({ erro: "Colaborador não encontrado nesta empresa" });
+  if (marcacaoId) {
+    const marcacao = await prisma.marcacaoPonto.findFirst({ where: { id: Number(marcacaoId), colaboradorId: colaborador.id }, select: { id: true } });
+    if (!marcacao) return res.status(400).json({ erro: "Batida não é deste colaborador" });
+  }
 
   const tratamento = await prisma.tratamentoPonto.create({
     data: {
@@ -612,7 +623,24 @@ router.get("/espelho", asyncHandler(async (req, res) => {
   // Depois da demissão não há jornada a cobrar: sem isso, o resto do mês
   // apareceria como falta.
   const ultimoDia = colaborador.situacao === "demitido" ? diaDoCampo(colaborador.dataDemissao) : null;
-  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada, fuso, ultimoDia });
+
+  // Tratamentos do RH (batida esquecida, batida a desconsiderar). A inclusão
+  // não tem marcação vinculada: por isso vem por consulta própria, e não
+  // pelas marcações. Antes ela era gravada e nunca aparecia no espelho.
+  const tratamentos = (await prisma.tratamentoPonto.findMany({
+    where: {
+      colaboradorId: colaborador.id,
+      dataHora: { gte: new Date(faixa.inicio.getTime() - umDia), lte: new Date(faixa.fim.getTime() + umDia) },
+    },
+    include: { autor: { select: { nome: true } } },
+    orderBy: { criadoEm: "asc" },
+  })).filter((t) => {
+    if (t.tipo === "desconsideracao" && t.marcacaoId) return true;
+    const { dia } = partesNoFuso(new Date(t.dataHora), fuso);
+    return dia >= de && dia <= ate;
+  });
+
+  const apuracao = apurarPeriodo({ de, ate, marcacoes, tratamentos, jornada, fuso, ultimoDia });
   res.json({ colaborador, jornada, ...apuracao });
 }));
 

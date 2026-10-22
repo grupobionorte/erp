@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.152";
+const VERSAO_SISTEMA = "1.153";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.153", texto: "Espelho de ponto: a batida incluída pelo RH agora aparece e entra na conta; nova janela para tratar o dia" },
   { versao: "1.152", texto: "CT-e: coluna Seguro na lista, mostrando se o CT-e foi averbado na AT&M" },
   { versao: "1.151", texto: "CT-e: averbação automática do seguro na AT&M ao autorizar; o número vai sozinho para o MDF-e" },
   { versao: "1.150", texto: "Folgas da equipe: só quem folga em bloco (25x5); 6x1 com descanso no domingo fica de fora" },
@@ -5235,11 +5236,109 @@ function FotoDaBatidaModal({ batida, onFechar }) {
   );
 }
 
+// Correção do espelho pelo RH. Nunca mexe na batida do relógio: grava um
+// tratamento com autor e motivo, que o espelho aplica na conta.
+function TratamentoPontoModal({ dia, colaboradorId, fuso, onFechar, onSalvo }) {
+  const [tipo, setTipo] = useState("inclusao");
+  const [horas, setHoras] = useState([""]);
+  const [alvo, setAlvo] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const ativas = dia.batidas.filter(b => !b.desconsiderada);
+
+  const salvar = async () => {
+    setErro("");
+    if (motivo.trim().length < 5) { setErro("Escreva o motivo (fica registrado com o seu nome)."); return; }
+    let envios;
+    if (tipo === "inclusao") {
+      const validas = horas.map(h => h.trim()).filter(Boolean);
+      if (!validas.length) { setErro("Informe a hora da batida."); return; }
+      if (validas.some(h => !/^([01]\d|2[0-3]):[0-5]\d$/.test(h))) { setErro("Hora no formato 08:15."); return; }
+      envios = validas.map(h => ({ tipo, dataHora: `${dia.dia}T${h}:00` }));
+    } else {
+      const b = ativas.find(x => String(x.id) === alvo);
+      if (!b) { setErro("Escolha a batida a desconsiderar."); return; }
+      // Batida do relógio vai pelo id; a incluída, pelo dia e minuto.
+      envios = [{ tipo, dataHora: `${dia.dia}T${b.hora}:00`, marcacaoId: b.incluida ? undefined : b.id }];
+    }
+    setSalvando(true);
+    try {
+      for (const e of envios) {
+        await apiRequest("/ponto/tratamentos", {
+          method: "POST",
+          // A hora digitada é a do local do colaborador, no fuso do espelho.
+          body: JSON.stringify({ ...e, colaboradorId, motivo: motivo.trim(), fuso }),
+        });
+      }
+      onSalvo();
+    } catch (e) { setErro(e.message); setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <div className="modal-header">
+          <h3>Tratar {new Date(`${dia.dia}T12:00:00Z`).toLocaleDateString("pt-BR")}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Batidas do dia: {dia.batidas.length ? dia.batidas.map(b => b.hora + (b.incluida ? "*" : "") + (b.desconsiderada ? " (desconsiderada)" : "")).join(" · ") : "nenhuma"}
+          </p>
+          <div className="field-group">
+            <label className="field-label">O que fazer</label>
+            <select value={tipo} onChange={e => { setTipo(e.target.value); setErro(""); }}>
+              <option value="inclusao">Incluir batida que o funcionário não fez</option>
+              <option value="desconsideracao" disabled={!ativas.length}>Desconsiderar uma batida</option>
+            </select>
+          </div>
+          {tipo === "inclusao" ? (
+            <div className="field-group">
+              <label className="field-label">Hora{horas.length > 1 ? "s" : ""} da batida</label>
+              {horas.map((h, i) => (
+                <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <input type="time" value={h} style={{ maxWidth: 140 }}
+                    onChange={e => setHoras(hs => hs.map((x, j) => j === i ? e.target.value : x))} />
+                  {horas.length > 1 && (
+                    <button className="btn" onClick={() => setHoras(hs => hs.filter((_, j) => j !== i))}>Tirar</button>
+                  )}
+                </div>
+              ))}
+              {horas.length < 4 && (
+                <button className="link-btn" onClick={() => setHoras(hs => [...hs, ""])}>+ outra batida neste dia</button>
+              )}
+            </div>
+          ) : (
+            <div className="field-group">
+              <label className="field-label">Batida</label>
+              <select value={alvo} onChange={e => setAlvo(e.target.value)}>
+                <option value="">Escolha…</option>
+                {ativas.map(b => <option key={b.id} value={String(b.id)}>{b.hora}{b.incluida ? " (incluída pelo RH)" : ""}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="field-group">
+            <label className="field-label">Motivo</label>
+            <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ex.: esqueceu de bater a saída" />
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Gravando…" : "Gravar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PontoEspelho() {
   const hoje = hojeNoFuso();
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
   const [fotoDe, setFotoDe] = useState(null);
+  const [tratarDia, setTratarDia] = useState(null);
   const [pessoas, setPessoas] = useState([]);
   const [filtro, setFiltro] = useState({ colaboradorId: "", de: primeiroDia, ate: hoje });
   const [espelho, setEspelho] = useState(null);
@@ -5261,23 +5360,6 @@ function PontoEspelho() {
       setEspelho(null);
     } finally { setCarregando(false); }
   }, [filtro]);
-
-  const registrarTratamento = async (dia) => {
-    const tipo = window.prompt("Tipo de tratamento: inclusao, desconsideracao ou pre_assinalado", "inclusao");
-    if (!tipo) return;
-    const hora = window.prompt(`Hora do registro no dia ${dia} (formato 08:15):`, "08:00");
-    if (!hora) return;
-    const motivo = window.prompt("Motivo (fica registrado com seu nome):");
-    if (!motivo || motivo.trim().length < 5) { alert("Informe o motivo."); return; }
-    try {
-      await apiRequest("/ponto/tratamentos", {
-        method: "POST",
-        // A hora digitada é a do local do colaborador, no fuso do espelho.
-        body: JSON.stringify({ tipo, colaboradorId: Number(filtro.colaboradorId), dataHora: `${dia}T${hora}:00`, motivo, fuso: espelho?.fuso }),
-      });
-      buscar();
-    } catch (e) { alert(`Não foi possível: ${e.message}`); }
-  };
 
   const corDaSituacao = (situacoes) => {
     if (situacoes.includes("falta") || situacoes.includes("batida faltando")) return "#c62828";
@@ -5373,10 +5455,17 @@ function PontoEspelho() {
                   {d.batidas.length
                     ? d.batidas.map(b => (
                         <span key={b.id}
-                          title={`NSR ${b.nsr} · ${b.metodo}${b.offline ? " · offline" : ""}${
-                            b.temFoto ? ` · foto (${b.conferenciaFacial})` : ""}`}
-                          style={{ marginRight: 9 }}>
-                          {b.hora}{b.temTratamento && <span style={{ color: "#b57a12" }}>*</span>}
+                          title={b.incluida
+                            ? `Incluída${b.autor ? ` por ${b.autor}` : ""}: ${b.motivo || ""}`
+                            : `NSR ${b.nsr} · ${b.metodo}${b.offline ? " · offline" : ""}${
+                              b.temFoto ? ` · foto (${b.conferenciaFacial})` : ""}${
+                              b.desconsiderada ? ` · desconsiderada${b.autor ? ` por ${b.autor}` : ""}: ${b.motivo || ""}` : ""}`}
+                          style={{
+                            marginRight: 9,
+                            color: b.incluida ? "#b57a12" : b.desconsiderada ? "#8a887f" : undefined,
+                            textDecoration: b.desconsiderada ? "line-through" : undefined,
+                          }}>
+                          {b.hora}{(b.temTratamento || b.incluida) && <span style={{ color: "#b57a12" }}>*</span>}
                           {/* Batida por PIN com foto: clicar abre a imagem.
                               A cor diz se o rosto foi conferido. */}
                           {b.temFoto && (
@@ -5399,7 +5488,7 @@ function PontoEspelho() {
                 </td>
                 <td style={{ color: corDaSituacao(d.situacoes), fontSize: 12.5 }}>{d.situacoes.join(", ") || "—"}</td>
                 <td className="actions-col">
-                  <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => registrarTratamento(d.dia)}>Tratar</button>
+                  <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => setTratarDia(d)}>Tratar</button>
                 </td>
               </tr>
             ))}
@@ -5409,10 +5498,14 @@ function PontoEspelho() {
 
       <p className="hint" style={{ marginTop: 14 }}>
         As batidas não podem ser alteradas nem apagadas — é exigência da Portaria 671/2021. Correções entram
-        como tratamento, ao lado do registro original, com autor e motivo. O asterisco marca a batida que tem
-        tratamento. A tolerância vem da jornada: diferenças menores que ela não viram crédito nem débito.
+        como tratamento, ao lado do registro original, com autor e motivo. Batida em laranja com asterisco foi
+        incluída pelo RH; riscada foi desconsiderada e não entra na conta. Passe o mouse para ver quem fez e por quê. A tolerância vem da jornada: diferenças menores que ela não viram crédito nem débito.
       </p>
       {fotoDe && <FotoDaBatidaModal batida={fotoDe} onFechar={() => setFotoDe(null)} />}
+      {tratarDia && (
+        <TratamentoPontoModal dia={tratarDia} colaboradorId={Number(filtro.colaboradorId)} fuso={espelho?.fuso}
+          onFechar={() => setTratarDia(null)} onSalvo={() => { setTratarDia(null); buscar(); }} />
+      )}
 
     </div>
   );

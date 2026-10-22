@@ -121,12 +121,46 @@ function minutosPrevistos(config) {
 }
 
 /**
+ * Junta às batidas do relógio os tratamentos do RH. A marcação original
+ * nunca muda (Portaria 671): a inclusão entra como batida a mais, marcada
+ * como incluída; a desconsiderada continua na lista, só não conta.
+ * Desconsideração sem marcação vinculada vale para a batida (do relógio ou
+ * incluída) do mesmo dia e minuto — é assim que se desfaz uma inclusão
+ * digitada errado.
+ */
+function aplicarTratamentos(marcacoes, tratamentos = [], fuso = FUSO_PADRAO) {
+  const quem = (t) => t.autor?.nome || null;
+  const batidas = marcacoes.map((m) => ({ ...m }));
+  for (const t of tratamentos) {
+    if (t.tipo === "inclusao" || t.tipo === "pre_assinalado") {
+      batidas.push({
+        id: `t${t.id}`, dataHora: t.dataHora, incluida: true, tipoTratamento: t.tipo,
+        motivo: t.motivo, autor: quem(t), tratamentoId: t.id,
+      });
+    }
+  }
+  const chave = (dataHora) => {
+    const p = partesNoFuso(new Date(dataHora), fuso);
+    return `${p.dia} ${p.hora}`;
+  };
+  for (const t of tratamentos.filter((x) => x.tipo === "desconsideracao")) {
+    const alvo = t.marcacaoId
+      ? batidas.find((b) => !b.incluida && b.id === t.marcacaoId)
+      : batidas.find((b) => !b.desconsiderada && chave(b.dataHora) === chave(t.dataHora));
+    if (alvo) Object.assign(alvo, { desconsiderada: true, motivoDesconsideracao: t.motivo, autorDesconsideracao: quem(t) });
+  }
+  return batidas;
+}
+
+/**
  * Apura um dia: casa as batidas em pares e compara com o previsto.
  */
 function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new Date(), fuso = FUSO_PADRAO }) {
-  const marcacoes = batidas
+  const todas = batidas
     .map((b) => ({ ...b, ...partesNoFuso(new Date(b.dataHora), fuso) }))
     .sort((a, b) => a.minutos - b.minutos);
+  // A desconsiderada aparece no espelho, mas fica fora da conta.
+  const marcacoes = todas.filter((b) => !b.desconsiderada);
 
   // Batidas em número ímpar significam registro faltando (esqueceu a saída,
   // por exemplo). Não inventamos o par que falta: marcamos como inconsistente
@@ -196,10 +230,14 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new
     previstoTexto: previsto && !previsto.folga
       ? [previsto.entrada, previsto.intervaloInicio, previsto.intervaloFim, previsto.saida].filter(Boolean).join(" · ")
       : null,
-    batidas: marcacoes.map((m) => ({
+    batidas: todas.map((m) => ({
       id: m.id, nsr: m.nsr, hora: m.hora,
       metodo: m.metodoIdentificacao, offline: m.origemOffline,
       temTratamento: Boolean(m.tratamentos?.length),
+      incluida: Boolean(m.incluida),
+      desconsiderada: Boolean(m.desconsiderada),
+      motivo: m.motivo || m.motivoDesconsideracao || null,
+      autor: m.autor || m.autorDesconsideracao || null,
       // Batida por PIN com foto: a imagem em si é buscada sob demanda.
       temFoto: Boolean(m.foto),
       conferenciaFacial: m.foto?.conferencia || null,
@@ -218,8 +256,9 @@ function apurarDia({ dia, batidas, previsto, toleranciaMinutos = 10, agora = new
 /**
  * Espelho do período: um registro por dia, mais os totais.
  */
-function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = FUSO_PADRAO, ultimoDia = null }) {
+function apurarPeriodo({ de, ate, marcacoes, tratamentos = [], jornada, toleranciaMinutos, fuso = FUSO_PADRAO, ultimoDia = null }) {
   const tolerancia = toleranciaMinutos ?? jornada?.toleranciaMinutos ?? 10;
+  marcacoes = aplicarTratamentos(marcacoes, tratamentos, fuso);
 
   // Agrupa as batidas pelo dia no fuso do local das batidas. Quem bate o
   // ponto num tablet de outro estado tem a jornada contada na hora de lá:
@@ -338,5 +377,5 @@ function folgaFixaNaSemana(jornada) {
 module.exports = {
   folgaDaEscala, folgaFixaNaSemana,
   FUSO_PADRAO, partesNoFuso, paraMinutos, paraHora,
-  previstoNoDia, minutosPrevistos, apurarDia, apurarPeriodo, diasDoPeriodo,
+  previstoNoDia, minutosPrevistos, apurarDia, apurarPeriodo, diasDoPeriodo, aplicarTratamentos,
 };

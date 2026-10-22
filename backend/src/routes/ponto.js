@@ -86,7 +86,12 @@ routerTablet.get("/carga", asyncHandler(async (req, res) => {
   });
 
   res.json({
-    rep: { id: rep.id, identificador: rep.identificador, descricao: rep.descricao, ultimoNsr: rep.ultimoNsr },
+    rep: {
+      id: rep.id, identificador: rep.identificador, descricao: rep.descricao, ultimoNsr: rep.ultimoNsr,
+      // Empresas liberadas para este tablet (null = todas). O tablet usa
+      // para mostrar só elas na escolha de empresa do cadastro facial.
+      empresas: empresasDoRep,
+    },
     servidorEm: new Date().toISOString(),
     colaboradores: colaboradores.map((c) => ({
       id: c.id,

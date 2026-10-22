@@ -1479,8 +1479,22 @@ $("btnEntrarCadastro").addEventListener("click", async () => {
     // Usuário com várias empresas: o servidor pede para escolher e ainda
     // não emite token. Mostra o seletor e espera o segundo clique.
     if (dados.requerEmpresa) {
-      $("cadEmpresa").innerHTML = dados.empresas
+      // Só as empresas liberadas para este tablet (configuradas no ERP, em
+      // Ponto → Tablets → Empresas). Sem configuração, todas as do usuário.
+      const liberadas = estado.rep?.empresas;
+      const empresas = Array.isArray(liberadas) && liberadas.length
+        ? dados.empresas.filter(e => liberadas.includes(e.id))
+        : dados.empresas;
+      if (!empresas.length) {
+        throw new Error("Seu usuário não tem acesso a nenhuma das empresas liberadas para este tablet.");
+      }
+      $("cadEmpresa").innerHTML = empresas
         .map(e => `<option value="${e.id}">${e.razaoSocial}</option>`).join("");
+      // Uma empresa só: entra direto, sem pedir para escolher.
+      if (empresas.length === 1) {
+        $("btnEntrarCadastro").click();
+        return;
+      }
       $("blocoEmpresa").classList.remove("oculto");
       alert("Escolha a empresa e toque em Entrar de novo.");
       return;

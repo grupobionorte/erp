@@ -1,0 +1,21 @@
+-- Ficha de registro do colaborador: matrícula, dados pessoais, filiação,
+-- cônjuge, documentos (RG e CTPS) e endereço.
+ALTER TABLE "colaboradores"
+  ADD COLUMN "matricula" TEXT,
+  ADD COLUMN "data_nascimento" TIMESTAMP(3),
+  ADD COLUMN "nacionalidade" TEXT,
+  ADD COLUMN "naturalidade" TEXT,
+  ADD COLUMN "estado_civil" TEXT,
+  ADD COLUMN "nome_pai" TEXT,
+  ADD COLUMN "nome_mae" TEXT,
+  ADD COLUMN "conjuge_nome" TEXT,
+  ADD COLUMN "conjuge_cpf" TEXT,
+  ADD COLUMN "rg_numero" TEXT,
+  ADD COLUMN "rg_orgao_emissor" TEXT,
+  ADD COLUMN "rg_uf" TEXT,
+  ADD COLUMN "rg_data_emissao" TIMESTAMP(3),
+  ADD COLUMN "ctps_numero" TEXT,
+  ADD COLUMN "ctps_serie" TEXT,
+  ADD COLUMN "ctps_uf" TEXT,
+  ADD COLUMN "ctps_data_emissao" TIMESTAMP(3),
+  ADD COLUMN "endereco_id" INTEGER REFERENCES "enderecos"("id");

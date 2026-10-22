@@ -265,7 +265,65 @@ function apurarPeriodo({ de, ate, marcacoes, jornada, toleranciaMinutos, fuso = 
   };
 }
 
+const somarDias = (dia, n) => {
+  const d = new Date(`${dia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const diasEntre = (de, ate) =>
+  Math.round((new Date(`${ate}T12:00:00Z`) - new Date(`${de}T12:00:00Z`)) / 86400000);
+
+/**
+ * Onde a escala põe a pessoa hoje: no serviço ou no bloco de folga do ciclo
+ * (os 5 dias em casa de uma 25x5), quando esse bloco começou ou começa e
+ * quando ela volta. A folga semanal dentro dos dias de trabalho (o domingo
+ * no serviço) não conta como bloco: ela não tira a pessoa do serviço.
+ * É o plano da escala, não o que foi batido no ponto.
+ */
+function folgaDaEscala(jornada, hoje) {
+  if (!jornada || jornada.tipo !== "escala") return null;
+  const ciclo = (jornada.diasTrabalho || 6) + (jornada.diasFolga || 1);
+  const limite = ciclo * 2 + 7;
+  const noBloco = (dia) => {
+    const p = previstoNoDia(jornada, dia);
+    return Boolean(p && p.folga && !p.folgaSemanal);
+  };
+  const fimDoBloco = (inicio) => {
+    let dia = somarDias(inicio, 1);
+    for (let i = 0; i < limite && noBloco(dia); i++) dia = somarDias(dia, 1);
+    return dia;   // primeiro dia fora do bloco: o dia de voltar
+  };
+  const previstoHoje = previstoNoDia(jornada, hoje);
+  const base = {
+    escala: `${jornada.diasTrabalho}x${jornada.diasFolga}`,
+    diasTrabalho: jornada.diasTrabalho,
+    diasFolga: jornada.diasFolga,
+  };
+
+  if (noBloco(hoje)) {
+    let inicio = hoje;
+    for (let i = 0; i < limite && noBloco(somarDias(inicio, -1)); i++) inicio = somarDias(inicio, -1);
+    const retorno = fimDoBloco(hoje);
+    return { ...base, situacao: "folga", inicioFolga: inicio, retorno, diasParaVoltar: diasEntre(hoje, retorno) };
+  }
+
+  let proxima = null;
+  for (let i = 1; i <= limite; i++) {
+    const dia = somarDias(hoje, i);
+    if (noBloco(dia)) { proxima = dia; break; }
+  }
+  return {
+    ...base,
+    situacao: previstoHoje?.folgaSemanal ? "folga semanal" : previstoHoje ? "trabalho" : "fora da escala",
+    diaDoCiclo: previstoHoje?.posicaoCiclo || null,
+    inicioFolga: proxima,
+    retorno: proxima ? fimDoBloco(proxima) : null,
+    diasParaFolga: proxima ? diasEntre(hoje, proxima) : null,
+  };
+}
+
 module.exports = {
+  folgaDaEscala,
   FUSO_PADRAO, partesNoFuso, paraMinutos, paraHora,
   previstoNoDia, minutosPrevistos, apurarDia, apurarPeriodo, diasDoPeriodo,
 };

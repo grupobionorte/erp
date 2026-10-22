@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
-const { apurarPeriodo } = require("../lib/jornada");
+const { apurarPeriodo, folgaDaEscala } = require("../lib/jornada");
 const { FUSO, intervaloNoFuso, instanteDaTela, fusoValido, partesNoFuso, hojeNoFuso, diaDoCampo } = require("../lib/fuso");
 const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
@@ -403,6 +403,49 @@ router.put("/pin/:colaboradorId", asyncHandler(async (req, res) => {
 // ---------------------------------------------------------------------------
 // Jornada de trabalho
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Controle de folgas: quem está de folga e quando sai/volta, pela escala de
+// cada um. Alimenta o painel da Visão geral.
+// ---------------------------------------------------------------------------
+router.get("/folgas", asyncHandler(async (req, res) => {
+  const hoje = hojeNoFuso();
+  // Campos só-data ficam à meia-noite UTC: compara em UTC.
+  const inicioHoje = new Date(`${hoje}T00:00:00Z`);
+  const fimHoje = new Date(`${hoje}T23:59:59Z`);
+
+  const colaboradores = await prisma.colaborador.findMany({
+    where: {
+      ativo: true,
+      tipoContrato: { not: "pj" },
+      empresaId: req.usuario.empresaId ?? undefined,
+      OR: [{ situacao: { not: "demitido" } }, { dataDemissao: { gte: inicioHoje } }],
+    },
+    select: {
+      id: true, nome: true, cargo: true, setor: true,
+      jornadas: {
+        where: {
+          vigenciaInicio: { lte: fimHoje },
+          OR: [{ vigenciaFim: null }, { vigenciaFim: { gte: inicioHoje } }],
+        },
+        include: { dias: true },
+        orderBy: { vigenciaInicio: "desc" },
+        take: 1,
+      },
+    },
+    orderBy: { nome: "asc" },
+  });
+
+  const lista = [];
+  let semEscala = 0;
+  for (const c of colaboradores) {
+    const situacao = folgaDaEscala(c.jornadas[0], hoje);
+    if (!situacao) { semEscala++; continue; }
+    lista.push({ id: c.id, nome: c.nome, cargo: c.cargo, setor: c.setor, ...situacao });
+  }
+
+  res.json({ hoje, colaboradores: lista, semEscala });
+}));
+
 router.get("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
   const jornadas = await prisma.jornadaTrabalho.findMany({
     where: { colaboradorId: Number(req.params.colaboradorId) },

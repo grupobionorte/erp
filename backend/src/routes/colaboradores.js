@@ -46,6 +46,20 @@ function problemaNaSituacao(dados) {
   return null;
 }
 
+// Outro colaborador ativo com o mesmo CPF na mesma empresa. Compara só os
+// números: "123.456.789-09" e "12345678909" são a mesma pessoa. Devolve
+// quem é, para a mensagem dizer com quem está o conflito.
+const soDigitos = (v) => String(v || "").replace(/\D/g, "");
+async function cpfRepetido(cpf, empresaId, ignorarId = null) {
+  const alvo = soDigitos(cpf);
+  if (!alvo) return null;
+  const daEmpresa = await prisma.colaborador.findMany({
+    where: { ativo: true, empresaId: empresaId ?? null, ...(ignorarId ? { NOT: { id: ignorarId } } : {}) },
+    select: { id: true, nome: true, cpf: true },
+  });
+  return daEmpresa.find((c) => soDigitos(c.cpf) === alvo) || null;
+}
+
 router.get("/", asyncHandler(async (req, res) => {
   const { empresaId } = req.usuario;
   const colaboradores = await prisma.colaborador.findMany({
@@ -66,6 +80,10 @@ router.post("/", asyncHandler(async (req, res) => {
   }
   const problema = problemaNaSituacao(dados);
   if (problema) return res.status(400).json({ erro: problema });
+  const repetido = await cpfRepetido(dados.cpf, req.usuario.empresaId);
+  if (repetido) {
+    return res.status(409).json({ erro: `Já existe colaborador com esse CPF nesta empresa: ${repetido.nome} (código ${repetido.id})` });
+  }
 
   const colaborador = await prisma.colaborador.create({
     data: { ...dados, empresaId: req.usuario.empresaId || undefined },
@@ -99,6 +117,12 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const { usuarioId, ...camposColaborador } = dados;
   const problema = problemaNaSituacao(camposColaborador);
   if (problema) return res.status(400).json({ erro: problema });
+  if (camposColaborador.cpf !== undefined) {
+    const repetido = await cpfRepetido(camposColaborador.cpf, existente.empresaId, id);
+    if (repetido) {
+      return res.status(409).json({ erro: `Já existe colaborador com esse CPF nesta empresa: ${repetido.nome} (código ${repetido.id})` });
+    }
+  }
 
   const colaborador = await prisma.colaborador.update({ where: { id }, data: camposColaborador });
 

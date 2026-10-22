@@ -41,6 +41,7 @@ Variáveis essenciais no Render (serviço `erp-biomassa-backend`):
 | `FOCUS_AMBIENTE_NFE` / `_CTE` / `_MDFE` | `producao` ou `homologacao`, **por documento** |
 | `TZ_FISCAL` | `America/Cuiaba` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_CONTATO` | notificações push |
+| `ATM_USUARIO` / `ATM_SENHA` / `ATM_CODIGO` (ou `_<CNPJ>`) | averbação do seguro do CT-e na AT&M. Sem elas, não averba. `ATM_URL` troca o endereço do serviço |
 | `CRON_TOKEN` | protege `POST /lembretes`, chamada a cada 5 min pelo cron-job.org (job "Lembretes da Agenda", fuso America/Cuiaba) com o cabeçalho `x-cron-token` |
 
 Endereços: `erp-biomassa-backend.onrender.com` e
@@ -79,6 +80,13 @@ documento e líquido são calculados no servidor. Uma carta valendo por CT-e;
 cancelada fica no histórico e o número não volta. Os dados das partes ficam
 congelados na emissão (`dados`). Numeração própria por empresa
 (`cartaFreteProximoNumero`).
+
+**Averbação do seguro (AT&M):** ao autorizar, o CT-e é averbado sozinho na
+AT&M (`services/averbacaoAtm.js`, envia o XML autorizado); ao cancelar,
+manda o XML do cancelamento. Falha da AT&M nunca segura o CT-e: fica "não
+averbado" na lista e o menu repete. O número da averbação preenche o
+MDF-e gerado do CT-e. Ainda não conferido em produção qual número a AT&M
+devolve (NumeroAverbacao; sem ele, o protocolo).
 
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra

@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.150";
+const VERSAO_SISTEMA = "1.151";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.151", texto: "CT-e: averbação automática do seguro na AT&M ao autorizar; o número vai sozinho para o MDF-e" },
   { versao: "1.150", texto: "Folgas da equipe: só quem folga em bloco (25x5); 6x1 com descanso no domingo fica de fora" },
   { versao: "1.149", texto: "Configurações: escolher em quais empresas o painel de folgas aparece na Visão geral" },
   { versao: "1.148", texto: "Visão geral: folgas da equipe — quem está de folga, quando volta e as próximas folgas" },
@@ -6320,7 +6321,8 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
             nomeSeguradora: daEmpresa.seguroNomeSeguradora || "",
             cnpjSeguradora: daEmpresa.seguroCnpjSeguradora || "",
             numeroApolice: daEmpresa.seguroNumeroApolice || "",
-            numeroAverbacao: "",
+            // A averbação é desta viagem: a que a AT&M devolveu para o CT-e.
+            numeroAverbacao: ctePreSelecionado?.averbacaoNumero || "",
           });
         } else if (ultimo) {
           // Sem seguro no cadastro: reaproveita o do último manifesto pra não
@@ -6330,7 +6332,8 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
             nomeSeguradora: ultimo.seguroNomeSeguradora || "",
             cnpjSeguradora: ultimo.seguroCnpjSeguradora || "",
             numeroApolice: ultimo.seguroNumeroApolice || "",
-            numeroAverbacao: ultimo.seguroNumeroAverbacao || "",
+            // Averbação de outra viagem não serve: a desta vem do CT-e.
+            numeroAverbacao: ctePreSelecionado?.averbacaoNumero || "",
           });
         }
       } catch { /* sem manifesto anterior, começa em branco */ }
@@ -6442,7 +6445,8 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
                 </div>
                 <div className="field-group">
                   <label className="field-label">Número da averbação</label>
-                  <input value={seguro.numeroAverbacao} onChange={e => setSeguro(s => ({ ...s, numeroAverbacao: e.target.value }))} />
+                  <input value={seguro.numeroAverbacao} placeholder="Em branco: a da AT&M no CT-e"
+                    onChange={e => setSeguro(s => ({ ...s, numeroAverbacao: e.target.value }))} />
                 </div>
               </div>
 
@@ -12435,6 +12439,22 @@ function CteView({ onIrParaMdfe }) {
   // Clonar: a mesma rota se repete muito, e redigitar tudo é onde o erro
   // entra. As notas transportadas ficam de fora — cada viagem carrega
   // notas diferentes, e repetir chave de NF-e num CT-e novo é erro caro.
+  // Averbação AT&M pelo menu: repete a que falhou, ou cancela a do CT-e
+  // cancelado.
+  const averbarCte = async (cte) => {
+    setProcessando(cte.id);
+    try {
+      const r = await apiRequest(`/documentos-fiscais/${cte.id}/averbar`, { method: "POST" });
+      await carregar();
+      alert(r.averbacaoSituacao === "averbado"
+        ? `CT-e averbado na AT&M.\n\nAverbação: ${r.averbacaoNumero || "—"}`
+        : "Averbação cancelada na AT&M.");
+    } catch (e) {
+      alert(`Averbação não feita: ${e.message}${e.detalhe ? `\n\n${e.detalhe}` : ""}`);
+      carregar();
+    } finally { setProcessando(null); }
+  };
+
   const clonarCte = async (cte) => {
     try {
       const novo = await apiRequest(`/documentos-fiscais/${cte.id}/clonar`, {
@@ -12696,6 +12716,23 @@ function CteView({ onIrParaMdfe }) {
                 <td style={{ textAlign: "right" }}>{cte.valorTotal != null ? `R$ ${formatarMoeda(cte.valorTotal)}` : "—"}</td>
                 <td>
                   <StatusDocumento status={cte.status} />
+                  {/* Averbação AT&M do seguro: quem olha a lista vê na hora
+                      se o CT-e está coberto. */}
+                  {cte.averbacaoSituacao && (() => {
+                    const a = {
+                      enviando: ["averbando…", "#8a887f"],
+                      averbado: ["averbado", "#00732F"],
+                      erro: ["não averbado", "#b57a12"],
+                      cancelada: ["averbação cancelada", "#8a887f"],
+                      erro_cancelamento: ["cancelar averbação", "#c62828"],
+                    }[cte.averbacaoSituacao];
+                    return a ? (
+                      <span title={cte.averbacaoSituacao === "averbado"
+                          ? `Averbação ${cte.averbacaoNumero || ""}${cte.averbacaoProtocolo ? ` · protocolo ${cte.averbacaoProtocolo}` : ""}`
+                          : cte.averbacaoMensagem || ""}
+                        style={{ display: "block", whiteSpace: "normal", color: a[1], fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{a[0]}</span>
+                    ) : null;
+                  })()}
                   {processando === cte.id && cte.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
@@ -12805,6 +12842,12 @@ function CteView({ onIrParaMdfe }) {
                           <button className="nf-dropdown-item" onClick={() => { setMenuAberto(null); setCteCartaFrete(cte); }}>
                             <FileText size={14} /> Carta frete
                           </button>
+                          {cte.averbacaoSituacao !== "averbado" && (
+                            <button className="nf-dropdown-item" disabled={processando === cte.id}
+                              onClick={() => { setMenuAberto(null); averbarCte(cte); }}>
+                              <FileText size={14} /> Averbar seguro (AT&M)
+                            </button>
+                          )}
                           {cte.mdfeId ? (
                             <button className="nf-dropdown-item" disabled onClick={() => setMenuAberto(null)}>
                               <Truck size={14} /> MDF-e já gerado
@@ -12822,6 +12865,12 @@ function CteView({ onIrParaMdfe }) {
                             <Trash2 size={14} /> Cancelar CTe (SEFAZ)
                           </button>
                         </>
+                      )}
+                      {cte.status === "cancelado" && ["averbado", "erro_cancelamento"].includes(cte.averbacaoSituacao) && (
+                        <button className="nf-dropdown-item" disabled={processando === cte.id}
+                          onClick={() => { setMenuAberto(null); averbarCte(cte); }}>
+                          <FileText size={14} /> Cancelar averbação (AT&M)
+                        </button>
                       )}
                     </div>
                   )}

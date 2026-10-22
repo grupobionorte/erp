@@ -555,7 +555,8 @@ const MODULES = {
     ],
     columns: ["nome", "cargo", "setor", "situacao", "telefone"],
     // Filtro e contagem por situação na listagem (Todos / Ativos / Demitidos).
-    filtroSituacao: { campo: "situacao", opcoes: [["Ativo", "Ativos"], ["Demitido", "Demitidos"]] },
+    // A tela abre em Ativos: é quem o RH procura no dia a dia.
+    filtroSituacao: { campo: "situacao", opcoes: [["Ativo", "Ativos"], ["Demitido", "Demitidos"]], padrao: "Ativo" },
     toApi: (data) => ({
       nome: data.nome,
       cpf: data.cpf,
@@ -1102,12 +1103,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.140";
+const VERSAO_SISTEMA = "1.141";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.141", texto: "Colaboradores: a listagem abre mostrando só os ativos" },
   { versao: "1.140", texto: "Colaboradores: filtro Todos/Ativos/Demitidos e total de ativos na listagem" },
   { versao: "1.139", texto: "Colaboradores: situação (Ativo/Demitido) e data de demissão; demitido sai do tablet de ponto" },
   { versao: "1.138", texto: "Ponto: escala com folga fixa na semana (ex.: 25 dias no serviço com folga aos domingos e 5 em casa)" },
@@ -5488,8 +5490,8 @@ function ModuleView({ moduleKey }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [copiando, setCopiando] = useState(false);
-  const [situacao, setSituacao] = useState("");
   const filtroSituacao = config.filtroSituacao;
+  const [situacao, setSituacao] = useState(filtroSituacao?.padrao || "");
   const filtered = (items || []).filter(it => {
     if (filtroSituacao && situacao && it[filtroSituacao.campo] !== situacao) return false;
     if (!query) return true;

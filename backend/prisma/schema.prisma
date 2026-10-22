@@ -313,7 +313,11 @@ model Colaborador {
   // hash, nunca em texto puro.
   pinPontoHash String? @map("pin_ponto_hash")
 
-  @@unique([cpf, empresaId])
+  // CPF único por empresa só entre os cadastros ativos: a exclusão é lógica,
+  // e o excluído segurava o CPF — não dava para cadastrar a pessoa de novo.
+  // O índice é parcial (WHERE ativo), escrito na migration; o Prisma não
+  // descreve índice parcial, por isso não aparece como @@unique aqui.
+  @@index([cpf, empresaId])
   @@map("colaboradores")
   eventosCriados     Evento[]            @relation("EventosCriados")
   eventosResponsavel EventoResponsavel[] @relation("EventosResponsavel")

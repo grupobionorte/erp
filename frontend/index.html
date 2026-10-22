@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.151";
+const VERSAO_SISTEMA = "1.152";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.152", texto: "CT-e: coluna Seguro na lista, mostrando se o CT-e foi averbado na AT&M" },
   { versao: "1.151", texto: "CT-e: averbação automática do seguro na AT&M ao autorizar; o número vai sozinho para o MDF-e" },
   { versao: "1.150", texto: "Folgas da equipe: só quem folga em bloco (25x5); 6x1 com descanso no domingo fica de fora" },
   { versao: "1.149", texto: "Configurações: escolher em quais empresas o painel de folgas aparece na Visão geral" },
@@ -12696,10 +12697,11 @@ function CteView({ onIrParaMdfe }) {
                 Número/Série{ordem === "numeroDesc" ? " ↓" : ordem === "numeroAsc" ? " ↑" : ""}
               </th>
               <th>Tomador</th>
-              <th style={{ width: 230 }}>Trajeto</th>
+              <th style={{ width: 215 }}>Trajeto</th>
               <th style={{ width: 105, textAlign: "right" }}>Valor</th>
               <th style={{ width: 95 }}>Status</th>
-              <th style={{ width: 130 }}>Chave / Motivo</th>
+              <th style={{ width: 88 }}>Seguro</th>
+              <th style={{ width: 100 }}>Chave / Motivo</th>
               <th style={{ width: 78 }}>Emissão</th>
               <th className="actions-col"></th>
             </tr>
@@ -12716,27 +12718,26 @@ function CteView({ onIrParaMdfe }) {
                 <td style={{ textAlign: "right" }}>{cte.valorTotal != null ? `R$ ${formatarMoeda(cte.valorTotal)}` : "—"}</td>
                 <td>
                   <StatusDocumento status={cte.status} />
-                  {/* Averbação AT&M do seguro: quem olha a lista vê na hora
-                      se o CT-e está coberto. */}
-                  {cte.averbacaoSituacao && (() => {
-                    const a = {
-                      enviando: ["averbando…", "#8a887f"],
-                      averbado: ["averbado", "#00732F"],
-                      erro: ["não averbado", "#b57a12"],
-                      cancelada: ["averbação cancelada", "#8a887f"],
-                      erro_cancelamento: ["cancelar averbação", "#c62828"],
-                    }[cte.averbacaoSituacao];
-                    return a ? (
-                      <span title={cte.averbacaoSituacao === "averbado"
-                          ? `Averbação ${cte.averbacaoNumero || ""}${cte.averbacaoProtocolo ? ` · protocolo ${cte.averbacaoProtocolo}` : ""}`
-                          : cte.averbacaoMensagem || ""}
-                        style={{ display: "block", whiteSpace: "normal", color: a[1], fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{a[0]}</span>
-                    ) : null;
-                  })()}
                   {processando === cte.id && cte.status === "enviado" && (
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· consultando…</span>
                   )}
                 </td>
+                {/* Averbação AT&M do seguro em coluna própria: quem olha a
+                    lista vê na hora se o CT-e está coberto. */}
+                {(() => {
+                  const a = {
+                    enviando: ["Averbando…", "#8a887f"],
+                    averbado: ["Averbado", "#00732F"],
+                    erro: ["Não averbado", "#b57a12"],
+                    cancelada: ["Cancelada", "#8a887f"],
+                    erro_cancelamento: ["Cancelar averbação", "#c62828"],
+                  }[cte.averbacaoSituacao];
+                  if (!a) return <td style={{ color: "#8a887f" }}>—</td>;
+                  const dica = cte.averbacaoSituacao === "averbado"
+                    ? `Averbação ${cte.averbacaoNumero || ""}${cte.averbacaoProtocolo ? ` · protocolo ${cte.averbacaoProtocolo}` : ""}`
+                    : cte.averbacaoMensagem || "";
+                  return <td title={dica} style={{ color: a[1], fontWeight: 600, whiteSpace: "normal" }}>{a[0]}</td>;
+                })()}
                 <td title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
                   {cte.status === "cancelado" && cte.justificativaCancelamento
                     ? `Cancelado: ${cte.justificativaCancelamento}`

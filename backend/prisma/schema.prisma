@@ -292,6 +292,9 @@ model Colaborador {
   situacao      String    @default("ativo")              // ativo | demitido
   // Forma de contratação. Informativo por enquanto: o ponto vale para os dois.
   tipoContrato  String    @default("clt") @map("tipo_contrato") // clt | pj
+  // Remuneração: salário mensal e prêmio pago por hora trabalhada (R$).
+  salario         Float?  @map("salario")
+  premiacaoPorHora Float? @map("premiacao_por_hora")
   dataDemissao  DateTime? @map("data_demissao")
   telefone      String?
   email         String?

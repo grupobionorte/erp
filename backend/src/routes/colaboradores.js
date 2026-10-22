@@ -39,6 +39,10 @@ async function vincularUsuario(colaboradorId, usuarioId) {
 // quando o ponto vale, e ativo com data de demissão é contradição.
 function problemaNaSituacao(dados) {
   if (dados.tipoContrato !== undefined && !["clt", "pj"].includes(dados.tipoContrato)) return "Contrato deve ser CLT ou PJ";
+  for (const [campo, rotulo] of [["salario", "Salário"], ["premiacaoPorHora", "Premiação por hora"]]) {
+    const v = dados[campo];
+    if (v !== undefined && v !== null && !(Number.isFinite(Number(v)) && Number(v) >= 0)) return `${rotulo} inválido`;
+  }
   if (dados.situacao === undefined && dados.dataDemissao === undefined) return null;
   if (dados.situacao && !["ativo", "demitido"].includes(dados.situacao)) return "Situação deve ser Ativo ou Demitido";
   if (dados.situacao === "demitido" && !dados.dataDemissao) return "Informe a data de demissão";

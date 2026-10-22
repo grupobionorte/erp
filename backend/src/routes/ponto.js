@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { apurarPeriodo } = require("../lib/jornada");
-const { FUSO, intervaloNoFuso, instanteDaTela, fusoValido, partesNoFuso } = require("../lib/fuso");
+const { FUSO, intervaloNoFuso, instanteDaTela, fusoValido, partesNoFuso, hojeNoFuso, diaDoCampo } = require("../lib/fuso");
 const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
 
@@ -65,9 +65,13 @@ routerTablet.get("/carga", asyncHandler(async (req, res) => {
     ? rep.empresasAtendidas.map((e) => e.id)
     : (rep.empresaId ? [rep.empresaId] : null);
 
+  // Demitido bate ponto até o último dia (a data de demissão, inclusive) e
+  // depois some do tablet. Data só-dia, gravada à meia-noite UTC.
+  const hojeUtc = new Date(`${hojeNoFuso()}T00:00:00Z`);
   const colaboradores = await prisma.colaborador.findMany({
     where: {
       ativo: true,
+      OR: [{ situacao: { not: "demitido" } }, { dataDemissao: { gte: hojeUtc } }],
       ...(empresasDoRep ? { empresaId: { in: empresasDoRep } } : {}),
     },
     select: {
@@ -490,7 +494,7 @@ router.get("/espelho", asyncHandler(async (req, res) => {
 
   const colaborador = await prisma.colaborador.findUnique({
     where: { id: Number(colaboradorId) },
-    select: { id: true, nome: true, cpf: true, cargo: true, setor: true },
+    select: { id: true, nome: true, cpf: true, cargo: true, setor: true, situacao: true, dataDemissao: true },
   });
   if (!colaborador) return res.status(404).json({ erro: "Colaborador não encontrado" });
 
@@ -541,7 +545,10 @@ router.get("/espelho", asyncHandler(async (req, res) => {
     return dia >= de && dia <= ate;
   });
 
-  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada, fuso });
+  // Depois da demissão não há jornada a cobrar: sem isso, o resto do mês
+  // apareceria como falta.
+  const ultimoDia = colaborador.situacao === "demitido" ? diaDoCampo(colaborador.dataDemissao) : null;
+  const apuracao = apurarPeriodo({ de, ate, marcacoes, jornada, fuso, ultimoDia });
   res.json({ colaborador, jornada, ...apuracao });
 }));
 

@@ -290,6 +290,8 @@ model Colaborador {
   // cadastro): o demitido continua existindo, com batidas e espelho, mas
   // deixa de bater ponto depois do último dia.
   situacao      String    @default("ativo")              // ativo | demitido
+  // Forma de contratação. Informativo por enquanto: o ponto vale para os dois.
+  tipoContrato  String    @default("clt") @map("tipo_contrato") // clt | pj
   dataDemissao  DateTime? @map("data_demissao")
   telefone      String?
   email         String?

@@ -1187,12 +1187,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.147";
+const VERSAO_SISTEMA = "1.148";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.148", texto: "Visão geral: folgas da equipe — quem está de folga, quando volta e as próximas folgas" },
   { versao: "1.147", texto: "Colaboradores: ficha completa (matrícula, endereço, nascimento e idade, filiação, cônjuge, RG e CTPS)" },
   { versao: "1.146", texto: "Colaboradores: salário e premiação por hora" },
   { versao: "1.145", texto: "Colaboradores: cadastro excluído não segura mais o CPF; aviso diz com quem é o conflito" },
@@ -6107,6 +6108,109 @@ function AgendaDoPainel({ onNavigate }) {
   );
 }
 
+// Controle de folgas da equipe, pela escala de cada um (ex.: 25 dias no
+// serviço e 5 em casa): quem está de folga, quando volta, e quem sai de
+// folga nos próximos dias. É o plano da escala — trocas combinadas fora
+// dela entram cadastrando a jornada nova no colaborador.
+function FolgasDoPainel() {
+  const [dados, setDados] = useState(null);
+  const [verTodos, setVerTodos] = useState(false);
+
+  useEffect(() => {
+    apiRequest("/ponto/folgas").then(setDados).catch(() => setDados({ colaboradores: [] }));
+  }, []);
+
+  if (!dados?.colaboradores?.length) return null;
+
+  const SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  const dataCurta = (dia) => {
+    if (!dia) return "—";
+    const d = new Date(`${dia}T12:00:00Z`);
+    return `${SEMANA[d.getUTCDay()]} ${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
+  };
+  const emDias = (n) => (n === 0 ? "hoje" : n === 1 ? "amanhã" : `em ${n} dias`);
+
+  const deFolga = dados.colaboradores.filter(c => c.situacao === "folga")
+    .sort((a, b) => (a.retorno || "").localeCompare(b.retorno || ""));
+  const proximas = dados.colaboradores.filter(c => c.situacao !== "folga" && c.inicioFolga)
+    .sort((a, b) => a.diasParaFolga - b.diasParaFolga || a.nome.localeCompare(b.nome));
+  const semana = proximas.filter(c => c.diasParaFolga <= 7).length;
+  const voltamLogo = deFolga.filter(c => c.diasParaVoltar <= 1).length;
+  const LIMITE = 8;
+  const proximasVisiveis = verTodos ? proximas : proximas.slice(0, LIMITE);
+
+  const cartao = { background: "var(--surface-2, #fff)", border: "1px solid var(--border, #e5e3da)", borderRadius: 8, padding: "8px 12px" };
+
+  return (
+    <div className="nf-section" style={{ marginBottom: 18 }}>
+      <h4 className="nf-section-title" style={{ margin: 0 }}>
+        Folgas da equipe
+        <span className="subtle" style={{ fontWeight: 400 }}>
+          {" · "}{deFolga.length} de folga hoje
+          {" · "}{semana} sai{semana !== 1 ? "em" : ""} de folga em até 7 dias
+          {voltamLogo > 0 && ` · ${voltamLogo} volta${voltamLogo !== 1 ? "m" : ""} até amanhã`}
+        </span>
+      </h4>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 10 }}>
+        <div>
+          <p className="field-label" style={{ marginBottom: 6 }}>De folga agora</p>
+          {deFolga.length === 0 && <p className="hint" style={{ margin: 0 }}>Ninguém de folga hoje.</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {deFolga.map(c => (
+              <div key={c.id} style={{ ...cartao, borderLeft: "3px solid #1565c0" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{c.nome}</div>
+                <div className="subtle" style={{ fontSize: 12 }}>
+                  Saiu {dataCurta(c.inicioFolga)} · <strong style={{ color: "#1565c0" }}>volta {dataCurta(c.retorno)}</strong> ({emDias(c.diasParaVoltar)})
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="field-label" style={{ marginBottom: 6 }}>Próximas folgas</p>
+          {proximas.length === 0 && <p className="hint" style={{ margin: 0 }}>Nenhuma folga prevista.</p>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {proximasVisiveis.map(c => {
+              // Folga vencendo em até 3 dias fica em destaque: é quando a
+              // substituição precisa estar combinada.
+              const perto = c.diasParaFolga <= 3;
+              return (
+                <div key={c.id} style={{ ...cartao, borderLeft: `3px solid ${perto ? "#b57a12" : "#9a9890"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 500 }}>{c.nome}</span>
+                    <span className="subtle" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                      {c.escala}{c.diaDoCiclo && c.diaDoCiclo <= c.diasTrabalho ? ` · dia ${c.diaDoCiclo} de ${c.diasTrabalho}` : ""}
+                    </span>
+                  </div>
+                  <div className="subtle" style={{ fontSize: 12 }}>
+                    <strong style={{ color: perto ? "#b57a12" : "inherit" }}>Folga {emDias(c.diasParaFolga)}</strong>
+                    {" · "}sai {dataCurta(c.inicioFolga)} · volta {dataCurta(c.retorno)}
+                    {c.situacao === "folga semanal" && " · hoje é a folga semanal"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {proximas.length > LIMITE && (
+            <button className="link-btn" style={{ marginTop: 6 }} onClick={() => setVerTodos(v => !v)}>
+              {verTodos ? "Mostrar menos" : `Ver todos (${proximas.length})`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {dados.semEscala > 0 && (
+        <p className="hint" style={{ marginTop: 8 }}>
+          {dados.semEscala} colaborador{dados.semEscala !== 1 ? "es" : ""} sem escala cadastrada não entra{dados.semEscala !== 1 ? "m" : ""} nesse controle
+          (cadastre em Colaboradores → Horários de trabalho, tipo "Escala por ciclo").
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
   const cards = modulosParaUsuario(usuario).map(([key, cfg]) => ({ key, cfg, count: counts[key] }));
   return (
@@ -6125,6 +6229,8 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
 
       <ClientesDoMes />
       <AgendaDoPainel onNavigate={onNavigate} />
+      {/* Só para quem tem o menu Ponto: a escala é dado do RH. */}
+      {menuLiberado("ponto", usuario) && <FolgasDoPainel />}
 
       <div className="dash-grid">
         {cards.map(({ key, cfg, count }) => {

@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.149";
+const VERSAO_SISTEMA = "1.150";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.150", texto: "Folgas da equipe: só quem folga em bloco (25x5); 6x1 com descanso no domingo fica de fora" },
   { versao: "1.149", texto: "Configurações: escolher em quais empresas o painel de folgas aparece na Visão geral" },
   { versao: "1.148", texto: "Visão geral: folgas da equipe — quem está de folga, quando volta e as próximas folgas" },
   { versao: "1.147", texto: "Colaboradores: ficha completa (matrícula, endereço, nascimento e idade, filiação, cônjuge, RG e CTPS)" },
@@ -6209,8 +6210,9 @@ function FolgasDoPainel() {
 
       {dados.semEscala > 0 && (
         <p className="hint" style={{ marginTop: 8 }}>
-          {dados.semEscala} colaborador{dados.semEscala !== 1 ? "es" : ""} sem escala cadastrada não entra{dados.semEscala !== 1 ? "m" : ""} nesse controle
-          (cadastre em Colaboradores → Horários de trabalho, tipo "Escala por ciclo").
+          {dados.semEscala} colaborador{dados.semEscala !== 1 ? "es" : ""} sem horário de trabalho cadastrado
+          {dados.semEscala !== 1 ? " ficam" : " fica"} fora desse controle (cadastre em Colaboradores → Horários de trabalho).
+          Quem tem folga fixa no mesmo dia da semana, como o 6x1 com descanso no domingo, não entra aqui.
         </p>
       )}
     </div>

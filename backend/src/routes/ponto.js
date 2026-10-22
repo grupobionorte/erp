@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
-const { apurarPeriodo, folgaDaEscala } = require("../lib/jornada");
+const { apurarPeriodo, folgaDaEscala, folgaFixaNaSemana } = require("../lib/jornada");
 const { FUSO, intervaloNoFuso, instanteDaTela, fusoValido, partesNoFuso, hojeNoFuso, diaDoCampo } = require("../lib/fuso");
 const { enviarComprovantePonto, enviarEmail, situacao, verificarConexao } = require("../lib/email");
 const router = express.Router();
@@ -435,15 +435,22 @@ router.get("/folgas", asyncHandler(async (req, res) => {
     orderBy: { nome: "asc" },
   });
 
+  // Entra no controle só quem tem folga em bloco que anda pelo calendário
+  // (25x5, por exemplo). Quem folga sempre no mesmo dia da semana — o 6x1
+  // com descanso no domingo, ou o horário fixo por dia — fica de fora: não
+  // há vencimento de folga para acompanhar.
   const lista = [];
   let semEscala = 0;
+  let folgaFixa = 0;
   for (const c of colaboradores) {
-    const situacao = folgaDaEscala(c.jornadas[0], hoje);
-    if (!situacao) { semEscala++; continue; }
-    lista.push({ id: c.id, nome: c.nome, cargo: c.cargo, setor: c.setor, ...situacao });
+    const jornada = c.jornadas[0];
+    if (!jornada) { semEscala++; continue; }
+    if (folgaFixaNaSemana(jornada)) { folgaFixa++; continue; }
+    const situacao = folgaDaEscala(jornada, hoje);
+    if (situacao) lista.push({ id: c.id, nome: c.nome, cargo: c.cargo, setor: c.setor, ...situacao });
   }
 
-  res.json({ hoje, colaboradores: lista, semEscala });
+  res.json({ hoje, colaboradores: lista, semEscala, folgaFixa });
 }));
 
 router.get("/jornada/:colaboradorId", asyncHandler(async (req, res) => {

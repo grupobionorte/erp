@@ -322,8 +322,21 @@ function folgaDaEscala(jornada, hoje) {
   };
 }
 
+/**
+ * A folga cai sempre no mesmo dia da semana? É o 6x1 com descanso no
+ * domingo, ou o horário fixo por dia da semana: não há o que controlar —
+ * todo mundo sabe que domingo é folga. Ciclo múltiplo de 7 sem a folga
+ * andar mantém a folga no mesmo dia da semana.
+ */
+function folgaFixaNaSemana(jornada) {
+  if (!jornada) return false;
+  if (jornada.tipo !== "escala") return true;
+  const ciclo = (jornada.diasTrabalho || 6) + (jornada.diasFolga || 1);
+  return ciclo % 7 === 0 && (jornada.deslocamentoPorCiclo || 0) % 7 === 0;
+}
+
 module.exports = {
-  folgaDaEscala,
+  folgaDaEscala, folgaFixaNaSemana,
   FUSO_PADRAO, partesNoFuso, paraMinutos, paraHora,
   previstoNoDia, minutosPrevistos, apurarDia, apurarPeriodo, diasDoPeriodo,
 };

@@ -71,6 +71,8 @@ routerTablet.get("/carga", asyncHandler(async (req, res) => {
   const colaboradores = await prisma.colaborador.findMany({
     where: {
       ativo: true,
+      // PJ não tem controle de ponto: não aparece no tablet.
+      tipoContrato: { not: "pj" },
       OR: [{ situacao: { not: "demitido" } }, { dataDemissao: { gte: hojeUtc } }],
       ...(empresasDoRep ? { empresaId: { in: empresasDoRep } } : {}),
     },
@@ -417,6 +419,10 @@ router.post("/jornada/:colaboradorId", asyncHandler(async (req, res) => {
     && req.body.folgaSemanal !== null ? Number(req.body.folgaSemanal) : null;
 
   if (!vigenciaInicio) return res.status(400).json({ erro: "Informe a partir de quando a jornada vale" });
+  const pessoa = await prisma.colaborador.findUnique({ where: { id: colaboradorId }, select: { tipoContrato: true } });
+  if (pessoa?.tipoContrato === "pj") {
+    return res.status(400).json({ erro: "Colaborador PJ não tem horário de trabalho" });
+  }
 
   const hora = (v) => (v && /^\d{1,2}:\d{2}$/.test(v) ? v : null);
 
@@ -494,9 +500,12 @@ router.get("/espelho", asyncHandler(async (req, res) => {
 
   const colaborador = await prisma.colaborador.findUnique({
     where: { id: Number(colaboradorId) },
-    select: { id: true, nome: true, cpf: true, cargo: true, setor: true, situacao: true, dataDemissao: true },
+    select: { id: true, nome: true, cpf: true, cargo: true, setor: true, situacao: true, dataDemissao: true, tipoContrato: true },
   });
   if (!colaborador) return res.status(404).json({ erro: "Colaborador não encontrado" });
+  if (colaborador.tipoContrato === "pj") {
+    return res.status(400).json({ erro: "Colaborador PJ não tem controle de ponto" });
+  }
 
   // A jornada usada é a vigente no início do período. Se a jornada mudou no
   // meio do mês, a apuração pega a que valia — por isso a vigência existe.
@@ -616,7 +625,8 @@ router.get("/reps", asyncHandler(async (req, res) => {
 // cadastrado e desde quando. É a tela de acompanhamento do RH.
 router.get("/colaboradores", asyncHandler(async (req, res) => {
   const colaboradores = await prisma.colaborador.findMany({
-    where: { ativo: true, empresaId: req.usuario.empresaId ?? undefined },
+    // PJ fica fora: não tem PIN, rosto nem espelho de ponto.
+    where: { ativo: true, tipoContrato: { not: "pj" }, empresaId: req.usuario.empresaId ?? undefined },
     select: {
       id: true, nome: true, cpf: true, cargo: true, setor: true, pinPontoHash: true,
       biometriaFacial: { select: { consentimentoEm: true, atualizadoEm: true, versaoModelo: true } },

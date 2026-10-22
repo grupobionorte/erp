@@ -1106,12 +1106,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.142";
+const VERSAO_SISTEMA = "1.143";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.143", texto: "Ponto: colaborador PJ não tem horário de trabalho nem batida de ponto" },
   { versao: "1.142", texto: "Colaboradores: tipo de contrato (CLT ou PJ)" },
   { versao: "1.141", texto: "Colaboradores: a listagem abre mostrando só os ativos" },
   { versao: "1.140", texto: "Colaboradores: filtro Todos/Ativos/Demitidos e total de ativos na listagem" },
@@ -4171,8 +4172,10 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
   const [error, setError] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [aba, setAba] = useState("dados");
-  // Colaborador tem jornada de trabalho; os outros cadastros, não.
-  const temJornada = moduleKey === "colaboradores";
+  // Colaborador tem jornada de trabalho; os outros cadastros, não. PJ
+  // também não: não tem horário nem batida de ponto.
+  const temJornada = moduleKey === "colaboradores" && data.contrato !== "PJ";
+  useEffect(() => { if (!temJornada && aba === "jornada") setAba("dados"); }, [temJornada, aba]);
   // Empresa separa cadastro de configuração fiscal: são coisas que se
   // mexem em momentos diferentes.
   const temAbaFiscal = config.fields.some(f => f.aba === "fiscal");

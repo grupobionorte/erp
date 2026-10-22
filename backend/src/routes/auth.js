@@ -266,6 +266,8 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
       // Os padrões do CT-e vêm junto: são eles que preenchem o CT-e novo.
       select: {
         id: true, razaoSocial: true, cfopPadraoCte: true, cstPadraoCte: true, observacaoPadraoCte: true,
+        // Se a Visão geral mostra o painel de folgas nesta empresa.
+        painelFolgas: true,
         // O seguro vem junto: é ele que preenche o MDF-e novo.
         seguroNomeSeguradora: true, seguroCnpjSeguradora: true, seguroNumeroApolice: true,
       },

@@ -1094,6 +1094,9 @@ const MODULES = {
       { key: "bancoAgencia", label: "Agência", type: "text", secao: "Recebimento" },
       { key: "regime", label: "Regime Tributário", type: "select", options: ["Simples Nacional", "Lucro Presumido", "Lucro Real"], required: true, secao: "Identificação" },
       { key: "endereco", label: "Endereço", type: "endereco", secao: "Endereço" },
+      // Visão geral: o painel de folgas só faz sentido na empresa que tem
+      // equipe em escala (25x5).
+      { key: "painelFolgas", label: "Visão geral", type: "check", textoCheck: "Mostrar o painel de folgas da equipe", secao: "Visão geral" },
       { key: "nfeSerie", label: "Série", type: "text", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
       { key: "nfeProximoNumero", label: "Próximo número", type: "number", aba: "fiscal", secao: "Nota fiscal (NF-e)" },
       { key: "cteSerie", label: "Série", type: "text", aba: "fiscal", secao: "Conhecimento de transporte (CT-e)" },
@@ -1122,6 +1125,7 @@ const MODULES = {
       im: data.im || undefined,
       rntrc: data.rntrc || undefined,
       cfopPadraoCte: data.cfopPadraoCte || undefined,
+      painelFolgas: data.painelFolgas !== false,
       // null para o padrão poder ser apagado na edição.
       cstPadraoCte: data.cstPadraoCte || null,
       observacaoPadraoCte: data.observacaoPadraoCte || null,
@@ -1154,6 +1158,7 @@ const MODULES = {
       im: r.im,
       rntrc: r.rntrc,
       cfopPadraoCte: r.cfopPadraoCte,
+      painelFolgas: r.painelFolgas !== false,
       cstPadraoCte: r.cstPadraoCte,
       observacaoPadraoCte: r.observacaoPadraoCte,
       pixRecebimento: r.pixRecebimento,
@@ -1187,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.148";
+const VERSAO_SISTEMA = "1.149";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.149", texto: "Configurações: escolher em quais empresas o painel de folgas aparece na Visão geral" },
   { versao: "1.148", texto: "Visão geral: folgas da equipe — quem está de folga, quando volta e as próximas folgas" },
   { versao: "1.147", texto: "Colaboradores: ficha completa (matrícula, endereço, nascimento e idade, filiação, cônjuge, RG e CTPS)" },
   { versao: "1.146", texto: "Colaboradores: salário e premiação por hora" },
@@ -6230,7 +6236,7 @@ function Dashboard({ counts, carregandoContagens, onNavigate, usuario }) {
       <ClientesDoMes />
       <AgendaDoPainel onNavigate={onNavigate} />
       {/* Só para quem tem o menu Ponto: a escala é dado do RH. */}
-      {menuLiberado("ponto", usuario) && <FolgasDoPainel />}
+      {menuLiberado("ponto", usuario) && usuario?.empresa?.painelFolgas !== false && <FolgasDoPainel />}
 
       <div className="dash-grid">
         {cards.map(({ key, cfg, count }) => {

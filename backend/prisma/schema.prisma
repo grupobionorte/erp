@@ -187,6 +187,10 @@ model Empresa {
   // na operação, e digitar o mesmo código toda vez é onde o erro entra.
   cfopPadraoCte String? @map("cfop_padrao_cte")
 
+  // Painel "Folgas da equipe" na Visão geral. Desligado na empresa que não
+  // tem equipe em escala, para o painel não aparecer lá.
+  painelFolgas Boolean @default(true) @map("painel_folgas")
+
   // Também preenchem o CT-e novo (e o gerado da NF-e): a situação tributária
   // da prestação e o texto que vai em todo CT-e da empresa. No documento
   // continuam editáveis.

@@ -38,6 +38,7 @@ async function vincularUsuario(colaboradorId, usuarioId) {
 // Situação e data de demissão andam juntas: demitido sem data não diz até
 // quando o ponto vale, e ativo com data de demissão é contradição.
 function problemaNaSituacao(dados) {
+  if (dados.tipoContrato !== undefined && !["clt", "pj"].includes(dados.tipoContrato)) return "Contrato deve ser CLT ou PJ";
   if (dados.situacao === undefined && dados.dataDemissao === undefined) return null;
   if (dados.situacao && !["ativo", "demitido"].includes(dados.situacao)) return "Situação deve ser Ativo ou Demitido";
   if (dados.situacao === "demitido" && !dados.dataDemissao) return "Informe a data de demissão";

@@ -539,6 +539,7 @@ const MODULES = {
       { key: "cpf", label: "CPF", type: "text", required: true },
       { key: "cargo", label: "Cargo", type: "text" },
       { key: "setor", label: "Setor", type: "select", options: ["Produção", "Logística", "Administrativo", "Comercial", "Fiscal", "Manutenção"] },
+      { key: "contrato", label: "Contrato", type: "select", options: ["CLT", "PJ"], default: "CLT" },
       { key: "admissao", label: "Data de admissão", type: "date" },
       // Demitido continua no cadastro (batidas e espelho), mas sai do tablet
       // de ponto depois da data de demissão.
@@ -553,7 +554,7 @@ const MODULES = {
         rotulo: (u) => `${u.nome} (${u.email})`,
       },
     ],
-    columns: ["nome", "cargo", "setor", "situacao", "telefone"],
+    columns: ["nome", "cargo", "setor", "contrato", "situacao", "telefone"],
     // Filtro e contagem por situação na listagem (Todos / Ativos / Demitidos).
     // A tela abre em Ativos: é quem o RH procura no dia a dia.
     filtroSituacao: { campo: "situacao", opcoes: [["Ativo", "Ativos"], ["Demitido", "Demitidos"]], padrao: "Ativo" },
@@ -564,6 +565,7 @@ const MODULES = {
       setor: data.setor || undefined,
       dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
       situacao: data.situacao === "Demitido" ? "demitido" : "ativo",
+      tipoContrato: data.contrato === "PJ" ? "pj" : "clt",
       // null (e não undefined) para a data sair quando o colaborador volta a
       // ativo.
       dataDemissao: data.demissao ? new Date(data.demissao).toISOString() : null,
@@ -579,6 +581,7 @@ const MODULES = {
       setor: r.setor,
       admissao: r.dataAdmissao ? r.dataAdmissao.slice(0, 10) : "",
       situacao: r.situacao === "demitido" ? "Demitido" : "Ativo",
+      contrato: r.tipoContrato === "pj" ? "PJ" : "CLT",
       demissao: r.dataDemissao ? r.dataDemissao.slice(0, 10) : "",
       telefone: r.telefone,
       email: r.email,
@@ -1103,12 +1106,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.141";
+const VERSAO_SISTEMA = "1.142";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.142", texto: "Colaboradores: tipo de contrato (CLT ou PJ)" },
   { versao: "1.141", texto: "Colaboradores: a listagem abre mostrando só os ativos" },
   { versao: "1.140", texto: "Colaboradores: filtro Todos/Ativos/Demitidos e total de ativos na listagem" },
   { versao: "1.139", texto: "Colaboradores: situação (Ativo/Demitido) e data de demissão; demitido sai do tablet de ponto" },

@@ -72,13 +72,15 @@ router.get("/", asyncHandler(async (req, res) => {
       ...(empresaId ? { OR: [{ empresaId }, { empresaId: null }] } : { empresaId: null }),
     },
     orderBy: { nome: "asc" },
-    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } } },
+    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } }, endereco: true },
   });
   res.json(colaboradores.map((c) => ({ ...c, usuarioId: c.usuario?.id ?? null })));
 }));
 
 router.post("/", asyncHandler(async (req, res) => {
-  const { empresaId, usuarioId, ...dados } = req.body;
+  // Endereço vai aninhado: com escrita aninhada o Prisma não aceita o campo
+  // de chave (enderecoId) junto.
+  const { empresaId, usuarioId, endereco, enderecoId, ...dados } = req.body;
   if (!dados.nome || !dados.cpf) {
     return res.status(400).json({ erro: "nome e cpf são obrigatórios" });
   }
@@ -90,7 +92,13 @@ router.post("/", asyncHandler(async (req, res) => {
   }
 
   const colaborador = await prisma.colaborador.create({
-    data: { ...dados, empresaId: req.usuario.empresaId || undefined },
+    data: {
+      ...dados,
+      // Com o endereço aninhado, a empresa também vai como relação (connect):
+      // misturar empresaId com escrita aninhada o Prisma recusa.
+      empresa: req.usuario.empresaId ? { connect: { id: req.usuario.empresaId } } : undefined,
+      endereco: endereco ? { create: endereco } : undefined,
+    },
   });
 
   if (usuarioId) {
@@ -103,13 +111,13 @@ router.post("/", asyncHandler(async (req, res) => {
 
   const completo = await prisma.colaborador.findUnique({
     where: { id: colaborador.id },
-    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } } },
+    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } }, endereco: true },
   });
   res.status(201).json({ ...completo, usuarioId: completo.usuario?.id ?? null });
 }));
 
 router.put("/:id", asyncHandler(async (req, res) => {
-  const { empresaId, ...dados } = req.body;
+  const { empresaId, endereco, enderecoId, ...dados } = req.body;
   const id = Number(req.params.id);
 
   const existente = await prisma.colaborador.findUnique({ where: { id } });
@@ -128,7 +136,15 @@ router.put("/:id", asyncHandler(async (req, res) => {
     }
   }
 
-  const colaborador = await prisma.colaborador.update({ where: { id }, data: camposColaborador });
+  // Endereço: cria quando ainda não existe, atualiza quando já existe. Rota
+  // de edição que esquece de gravar o endereço já aconteceu três vezes.
+  const colaborador = await prisma.colaborador.update({
+    where: { id },
+    data: {
+      ...camposColaborador,
+      endereco: endereco ? { upsert: { create: endereco, update: endereco } } : undefined,
+    },
+  });
 
   // undefined = a tela não mandou o campo, então o vínculo fica como está.
   if (usuarioId !== undefined) {
@@ -141,7 +157,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 
   const completo = await prisma.colaborador.findUnique({
     where: { id: colaborador.id },
-    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } } },
+    include: { usuario: { select: { id: true, nome: true, email: true, papel: true } }, endereco: true },
   });
   res.json({ ...completo, usuarioId: completo.usuario?.id ?? null });
 }));

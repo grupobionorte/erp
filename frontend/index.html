@@ -534,66 +534,140 @@ const MODULES = {
     icon: UserCog,
     color: "coral",
     apiPath: "/colaboradores",
+    // Ficha de registro do empregado: grade de 4 colunas, por seção.
+    colunas: 4,
     fields: [
-      { key: "nome", label: "Nome completo", type: "text", required: true },
-      { key: "cpf", label: "CPF", type: "text", required: true },
-      { key: "cargo", label: "Cargo", type: "text" },
-      { key: "setor", label: "Setor", type: "select", options: ["Produção", "Logística", "Administrativo", "Comercial", "Fiscal", "Manutenção"] },
-      { key: "contrato", label: "Contrato", type: "select", options: ["CLT", "PJ"], default: "CLT" },
-      { key: "admissao", label: "Data de admissão", type: "date" },
-      { key: "salario", label: "Salário (R$)", type: "moeda" },
-      { key: "premiacaoHora", label: "Premiação por hora (R$)", type: "moeda" },
-      // Demitido continua no cadastro (batidas e espelho), mas sai do tablet
-      // de ponto depois da data de demissão.
-      { key: "situacao", label: "Situação", type: "select", options: ["Ativo", "Demitido"], default: "Ativo" },
-      { key: "demissao", label: "Data de demissão", type: "date" },
-      { key: "telefone", label: "Telefone", type: "text" },
-      { key: "email", label: "E-mail", type: "text" },
+      { key: "nome", label: "Nome completo", type: "text", required: true, secao: "Identificação", largura: 2 },
+      { key: "cpf", label: "CPF", type: "text", required: true, secao: "Identificação", largura: 1 },
+      { key: "matricula", label: "Matrícula", type: "text", secao: "Identificação", largura: 1 },
+      { key: "telefone", label: "Telefone", type: "text", secao: "Identificação", largura: 1 },
+      { key: "email", label: "E-mail", type: "text", secao: "Identificação", largura: 1 },
       {
         key: "usuarioId", label: "Usuário", type: "vinculo",
         fonte: "/usuarios", vazio: "Sem usuário vinculado",
         ajuda: "Qual login do sistema pertence a esta pessoa.",
         rotulo: (u) => `${u.nome} (${u.email})`,
+        secao: "Identificação", largura: 2,
       },
+
+      { key: "contrato", label: "Contrato", type: "select", options: ["CLT", "PJ"], default: "CLT", secao: "Contrato", largura: 1 },
+      { key: "cargo", label: "Cargo", type: "text", secao: "Contrato", largura: 1 },
+      { key: "setor", label: "Setor", type: "select", options: ["Produção", "Logística", "Administrativo", "Comercial", "Fiscal", "Manutenção"], secao: "Contrato", largura: 1 },
+      { key: "admissao", label: "Data de admissão", type: "date", secao: "Contrato", largura: 1 },
+      { key: "salario", label: "Salário (R$)", type: "moeda", secao: "Contrato", largura: 1 },
+      { key: "premiacaoHora", label: "Premiação por hora (R$)", type: "moeda", secao: "Contrato", largura: 1 },
+      // Demitido continua no cadastro (batidas e espelho), mas sai do tablet
+      // de ponto depois da data de demissão.
+      { key: "situacao", label: "Situação", type: "select", options: ["Ativo", "Demitido"], default: "Ativo", secao: "Contrato", largura: 1 },
+      { key: "demissao", label: "Data de demissão", type: "date", secao: "Contrato", largura: 1 },
+
+      { key: "nascimento", label: "Data de nascimento", type: "date", secao: "Dados pessoais", largura: 1 },
+      // Idade é calculada, nunca digitada: campo calculado editável deixa
+      // passar um valor que não bate com a data.
+      { key: "idade", label: "Idade", type: "calculado", calcular: (d) => idadeEm(d.nascimento), secao: "Dados pessoais", largura: 1 },
+      { key: "nacionalidade", label: "Nacionalidade", type: "text", secao: "Dados pessoais", largura: 1 },
+      { key: "naturalidade", label: "Local de nascimento (cidade/UF)", type: "text", secao: "Dados pessoais", largura: 1 },
+      { key: "estadoCivil", label: "Estado civil", type: "select", options: ["Solteiro(a)", "Casado(a)", "União estável", "Divorciado(a)", "Separado(a)", "Viúvo(a)"], secao: "Dados pessoais", largura: 1 },
+
+      { key: "nomePai", label: "Nome do pai", type: "text", secao: "Filiação e cônjuge", largura: 2 },
+      { key: "nomeMae", label: "Nome da mãe", type: "text", secao: "Filiação e cônjuge", largura: 2 },
+      { key: "conjugeNome", label: "Nome do cônjuge", type: "text", secao: "Filiação e cônjuge", largura: 3 },
+      { key: "conjugeCpf", label: "CPF do cônjuge", type: "text", secao: "Filiação e cônjuge", largura: 1 },
+
+      { key: "rgNumero", label: "Identidade (RG)", type: "text", secao: "Documentos", largura: 1 },
+      { key: "rgOrgao", label: "Órgão emissor", type: "text", secao: "Documentos", largura: 1 },
+      { key: "rgUf", label: "UF do RG", type: "select", options: UFS, secao: "Documentos", largura: 1 },
+      { key: "rgEmissao", label: "Emissão do RG", type: "date", secao: "Documentos", largura: 1 },
+      { key: "ctpsNumero", label: "Carteira profissional (CTPS)", type: "text", secao: "Documentos", largura: 1 },
+      { key: "ctpsSerie", label: "Série da CTPS", type: "text", secao: "Documentos", largura: 1 },
+      { key: "ctpsUf", label: "UF da CTPS", type: "select", options: UFS, secao: "Documentos", largura: 1 },
+      { key: "ctpsEmissao", label: "Emissão da CTPS", type: "date", secao: "Documentos", largura: 1 },
+
+      { key: "endereco", label: "Endereço", type: "endereco", secao: "Endereço" },
     ],
     columns: ["nome", "cargo", "setor", "contrato", "situacao", "telefone"],
     // Filtro e contagem por situação na listagem (Todos / Ativos / Demitidos).
     // A tela abre em Ativos: é quem o RH procura no dia a dia.
     filtroSituacao: { campo: "situacao", opcoes: [["Ativo", "Ativos"], ["Demitido", "Demitidos"]], padrao: "Ativo" },
-    toApi: (data) => ({
-      nome: data.nome,
-      cpf: data.cpf,
-      cargo: data.cargo || undefined,
-      setor: data.setor || undefined,
-      dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
-      situacao: data.situacao === "Demitido" ? "demitido" : "ativo",
-      tipoContrato: data.contrato === "PJ" ? "pj" : "clt",
-      // null para o valor poder ser apagado na edição.
-      salario: data.salario !== "" && data.salario != null ? Number(data.salario) : null,
-      premiacaoPorHora: data.premiacaoHora !== "" && data.premiacaoHora != null ? Number(data.premiacaoHora) : null,
-      // null (e não undefined) para a data sair quando o colaborador volta a
-      // ativo.
-      dataDemissao: data.demissao ? new Date(data.demissao).toISOString() : null,
-      telefone: data.telefone || undefined,
-      email: data.email || undefined,
-      usuarioId: data.usuarioId ?? null,
-    }),
-    fromApi: (r) => ({
-      id: r.id,
-      nome: r.nome,
-      cpf: r.cpf,
-      cargo: r.cargo,
-      setor: r.setor,
-      admissao: r.dataAdmissao ? r.dataAdmissao.slice(0, 10) : "",
-      situacao: r.situacao === "demitido" ? "Demitido" : "Ativo",
-      contrato: r.tipoContrato === "pj" ? "PJ" : "CLT",
-      salario: r.salario ?? "",
-      premiacaoHora: r.premiacaoPorHora ?? "",
-      demissao: r.dataDemissao ? r.dataDemissao.slice(0, 10) : "",
-      telefone: r.telefone,
-      email: r.email,
-      usuarioId: r.usuarioId ?? r.usuario?.id ?? null,
-    }),
+    toApi: (data) => {
+      // Campo só-data vai como meia-noite UTC (como a admissão); vazio vira
+      // null para poder ser apagado na edição.
+      const dataOuNull = (v) => (v ? new Date(v).toISOString() : null);
+      const texto = (v) => (v && String(v).trim()) || null;
+      return {
+        nome: data.nome,
+        cpf: data.cpf,
+        cargo: data.cargo || undefined,
+        setor: data.setor || undefined,
+        dataAdmissao: data.admissao ? new Date(data.admissao).toISOString() : undefined,
+        situacao: data.situacao === "Demitido" ? "demitido" : "ativo",
+        tipoContrato: data.contrato === "PJ" ? "pj" : "clt",
+        // null para o valor poder ser apagado na edição.
+        salario: data.salario !== "" && data.salario != null ? Number(data.salario) : null,
+        premiacaoPorHora: data.premiacaoHora !== "" && data.premiacaoHora != null ? Number(data.premiacaoHora) : null,
+        // null (e não undefined) para a data sair quando o colaborador volta a
+        // ativo.
+        dataDemissao: dataOuNull(data.demissao),
+        telefone: data.telefone || undefined,
+        email: data.email || undefined,
+        usuarioId: data.usuarioId ?? null,
+        matricula: texto(data.matricula),
+        dataNascimento: dataOuNull(data.nascimento),
+        nacionalidade: texto(data.nacionalidade),
+        naturalidade: texto(data.naturalidade),
+        estadoCivil: texto(data.estadoCivil),
+        nomePai: texto(data.nomePai),
+        nomeMae: texto(data.nomeMae),
+        conjugeNome: texto(data.conjugeNome),
+        conjugeCpf: texto(data.conjugeCpf),
+        rgNumero: texto(data.rgNumero),
+        rgOrgaoEmissor: texto(data.rgOrgao),
+        rgUf: texto(data.rgUf),
+        rgDataEmissao: dataOuNull(data.rgEmissao),
+        ctpsNumero: texto(data.ctpsNumero),
+        ctpsSerie: texto(data.ctpsSerie),
+        ctpsUf: texto(data.ctpsUf),
+        ctpsDataEmissao: dataOuNull(data.ctpsEmissao),
+        endereco: data.endereco || undefined,
+      };
+    },
+    fromApi: (r) => {
+      const dia = (v) => (v ? String(v).slice(0, 10) : "");
+      return {
+        id: r.id,
+        nome: r.nome,
+        cpf: r.cpf,
+        cargo: r.cargo,
+        setor: r.setor,
+        admissao: dia(r.dataAdmissao),
+        situacao: r.situacao === "demitido" ? "Demitido" : "Ativo",
+        contrato: r.tipoContrato === "pj" ? "PJ" : "CLT",
+        salario: r.salario ?? "",
+        premiacaoHora: r.premiacaoPorHora ?? "",
+        demissao: dia(r.dataDemissao),
+        telefone: r.telefone,
+        email: r.email,
+        usuarioId: r.usuarioId ?? r.usuario?.id ?? null,
+        matricula: r.matricula || "",
+        nascimento: dia(r.dataNascimento),
+        nacionalidade: r.nacionalidade || "",
+        naturalidade: r.naturalidade || "",
+        estadoCivil: r.estadoCivil || "",
+        nomePai: r.nomePai || "",
+        nomeMae: r.nomeMae || "",
+        conjugeNome: r.conjugeNome || "",
+        conjugeCpf: r.conjugeCpf || "",
+        rgNumero: r.rgNumero || "",
+        rgOrgao: r.rgOrgaoEmissor || "",
+        rgUf: r.rgUf || "",
+        rgEmissao: dia(r.rgDataEmissao),
+        ctpsNumero: r.ctpsNumero || "",
+        ctpsSerie: r.ctpsSerie || "",
+        ctpsUf: r.ctpsUf || "",
+        ctpsEmissao: dia(r.ctpsDataEmissao),
+        endereco: mapEndereco(r.endereco),
+      };
+    },
   },
   transportadoras: {
     label: "Transportadoras",
@@ -1113,12 +1187,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.146";
+const VERSAO_SISTEMA = "1.147";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.147", texto: "Colaboradores: ficha completa (matrícula, endereço, nascimento e idade, filiação, cônjuge, RG e CTPS)" },
   { versao: "1.146", texto: "Colaboradores: salário e premiação por hora" },
   { versao: "1.145", texto: "Colaboradores: cadastro excluído não segura mais o CPF; aviso diz com quem é o conflito" },
   { versao: "1.144", texto: "Tablet de ponto: no cadastro facial, só aparecem as empresas liberadas para o tablet" },
@@ -1681,7 +1756,26 @@ const UNIDADES_SERVICO = [
   { valor: "alq", rotulo: "alq" },
 ];
 
+// Idade completa hoje (no fuso da operação) para uma data "AAAA-MM-DD".
+function idadeEm(nascimento) {
+  if (!nascimento) return "";
+  const [a, m, d] = String(nascimento).slice(0, 10).split("-").map(Number);
+  const [ha, hm, hd] = hojeNoFuso().split("-").map(Number);
+  if (!a) return "";
+  const anos = ha - a - (hm < m || (hm === m && hd < d) ? 1 : 0);
+  return anos >= 0 ? `${anos} anos` : "";
+}
+
 function Field({ field, value, onChange, disabled, dados }) {
+  // Calculado: só mostra, nunca é digitado nem vai para o servidor.
+  if (field.type === "calculado") {
+    return (
+      <div className="field-group">
+        <label className="field-label">{field.label}</label>
+        <input value={field.calcular(dados || {}) || ""} disabled readOnly />
+      </div>
+    );
+  }
   // Campo que puxa outro cadastro para vincular (usuário <-> colaborador).
   // A lista vem da própria API, então o que aparece aqui é sempre o que
   // está cadastrado de verdade.

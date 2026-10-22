@@ -116,6 +116,7 @@ model Endereco {
 
   @@map("enderecos")
   motoristas     Motorista[]
+  colaboradores  Colaborador[]
 }
 
 model CertificadoDigital {
@@ -295,6 +296,27 @@ model Colaborador {
   // Remuneração: salário mensal e prêmio pago por hora trabalhada (R$).
   salario         Float?  @map("salario")
   premiacaoPorHora Float? @map("premiacao_por_hora")
+
+  // Ficha de registro do empregado.
+  matricula        String?
+  dataNascimento   DateTime? @map("data_nascimento")   // só a data; a idade é calculada
+  nacionalidade    String?
+  naturalidade     String?                             // local de nascimento
+  estadoCivil      String?   @map("estado_civil")
+  nomePai          String?   @map("nome_pai")
+  nomeMae          String?   @map("nome_mae")
+  conjugeNome      String?   @map("conjuge_nome")
+  conjugeCpf       String?   @map("conjuge_cpf")
+  rgNumero         String?   @map("rg_numero")
+  rgOrgaoEmissor   String?   @map("rg_orgao_emissor")
+  rgUf             String?   @map("rg_uf")
+  rgDataEmissao    DateTime? @map("rg_data_emissao")
+  ctpsNumero       String?   @map("ctps_numero")
+  ctpsSerie        String?   @map("ctps_serie")
+  ctpsUf           String?   @map("ctps_uf")
+  ctpsDataEmissao  DateTime? @map("ctps_data_emissao")
+  enderecoId       Int?      @map("endereco_id")
+  endereco         Endereco? @relation(fields: [enderecoId], references: [id])
   dataDemissao  DateTime? @map("data_demissao")
   telefone      String?
   email         String?

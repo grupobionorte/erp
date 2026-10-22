@@ -85,8 +85,8 @@ congelados na emissão (`dados`). Numeração própria por empresa
 AT&M (`services/averbacaoAtm.js`, envia o XML autorizado); ao cancelar,
 manda o XML do cancelamento. Falha da AT&M nunca segura o CT-e: fica "não
 averbado" na lista e o menu repete. O número da averbação preenche o
-MDF-e gerado do CT-e. Ainda não conferido em produção qual número a AT&M
-devolve (NumeroAverbacao; sem ele, o protocolo).
+MDF-e gerado do CT-e. O número gravado é o `NumeroAverbacao` da resposta
+(sem ele, o protocolo) — conferido em produção contra o portal da AT&M.
 
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra

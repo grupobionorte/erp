@@ -501,6 +501,16 @@ model DocumentoFiscal {
   dataEmissao          DateTime               @default(now()) @map("data_emissao")
   dataAutorizacao      DateTime?              @map("data_autorizacao")
   xmlUrl               String?                @map("xml_url")
+  // XML do cancelamento (CT-e): é ele que cancela a averbação na AT&M.
+  xmlCancelamentoUrl   String?                @map("xml_cancelamento_url")
+
+  // Averbação do seguro de carga (CT-e, AT&M). O número vai no seguro do
+  // MDF-e. Situação: enviando | averbado | erro | cancelada | erro_cancelamento.
+  averbacaoSituacao    String?                @map("averbacao_situacao")
+  averbacaoProtocolo   String?                @map("averbacao_protocolo")
+  averbacaoNumero      String?                @map("averbacao_numero")
+  averbacaoData        DateTime?              @map("averbacao_data")
+  averbacaoMensagem    String?                @map("averbacao_mensagem")
   pdfUrl               String?                @map("pdf_url")
   motivoRejeicao       String?                @map("motivo_rejeicao")
   // Quantas vezes esse documento já foi mandado ao provedor. A referência

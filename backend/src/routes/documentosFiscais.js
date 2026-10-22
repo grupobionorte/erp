@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const focusNfe = require("../services/focusNfe");
+const averbacaoAtm = require("../services/averbacaoAtm");
 
 const asyncHandler = require("../lib/asyncHandler");
 const fuso = require("../lib/fuso");
@@ -15,6 +16,57 @@ async function cnpjDoEmitente(empresaId) {
   if (!empresaId) return undefined;
   const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { cnpj: true } });
   return empresa?.cnpj;
+}
+
+// Averba (ou cancela a averbação de) um CT-e na AT&M e grava o resultado.
+// Sem credenciais no Render não faz nada. Nunca impede a autorização nem o
+// cancelamento do CT-e: se a AT&M falhar, fica marcado e dá para repetir
+// pelo menu do CT-e.
+async function averbarCte(documento, { cancelamento = false, forcar = false } = {}) {
+  if (documento.tipo !== "CTe") return null;
+  const cnpj = await cnpjDoEmitente(documento.empresaId);
+  if (!averbacaoAtm.configurada(cnpj)) return null;
+
+  const gravar = (data) => prisma.documentoFiscal.update({ where: { id: documento.id }, data });
+  // A tela consulta o status em intervalos: duas consultas juntas veriam o
+  // CT-e recém-autorizado e averbariam duas vezes. Só a primeira passa.
+  if (!cancelamento && !forcar) {
+    const { count } = await prisma.documentoFiscal.updateMany({
+      where: { id: documento.id, averbacaoSituacao: null },
+      data: { averbacaoSituacao: "enviando" },
+    });
+    if (!count) return null;
+  }
+  const situacaoErro = cancelamento ? "erro_cancelamento" : "erro";
+  const url = cancelamento ? documento.xmlCancelamentoUrl : documento.xmlUrl;
+  if (!url) {
+    return gravar({
+      averbacaoSituacao: situacaoErro,
+      averbacaoMensagem: cancelamento
+        ? "A Focus não devolveu o XML do cancelamento: cancele a averbação no portal da AT&M."
+        : "CT-e sem XML autorizado para averbar.",
+    });
+  }
+  try {
+    const baixado = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    if (!baixado.ok) throw new Error(`não foi possível baixar o XML (HTTP ${baixado.status})`);
+    const xml = await baixado.text();
+    const r = await averbacaoAtm.averbarXmlCte({ xml, cnpj, ambiente: focusNfe.ambienteDoTipo("CTe") });
+    if (!r.ok) return gravar({ averbacaoSituacao: situacaoErro, averbacaoMensagem: r.mensagem });
+    if (cancelamento) {
+      return gravar({ averbacaoSituacao: "cancelada", averbacaoMensagem: r.protocolo ? `Cancelamento protocolo ${r.protocolo}` : null });
+    }
+    return gravar({
+      averbacaoSituacao: "averbado",
+      averbacaoProtocolo: r.protocolo,
+      // O número da averbação é o que vai no MDF-e; sem ele, o protocolo.
+      averbacaoNumero: r.numero || r.protocolo,
+      averbacaoData: new Date(),
+      averbacaoMensagem: null,
+    });
+  } catch (erro) {
+    return gravar({ averbacaoSituacao: situacaoErro, averbacaoMensagem: `Falha ao falar com a AT&M: ${erro.message}` });
+  }
 }
 
 // Referência enviada ao provedor. A primeira tentativa mantém o formato
@@ -1035,7 +1087,11 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
       seguroNomeSeguradora: seguroDoManifesto.nomeSeguradora || undefined,
       seguroCnpjSeguradora: seguroDoManifesto.cnpjSeguradora || undefined,
       seguroNumeroApolice: seguroDoManifesto.numeroApolice || undefined,
-      seguroNumeroAverbacao: seguro?.numeroAverbacao || undefined,
+      // Averbação: a digitada vale; sem ela, a que a AT&M devolveu para o
+      // CT-e (a mesma viagem).
+      seguroNumeroAverbacao: seguro?.numeroAverbacao
+        || ctes.find((c) => c.averbacaoSituacao === "averbado" && c.averbacaoNumero)?.averbacaoNumero
+        || undefined,
 
       documentosVinculados: { connect: ctes.map((c) => ({ id: c.id })) },
     },
@@ -1047,6 +1103,35 @@ router.post("/mdfe/gerar-do-cte", asyncHandler(async (req, res) => {
 
 // Encerramento do MDFe — obrigatório quando a viagem termina. Sem isso a
 // SEFAZ recusa o próximo manifesto da mesma placa.
+// Averbação do CT-e na AT&M pelo menu: repete a que falhou na autorização
+// ou, no CT-e cancelado, cancela a averbação.
+router.post("/:id/averbar", asyncHandler(async (req, res) => {
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id: Number(req.params.id) } });
+  if (!documento || documento.tipo !== "CTe") return res.status(404).json({ erro: "CT-e não encontrado" });
+  if (documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (!averbacaoAtm.configurada(await cnpjDoEmitente(documento.empresaId))) {
+    return res.status(400).json({
+      erro: "A averbação AT&M não está configurada para esta empresa",
+      detalhe: "Cadastre ATM_USUARIO, ATM_SENHA e ATM_CODIGO no Render (serviço erp-biomassa-backend).",
+    });
+  }
+  let atualizado;
+  if (documento.status === "autorizado") {
+    if (documento.averbacaoSituacao === "averbado") return res.json(documento);
+    atualizado = await averbarCte(documento, { forcar: true });
+  } else if (documento.status === "cancelado" && ["averbado", "erro_cancelamento"].includes(documento.averbacaoSituacao)) {
+    atualizado = await averbarCte(documento, { cancelamento: true });
+  } else {
+    return res.status(409).json({ erro: "Só CT-e autorizado (ou cancelado já averbado) passa pela averbação" });
+  }
+  if (atualizado.averbacaoSituacao === "erro" || atualizado.averbacaoSituacao === "erro_cancelamento") {
+    return res.status(502).json({ erro: "A AT&M não confirmou", detalhe: atualizado.averbacaoMensagem });
+  }
+  res.json(atualizado);
+}));
+
 router.post("/:id/encerrar", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
@@ -1563,6 +1648,12 @@ router.get("/:id/status", asyncHandler(async (req, res) => {
       },
     });
 
+    // CT-e acabou de ser autorizado: averba o seguro na AT&M, sem segurar
+    // a resposta. O resultado aparece na lista do CT-e.
+    if (documento.tipo === "CTe" && documento.status !== "autorizado") {
+      averbarCte(atualizado).catch((e) => console.error("[averbacao]", e.message));
+    }
+
     // Recoloca o contador à frente do último número autorizado, para o
     // próximo rascunho já nascer com a previsão certa.
     if (numeroAutorizado && documento.empresaId) {
@@ -1919,8 +2010,17 @@ router.delete("/:id", asyncHandler(async (req, res) => {
       }
       const atualizado = await prisma.documentoFiscal.update({
         where: { id },
-        data: { status: "cancelado", justificativaCancelamento: justificativa.trim() },
+        data: {
+          status: "cancelado",
+          justificativaCancelamento: justificativa.trim(),
+          xmlCancelamentoUrl: focusNfe.urlCompleta(resultado.caminho_xml_cancelamento, existente.tipo) || undefined,
+        },
       });
+      // CT-e averbado: cancelar na SEFAZ não cancela a averbação. Manda o
+      // XML do cancelamento para a AT&M, sem segurar a resposta.
+      if (existente.tipo === "CTe" && existente.averbacaoSituacao === "averbado") {
+        averbarCte(atualizado, { cancelamento: true }).catch((e) => console.error("[averbacao]", e.message));
+      }
       // MDF-e cancelado na SEFAZ libera o CT-e para um manifesto novo. O XML do
       // cancelado continua guardando quais CT-es ele levava.
       if (existente.tipo === "MDFe") {

@@ -1085,8 +1085,40 @@ function montarPayloadMdfe({
         : undefined,
     },
 
-    informacao_complementar: documento.informacoesComplementares || undefined,
+    // O DAMDFE da Focus não imprime o RNTRC da empresa nem o seguro, embora
+    // os dois vão nas tags próprias acima. A fiscalização de estrada olha o
+    // papel: repetimos nas observações, uma informação por linha, como no
+    // DANFE.
+    informacao_complementar: [
+      documento.informacoesComplementares,
+      ...linhasDoMdfeParaObservacao(documento, empresa),
+    ]
+      .map((t) => (t || "").trim())
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, 5000) || undefined,
   };
+}
+
+function linhasDoMdfeParaObservacao(documento, empresa) {
+  const texto = (documento.informacoesComplementares || "").toUpperCase();
+  const cnpj = (v) => {
+    const d = somenteDigitos(v);
+    return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : d;
+  };
+  const linhas = [];
+  // Quem já digitou à mão não ganha a linha repetida.
+  const rntrc = somenteDigitos(empresa.rntrc);
+  if (rntrc && !texto.includes("RNTRC")) linhas.push(`RNTRC: ${rntrc}`);
+  if (documento.seguroNomeSeguradora && !texto.includes("SEGURADORA")) {
+    linhas.push([
+      `Seguradora: ${textoLimpo(documento.seguroNomeSeguradora)}`,
+      documento.seguroCnpjSeguradora && `CNPJ ${cnpj(documento.seguroCnpjSeguradora)}`,
+      documento.seguroNumeroApolice && `Apólice ${textoLimpo(documento.seguroNumeroApolice)}`,
+      documento.seguroNumeroAverbacao && `Averbação ${textoLimpo(documento.seguroNumeroAverbacao)}`,
+    ].filter(Boolean).join(" - "));
+  }
+  return linhas;
 }
 
 

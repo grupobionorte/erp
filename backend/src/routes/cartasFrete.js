@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
+const { intervaloNoFuso, partesNoFuso } = require("../lib/fuso");
 
 const router = express.Router();
 
@@ -216,6 +217,85 @@ router.post("/", asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(carta);
+}));
+
+/**
+ * Relação das cartas frete do período (relatório do CT-e). O período é o da
+ * emissão da carta, no fuso da operação. Totais só das emitidas: a
+ * cancelada aparece na lista, mas não é frete a pagar.
+ */
+router.get("/", asyncHandler(async (req, res) => {
+  const { de, ate } = req.query;
+  if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+  const { inicio, fim } = intervaloNoFuso(de, ate);
+  const status = req.query.status === "emitida" ? ["emitida"]
+    : req.query.status === "cancelada" ? ["cancelada"]
+    : ["emitida", "cancelada"];
+
+  const [empresa, cartas] = await Promise.all([
+    prisma.empresa.findUnique({
+      where: { id: req.usuario.empresaId },
+      select: { razaoSocial: true, cnpj: true, ie: true, endereco: true },
+    }),
+    prisma.cartaFrete.findMany({
+      where: { empresaId: req.usuario.empresaId, status: { in: status }, dataEmissao: { gte: inicio, lte: fim } },
+      orderBy: { numero: "asc" },
+    }),
+  ]);
+
+  // Proprietário pelo nome ou pelo CPF/CNPJ (com ou sem pontuação): é a
+  // pergunta "quanto paguei a fulano no mês".
+  const busca = String(req.query.proprietario || "").trim().toLowerCase();
+  const buscaDigitos = soDigitos(busca);
+  const doProprietario = (c) => {
+    if (!busca) return true;
+    const p = c.dados?.proprietario || {};
+    return String(p.nome || "").toLowerCase().includes(busca)
+      || (buscaDigitos.length >= 3 && soDigitos(p.documento).includes(buscaDigitos));
+  };
+
+  const linhas = cartas.filter(doProprietario).map((c) => {
+    const d = c.dados || {};
+    // Tudo o que sai do frete além do adiantamento, já descontados os
+    // créditos: frete - adiantamento - descontos = saldo, sempre.
+    const descontos = arredondar(c.valorDocumento - c.adiantamento - c.valorLiquido);
+    return {
+      id: c.id,
+      numero: c.numero,
+      status: c.status,
+      dia: partesNoFuso(c.dataEmissao).dia,
+      cte: d.cte ? `${d.cte.numero ?? ""}${d.cte.serie != null ? `/${d.cte.serie}` : ""}` : null,
+      proprietario: d.proprietario?.nome || null,
+      proprietarioDocumento: d.proprietario?.documento || null,
+      motorista: d.motorista?.nome || null,
+      placas: (d.placas || []).join(" / "),
+      coleta: d.coleta || null,
+      entrega: d.entrega || null,
+      pesoToneladas: c.pesoToneladas,
+      valorPorTonelada: c.valorPorTonelada,
+      valorDocumento: c.valorDocumento,
+      adiantamento: c.adiantamento,
+      descontos,
+      valorLiquido: c.valorLiquido,
+    };
+  });
+
+  const validas = linhas.filter((l) => l.status === "emitida");
+  const total = (campo) => arredondar(validas.reduce((t, l) => t + (l[campo] || 0), 0));
+  res.json({
+    empresa,
+    periodo: { de, ate },
+    linhas,
+    totais: {
+      quantidade: validas.length,
+      canceladas: linhas.length - validas.length,
+      pesoToneladas: Math.round(validas.reduce((t, l) => t + (l.pesoToneladas || 0), 0) * 1000) / 1000,
+      valorDocumento: total("valorDocumento"),
+      adiantamento: total("adiantamento"),
+      descontos: total("descontos"),
+      valorLiquido: total("valorLiquido"),
+    },
+  });
 }));
 
 // Cancelar não apaga: o número fica registrado, e uma carta assinada nunca

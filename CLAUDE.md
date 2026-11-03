@@ -79,7 +79,8 @@ quando é de terceiro. Valor do documento = peso (t) × valor por tonelada;
 documento e líquido são calculados no servidor. Uma carta valendo por CT-e;
 cancelada fica no histórico e o número não volta. Os dados das partes ficam
 congelados na emissão (`dados`). Numeração própria por empresa
-(`cartaFreteProximoNumero`).
+(`cartaFreteProximoNumero`). A relação por período fica no Relatório do CT-e
+(`GET /cartas-frete?de=&ate=&status=&proprietario=`); totais só das emitidas.
 
 **Averbação do seguro (AT&M):** ao autorizar, o CT-e é averbado sozinho na
 AT&M (`services/averbacaoAtm.js`, envia o XML autorizado); ao cancelar,

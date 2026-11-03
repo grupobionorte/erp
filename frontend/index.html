@@ -22,7 +22,7 @@
 
 <script type="text/babel">
 // ---------- Ícones (equivalentes simples, sem depender de pacotes externos) ----------
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 function IconBase({ children, size = 16, ...rest }) {
   return (
@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.155";
+const VERSAO_SISTEMA = "1.156";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.156", texto: "Operação: despesas lançadas da mais recente para a mais antiga" },
   { versao: "1.155", texto: "Relatório de CT-e: baixar os PDFs (DACTE) do período num zip, como os XMLs" },
   { versao: "1.154", texto: "MDF-e: RNTRC da empresa e dados do seguro (seguradora, apólice, averbação) saem nas observações do DAMDFE" },
   { versao: "1.153", texto: "Espelho de ponto: a batida incluída pelo RH agora aparece e entra na conta; nova janela para tratar o dia" },
@@ -3607,7 +3608,11 @@ function DespesasAba({ operacaoId }) {
   }, []);
   useEffect(() => { carregarApoio(); }, [carregarApoio]);
 
-  const pag = usePaginacaoLocal(contas, operacaoId);
+  // Na operação, quem olha quer o lançamento mais recente primeiro (o
+  // Contas a pagar segue por vencimento crescente, que é a ordem de pagar).
+  const contasRecentes = useMemo(() => contas && [...contas].sort((a, b) =>
+    String(b.vencimento || "").localeCompare(String(a.vencimento || "")) || b.id - a.id), [contas]);
+  const pag = usePaginacaoLocal(contasRecentes, operacaoId);
 
   if (!operacaoId) return <p className="hint">Salve a operação primeiro para lançar despesas.</p>;
   if (erro && !contas) return <p className="error-text" style={{ padding: "0 22px" }}>{erro}</p>;

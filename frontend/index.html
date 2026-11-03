@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.154";
+const VERSAO_SISTEMA = "1.155";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.155", texto: "Relatório de CT-e: baixar os PDFs (DACTE) do período num zip, como os XMLs" },
   { versao: "1.154", texto: "MDF-e: RNTRC da empresa e dados do seguro (seguradora, apólice, averbação) saem nas observações do DAMDFE" },
   { versao: "1.153", texto: "Espelho de ponto: a batida incluída pelo RH agora aparece e entra na conta; nova janela para tratar o dia" },
   { versao: "1.152", texto: "CT-e: coluna Seguro na lista, mostrando se o CT-e foi averbado na AT&M" },
@@ -8065,23 +8066,25 @@ function RelatorioCteModal({ onFechar }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
-  const [baixando, setBaixando] = useState(false);
+  const [baixando, setBaixando] = useState("");
 
   const parametros = () => {
     const { cliente: _cliente, ...resto } = filtro;
     return new URLSearchParams({ ...resto, ...(codigo ? { clienteId: codigo } : {}) });
   };
 
-  // Pacote dos XMLs com os mesmos filtros do relatório, como na NF-e. O zip
-  // é montado no servidor, que busca cada XML no provedor.
-  const baixarXmls = async () => {
+  // Pacote dos XMLs ou dos PDFs (DACTE) com os mesmos filtros do
+  // relatório, como na NF-e. O zip é montado no servidor, que busca cada
+  // arquivo no provedor.
+  const baixarPacote = async (tipo) => {
     if (textoCliente && !clienteEscolhido) { setErro(`${PAPEIS[filtro.papel]} não encontrado na lista de clientes.`); return; }
-    setErro(""); setBaixando(true);
+    setErro(""); setBaixando(tipo);
     try {
-      await apiDownload(`/relatorios/cte/xmls?${parametros()}`, `XMLs-CTe-${filtro.de}-a-${filtro.ate}.zip`);
+      const nome = tipo === "pdfs" ? "PDFs" : "XMLs";
+      await apiDownload(`/relatorios/cte/${tipo}?${parametros()}`, `${nome}-CTe-${filtro.de}-a-${filtro.ate}.zip`);
     } catch (e) {
       setErro(e.message);
-    } finally { setBaixando(false); }
+    } finally { setBaixando(""); }
   };
 
   const gerar = async () => {
@@ -8249,8 +8252,11 @@ function RelatorioCteModal({ onFechar }) {
               {carregando ? "Buscando…" : "Gerar"}
             </button>
             {dados && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
-            <button className="btn" onClick={baixarXmls} disabled={baixando}>
-              {baixando ? "Compactando…" : "Baixar XMLs do período"}
+            <button className="btn" onClick={() => baixarPacote("xmls")} disabled={Boolean(baixando)}>
+              {baixando === "xmls" ? "Compactando…" : "Baixar XMLs do período"}
+            </button>
+            <button className="btn" onClick={() => baixarPacote("pdfs")} disabled={Boolean(baixando)}>
+              {baixando === "pdfs" ? "Compactando…" : "Baixar PDFs do período"}
             </button>
           </div>
           {erro && <p className="error-text">{erro}</p>}

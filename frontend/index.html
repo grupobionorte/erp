@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.157";
+const VERSAO_SISTEMA = "1.158";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.158", texto: "Relatório do CT-e: relação das cartas frete emitidas no período, com filtro por proprietário" },
   { versao: "1.157", texto: "Contas a pagar: relatório impresso em paisagem" },
   { versao: "1.156", texto: "Operação: despesas lançadas da mais recente para a mais antiga" },
   { versao: "1.155", texto: "Relatório de CT-e: baixar os PDFs (DACTE) do período num zip, como os XMLs" },
@@ -8052,7 +8053,132 @@ function RelatorioNfeModal({ onFechar }) {
 // Relatório de CT-e emitidos, no layout do sistema anterior (Quinto Eixo):
 // folha deitada, cabeçalho da empresa, uma linha por conhecimento e os
 // totais no fim. As contas vêm prontas do servidor.
+// Relação das cartas frete do período, dentro do relatório do CT-e. Os
+// valores vêm prontos do servidor (o mesmo cálculo da carta); aqui só
+// filtra, lista e imprime.
+function RelatorioCartasFrete() {
+  const hoje = hojeNoFuso();
+  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "emitida", proprietario: "" });
+  const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [dados, setDados] = useState(null);
+
+  const imprimir = (resultado) => {
+    const r = resultado || dados;
+    if (!r) return;
+    const janela = window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+    const esc = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const dia = (d) => d ? d.split("-").reverse().join("/") : "";
+    const din = (v) => formatarDecimal(v, 2);
+    const e = r.empresa || {};
+    const cnpj = String(e.cnpj || "").replace(/\D/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    const agora = new Date().toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO }).replace(",", "");
+    const T = r.totais;
+    const linhas = r.linhas.map(l => `
+      <tr class="${l.status === "cancelada" ? "canc" : ""}">
+        <td>${dia(l.dia)}</td><td>${esc(l.numero)}</td><td>${esc(l.cte || "")}</td>
+        <td>${esc(l.proprietario || "")}</td><td>${esc(l.motorista || "")}</td><td>${esc(l.placas)}</td>
+        <td>${esc([l.coleta, l.entrega].filter(Boolean).join(" → "))}</td>
+        ${l.status === "cancelada" ? `<td colspan="6">Cancelada</td>` : `
+        <td class="n">${formatarDecimal(l.pesoToneladas, 3)}</td><td class="n">${din(l.valorPorTonelada)}</td>
+        <td class="n">${din(l.valorDocumento)}</td><td class="n">${din(l.adiantamento)}</td>
+        <td class="n">${din(l.descontos)}</td><td class="n">${din(l.valorLiquido)}</td>`}
+      </tr>`).join("");
+    janela.document.write(`
+      <!doctype html><html><head><meta charset="utf-8"><title>Relação de cartas frete</title>
+      <style>
+        @page { size: A4 landscape; margin: 10mm 9mm 12mm;
+          @top-right { content: "Folha " counter(page) " de " counter(pages); font: 10px Arial, sans-serif; } }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 10px; margin: 0; }
+        .topo { display: flex; justify-content: space-between; font-size: 10.5px; line-height: 1.55; }
+        h1 { text-align: center; font-size: 13px; margin: 10px 0 2px; }
+        .periodo { text-align: right; font-size: 10.5px; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th { font-size: 9.5px; text-align: left; border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 3px; }
+        td { padding: 2.5px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        th.n, td.n { text-align: right; }
+        tr.canc td { color: #777; }
+        .total td { font-weight: 700; border-top: 1.5px solid #111; padding-top: 4px; }
+        tr { page-break-inside: avoid; }
+      </style></head><body>
+        <div class="topo">
+          <div>${esc(e.razaoSocial)}<br>${esc(cnpj)}${e.ie ? `&nbsp;&nbsp; I.E.: ${esc(e.ie)}` : ""}<br>
+            ${esc(e.endereco?.cidade || "")}${e.endereco?.uf ? ` - ${esc(e.endereco.uf)}` : ""}</div>
+          <div style="text-align:right">&nbsp;<br>Emissão em: ${esc(agora)}<br>Emitido por: ${esc(usuarioLogado?.nome || "")}</div>
+        </div>
+        <h1>Relação de Cartas Frete Emitidas</h1>
+        <div class="periodo">${filtro.proprietario.trim() ? `Proprietário: ${esc(filtro.proprietario.trim())} &nbsp;·&nbsp; ` : ""}Período: de ${dia(r.periodo.de)} a ${dia(r.periodo.ate)}</div>
+        <table>
+          <colgroup>
+            <col style="width:6.5%"><col style="width:4.5%"><col style="width:5%"><col style="width:15%">
+            <col style="width:12%"><col style="width:8.5%"><col style="width:14%">
+            <col style="width:5.5%"><col style="width:5%"><col style="width:6.5%"><col style="width:6%">
+            <col style="width:5.5%"><col style="width:6.5%">
+          </colgroup>
+          <thead><tr><th>Emissão</th><th>Nº</th><th>CT-e</th><th>Proprietário</th><th>Motorista</th><th>Placas</th>
+            <th>Coleta → Entrega</th><th class="n">Peso (t)</th><th class="n">R$/t</th><th class="n">Frete</th>
+            <th class="n">Adiant.</th><th class="n">Descontos</th><th class="n">Saldo</th></tr></thead>
+          <tbody>
+            ${linhas}
+            <tr class="total"><td colspan="7">Total: ${T.quantidade} carta(s)${T.canceladas ? ` · ${T.canceladas} cancelada(s), fora do total` : ""}</td>
+              <td class="n">${formatarDecimal(T.pesoToneladas, 3)}</td><td></td>
+              <td class="n">${din(T.valorDocumento)}</td><td class="n">${din(T.adiantamento)}</td>
+              <td class="n">${din(T.descontos)}</td><td class="n">${din(T.valorLiquido)}</td></tr>
+          </tbody>
+        </table>
+      </body></html>`);
+    janela.document.close();
+    janela.focus();
+    setTimeout(() => janela.print(), 250);
+  };
+
+  const gerar = async () => {
+    setErro(""); setCarregando(true);
+    try {
+      const r = await apiRequest(`/cartas-frete?${new URLSearchParams(filtro)}`);
+      setDados(r);
+      if (!r.linhas.length) { setErro("Nenhuma carta frete nesse período."); return; }
+      imprimir(r);
+    } catch (e) { setErro(e.message); } finally { setCarregando(false); }
+  };
+
+  return (
+    <>
+      <div className="nf-grid-3">
+        <div className="field-group">
+          <label className="field-label">De</label>
+          <input type="date" value={filtro.de} onChange={ev => setFiltro(f => ({ ...f, de: ev.target.value }))} />
+        </div>
+        <div className="field-group">
+          <label className="field-label">Até</label>
+          <input type="date" value={filtro.ate} onChange={ev => setFiltro(f => ({ ...f, ate: ev.target.value }))} />
+        </div>
+        <div className="field-group">
+          <label className="field-label">Situação</label>
+          <select value={filtro.status} onChange={ev => setFiltro(f => ({ ...f, status: ev.target.value }))}>
+            <option value="emitida">Só emitidas</option>
+            <option value="todas">Todas</option>
+            <option value="cancelada">Só canceladas</option>
+          </select>
+        </div>
+      </div>
+      <div className="field-group">
+        <label className="field-label">Proprietário do veículo</label>
+        <input value={filtro.proprietario} placeholder="Todos — digite o nome ou o CPF/CNPJ"
+          onChange={ev => setFiltro(f => ({ ...f, proprietario: ev.target.value }))} />
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+        <button className="btn btn-primary" onClick={gerar} disabled={carregando}>{carregando ? "Buscando…" : "Gerar"}</button>
+        {dados?.linhas.length > 0 && <button className="btn" onClick={() => imprimir()}>Imprimir de novo</button>}
+      </div>
+      {erro && <p className="error-text">{erro}</p>}
+    </>
+  );
+}
+
 function RelatorioCteModal({ onFechar }) {
+  const [tipoRelatorio, setTipoRelatorio] = useState("ctes");
   const hoje = hojeNoFuso();
   const { items: clientes } = useApiCollection("clientes");
   const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, status: "todas", papel: "tomador", cliente: "" });
@@ -8212,10 +8338,18 @@ function RelatorioCteModal({ onFechar }) {
     <div className="modal-backdrop">
       <div className="modal" style={{ maxWidth: 560 }}>
         <div className="modal-header">
-          <h3>Relatório de CT-e emitidos</h3>
+          <h3>{tipoRelatorio === "cartas" ? "Relação de cartas frete" : "Relatório de CT-e emitidos"}</h3>
           <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
+          <div className="field-group">
+            <label className="field-label">Relatório</label>
+            <select value={tipoRelatorio} onChange={ev => setTipoRelatorio(ev.target.value)}>
+              <option value="ctes">CT-e emitidos</option>
+              <option value="cartas">Cartas frete emitidas</option>
+            </select>
+          </div>
+          {tipoRelatorio === "cartas" ? <RelatorioCartasFrete /> : (<>
           <div className="nf-grid-3">
             <div className="field-group">
               <label className="field-label">De</label>
@@ -8266,6 +8400,7 @@ function RelatorioCteModal({ onFechar }) {
             </button>
           </div>
           {erro && <p className="error-text">{erro}</p>}
+          </>)}
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onFechar}>Fechar</button>

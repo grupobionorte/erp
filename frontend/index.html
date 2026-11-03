@@ -1192,12 +1192,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.156";
+const VERSAO_SISTEMA = "1.157";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.157", texto: "Contas a pagar: relatório impresso em paisagem" },
   { versao: "1.156", texto: "Operação: despesas lançadas da mais recente para a mais antiga" },
   { versao: "1.155", texto: "Relatório de CT-e: baixar os PDFs (DACTE) do período num zip, como os XMLs" },
   { versao: "1.154", texto: "MDF-e: RNTRC da empresa e dados do seguro (seguradora, apólice, averbação) saem nas observações do DAMDFE" },
@@ -10380,7 +10381,7 @@ function ContasPagarView() {
       </tr>`).join("");
     janela.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Contas a pagar</title>
       <style>
-        @page { size: A4; margin: 14mm; }
+        @page { size: A4 landscape; margin: 10mm; }
         body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #23231F; font-size: 11px; }
         h1 { font-size: 15px; margin: 0 0 2px; }
         .sub { color: #6B6B68; font-size: 11px; margin-bottom: 14px; }

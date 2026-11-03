@@ -245,12 +245,13 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
 }));
 
 /**
- * Mesmo pacote de XMLs, para os CT-e do período — com o filtro de cliente
- * (tomador) do relatório de CT-e.
+ * CT-e do período com o filtro de cliente (no papel escolhido) do relatório
+ * de CT-e. Serve aos dois pacotes, XML e PDF: os dois mostram os mesmos
+ * documentos que o relatório lista. Devolve null quando falta o período.
  */
-router.get("/cte/xmls", asyncHandler(async (req, res) => {
+async function ctesDoPacote(req, campoArquivo) {
   const { de, ate, status: statusPedido } = req.query;
-  if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+  if (!de || !ate) return null;
   const clienteId = req.query.clienteId ? Number(req.query.clienteId) : null;
   const papel = PAPEIS_CTE.includes(req.query.papel) ? req.query.papel : "tomador";
 
@@ -265,27 +266,45 @@ router.get("/cte/xmls", asyncHandler(async (req, res) => {
       empresaId: req.usuario.empresaId || undefined,
       status: { in: status },
       dataEmissao: { gte: inicio, lte: fim },
-      xmlUrl: { not: null },
+      [campoArquivo]: { not: null },
     },
     select: {
-      numero: true, chaveAcesso: true, xmlUrl: true, status: true, definicaoTomador: true,
+      numero: true, chaveAcesso: true, xmlUrl: true, pdfUrl: true, status: true, definicaoTomador: true,
       remetenteId: true, destinatarioId: true, expedidorId: true, recebedorId: true,
     },
     orderBy: { numero: "asc" },
   });
 
   // Mesmo critério do relatório.
-  const escolhidos = clienteId ? ctes.filter((c) => idDoPapel(c, papel) === clienteId) : ctes;
+  return clienteId ? ctes.filter((c) => idDoPapel(c, papel) === clienteId) : ctes;
+}
 
+router.get("/cte/xmls", asyncHandler(async (req, res) => {
+  const escolhidos = await ctesDoPacote(req, "xmlUrl");
+  if (!escolhidos) return res.status(400).json({ erro: "Informe o período (de e ate)" });
   if (!escolhidos.length) {
     return res.status(404).json({ erro: "Nenhum CT-e com XML no período" });
   }
+  const { de, ate } = req.query;
   await enviarZipDeXmls(res, escolhidos, { sigla: "CTe", nomeArquivo: `XMLs-CTe-${de}-a-${ate}.zip` });
 }));
 
-// Monta o zip baixando cada XML do provedor. Os arquivos ficam lá; aqui eles
-// passam direto para o pacote, em memória.
-async function enviarZipDeXmls(res, documentos, { sigla, nomeArquivo }) {
+// Os DACTEs do período num zip, para imprimir ou mandar ao cliente de uma vez.
+router.get("/cte/pdfs", asyncHandler(async (req, res) => {
+  const escolhidos = await ctesDoPacote(req, "pdfUrl");
+  if (!escolhidos) return res.status(400).json({ erro: "Informe o período (de e ate)" });
+  if (!escolhidos.length) {
+    return res.status(404).json({ erro: "Nenhum CT-e com PDF no período" });
+  }
+  const { de, ate } = req.query;
+  await enviarZipDeXmls(res, escolhidos, {
+    sigla: "CTe", nomeArquivo: `PDFs-CTe-${de}-a-${ate}.zip`, campo: "pdfUrl", extensao: "pdf",
+  });
+}));
+
+// Monta o zip baixando cada arquivo (XML ou PDF) do provedor. Os arquivos
+// ficam lá; aqui eles passam direto para o pacote, em memória.
+async function enviarZipDeXmls(res, documentos, { sigla, nomeArquivo, campo = "xmlUrl", extensao = "xml" }) {
   res.setHeader("Content-Type", "application/zip");
   res.setHeader("Content-Disposition", `attachment; filename="${nomeArquivo}"`);
 
@@ -295,19 +314,26 @@ async function enviarZipDeXmls(res, documentos, { sigla, nomeArquivo }) {
   pacote.on("error", (e) => { console.error("[xmls]", e); res.destroy(); });
   pacote.pipe(res);
 
-  for (const doc of documentos) {
-    try {
-      const resposta = await fetch(doc.xmlUrl);
-      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
-      const xml = Buffer.from(await resposta.arrayBuffer());
+  // Baixa de 5 em 5: um mês de DACTEs, um a um, levava minutos. A ordem
+  // no zip continua a da numeração.
+  const baixar = async (doc) => {
+    const resposta = await fetch(doc[campo], { signal: AbortSignal.timeout(60000) });
+    if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+    return Buffer.from(await resposta.arrayBuffer());
+  };
+  for (let i = 0; i < documentos.length; i += 5) {
+    const lote = documentos.slice(i, i + 5);
+    const resultados = await Promise.allSettled(lote.map(baixar));
+    lote.forEach((doc, j) => {
+      const r = resultados[j];
+      if (r.status === "rejected") { falhas.push(`${sigla} ${doc.numero}: ${r.reason?.message}`); return; }
       // Nome com número e chave: o contador acha pelo número, e a chave
       // garante que dois arquivos nunca colidam.
       const nome = `${doc.status === "cancelado" ? "CANCELADA-" : ""}` +
-        `${sigla}-${String(doc.numero || "s-n").padStart(6, "0")}-${doc.chaveAcesso || ""}.xml`;
-      pacote.append(xml, { name: nome });
-    } catch (erro) {
-      falhas.push(`${sigla} ${doc.numero}: ${erro.message}`);
-    }
+        `${sigla}-${String(doc.numero || "s-n").padStart(6, "0")}-${doc.chaveAcesso || ""}.${extensao}`;
+      // PDF já vem comprimido: recomprimir só gasta tempo.
+      pacote.append(r.value, { name: nome, store: extensao === "pdf" });
+    });
   }
 
   // Um aviso dentro do próprio zip: melhor o contador saber que faltou

@@ -24,6 +24,7 @@ const MENUS = {
   emissao: { rotulo: "MDF-e", rotas: [] },
   equipamentos: { rotulo: "Equipamentos", rotas: [] },
   manutencao: { rotulo: "Manutenção", rotas: ["/manutencao/equipamentos", "/manutencao/ordens"] },
+  diesel: { rotulo: "Diesel", rotas: ["/diesel"] },
   contasPagar: { rotulo: "Contas a pagar", rotas: ["/contas-pagar"] },
   ponto: { rotulo: "Ponto", rotas: ["/ponto"] },
   empresas: { rotulo: "Configurações", rotas: ["/empresas"] },

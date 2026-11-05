@@ -89,6 +89,24 @@ averbado" na lista e o menu repete. O número da averbação preenche o
 MDF-e gerado do CT-e. O número gravado é o `NumeroAverbacao` da resposta
 (sem ele, o protocolo) — conferido em produção contra o portal da AT&M.
 
+**Boletim de produção** (aba Produção da operação,
+`routes/producaoOperacao.js`): uma linha por máquina, dia e turno (1º/2º),
+única por máquina em qualquer operação. Horímetro/hodômetro inicial e final,
+produção na unidade do serviço da operação, paradas com motivo, diesel. O
+trabalhado é conta do servidor; mais de 24 h no turno é recusado, e horímetro
+que volta em relação ao turno vizinho pede confirmação (`confirmarLeitura`).
+O maior horímetro final vira a `leituraAtual` do equipamento (os planos de
+manutenção contam com ela); corrigir ou excluir a linha que deu a leitura
+recalcula.
+
+**Diesel** (menu próprio, `routes/diesel.js`, `lib/diesel.js`): tanques e
+movimentos — entrada (compra, total = litros × R$/L), saída e ajuste (a
+pessoa digita o medido; grava a diferença com sinal). Saldo e custo médio
+nunca são gravados: saem da soma dos movimentos. O diesel do boletim é uma
+saída ligada à linha (`producaoId`), que nasce, muda e some com ela e não se
+edita pelo menu Diesel. Saldo negativo é aceito com aviso (compra lançada
+depois).
+
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra
 (`lib/copiarCadastros.js`). É cópia, nunca mudança de dono; pula quem já existe

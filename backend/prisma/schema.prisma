@@ -211,6 +211,8 @@ model Empresa {
   reps Rep[]
   repsAtendendo Rep[] @relation("RepEmpresas")
 
+  tanquesDiesel     TanqueDiesel[]
+  movimentosDiesel  MovimentoDiesel[]
   @@map("empresas")
   motoristas Motorista[]
   categoriasDespesa CategoriaDespesa[]
@@ -278,6 +280,7 @@ model Pessoa {
   // CPF/CNPJ único por empresa e por papel — duas empresas do grupo podem
   // ter cada uma seu cadastro, e a mesma empresa pode ter o CNPJ como
   // cliente e como fornecedor, sem um mexer no outro.
+  comprasDiesel MovimentoDiesel[]
   @@unique([documento, empresaId, papel])
   @@map("pessoas")
   contasPagar ContaPagar[]
@@ -346,6 +349,7 @@ model Colaborador {
   // e o excluído segurava o CPF — não dava para cadastrar a pessoa de novo.
   // O índice é parcial (WHERE ativo), escrito na migration; o Prisma não
   // descreve índice parcial, por isso não aparece como @@unique aqui.
+  producoesOperadas ProducaoOperacao[]
   @@index([cpf, empresaId])
   @@map("colaboradores")
   eventosCriados     Evento[]            @relation("EventosCriados")
@@ -1291,6 +1295,8 @@ model Equipamento {
   ordens OrdemManutencao[]
   alocacoes OperacaoEquipamento[]
 
+  producoes        ProducaoOperacao[]
+  abastecimentos   MovimentoDiesel[]
   @@index([empresaId, nome])
   @@map("equipamentos")
 }
@@ -1433,6 +1439,8 @@ model Operacao {
 
   criadoEm DateTime @default(now()) @map("criado_em")
 
+  producoes        ProducaoOperacao[]
+  movimentosDiesel MovimentoDiesel[]
   @@index([empresaId, codigo])
   @@map("operacoes")
   viagens ViagemOperacao[]
@@ -1601,4 +1609,110 @@ model CartaFrete {
   @@unique([empresaId, numero])
   @@index([cteId])
   @@map("cartas_frete")
+}
+
+// Controle de diesel: o tanque é onde o combustível fica (o da sede, o da
+// frente de trabalho, o comboio). Saldo = entradas + ajustes - saídas; não
+// se grava saldo, ele sai sempre da soma dos movimentos.
+model TanqueDiesel {
+  id               Int     @id @default(autoincrement())
+  nome             String
+  capacidadeLitros Float?  @map("capacidade_litros")
+  ativo            Boolean @default(true)
+  observacao       String?
+
+  empresaId Int     @map("empresa_id")
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  criadoEm DateTime @default(now()) @map("criado_em")
+
+  movimentos MovimentoDiesel[]
+
+  @@index([empresaId])
+  @@map("tanques_diesel")
+}
+
+// Entrada (compra), saída (abastecimento) ou ajuste (diferença da medição
+// física). Litros sempre positivos em entrada e saída; no ajuste, o sinal diz
+// se sobrou (+) ou faltou (-).
+model MovimentoDiesel {
+  id     Int      @id @default(autoincrement())
+  tipo   String // entrada | saida | ajuste
+  // Só o dia, gravado ao meio-dia no fuso da operação.
+  data   DateTime
+  litros Float
+
+  // Entrada: quanto custou. O total sai da conta, não se digita.
+  valorLitro   Float?  @map("valor_litro")
+  valorTotal   Float?  @map("valor_total")
+  fornecedorId Int?    @map("fornecedor_id")
+  fornecedor   Pessoa? @relation(fields: [fornecedorId], references: [id])
+  documento    String? // nº da NF da compra
+
+  // Saída: quem consumiu e em que frente.
+  equipamentoId Int?         @map("equipamento_id")
+  equipamento   Equipamento? @relation(fields: [equipamentoId], references: [id])
+  operacaoId    Int?         @map("operacao_id")
+  operacao      Operacao?    @relation(fields: [operacaoId], references: [id])
+  // Saída para quem não é equipamento cadastrado (caminhão de terceiro...).
+  destino       String?
+
+  // Saída lançada pelo boletim de produção: nasce, muda e some com ele.
+  producaoId Int?              @unique @map("producao_id")
+  producao   ProducaoOperacao? @relation(fields: [producaoId], references: [id], onDelete: Cascade)
+
+  observacao String?
+
+  tanqueId  Int          @map("tanque_id")
+  tanque    TanqueDiesel @relation(fields: [tanqueId], references: [id])
+  empresaId Int          @map("empresa_id")
+  empresa   Empresa      @relation(fields: [empresaId], references: [id])
+
+  criadoPorId Int?     @map("criado_por_id")
+  criadoEm    DateTime @default(now()) @map("criado_em")
+
+  @@index([empresaId, data])
+  @@index([tanqueId])
+  @@map("movimentos_diesel")
+}
+
+// Boletim diário de produção da operação: uma linha por máquina por turno.
+// Leituras e produção são digitadas; o trabalhado é a conta das leituras.
+model ProducaoOperacao {
+  id      Int      @id @default(autoincrement())
+  // Só o dia, gravado ao meio-dia no fuso da operação.
+  data    DateTime
+  turno   Int      @default(1)
+  // Um dos serviços da operação (corte, tracamento, picagem...).
+  servico String
+
+  operacaoId    Int          @map("operacao_id")
+  operacao      Operacao     @relation(fields: [operacaoId], references: [id])
+  equipamentoId Int          @map("equipamento_id")
+  equipamento   Equipamento  @relation(fields: [equipamentoId], references: [id])
+  colaboradorId Int?         @map("colaborador_id")
+  colaborador   Colaborador? @relation(fields: [colaboradorId], references: [id])
+
+  // Horímetro (horas) ou hodômetro (km), conforme o controle do equipamento.
+  leituraInicial Float? @map("leitura_inicial")
+  leituraFinal   Float? @map("leitura_final")
+  // final - inicial: calculado no servidor, somente leitura.
+  trabalhado     Float?
+
+  quantidade Float?
+  unidade    String? // m3 | kg | ha | alq
+
+  horasParadas Float?  @map("horas_paradas")
+  motivoParada String? @map("motivo_parada")
+
+  observacao String?
+
+  diesel MovimentoDiesel?
+
+  criadoPorId Int?     @map("criado_por_id")
+  criadoEm    DateTime @default(now()) @map("criado_em")
+
+  @@unique([equipamentoId, data, turno])
+  @@index([operacaoId, data])
+  @@map("producoes_operacao")
 }

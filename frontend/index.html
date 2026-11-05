@@ -44,6 +44,7 @@ function LayoutDashboard(props) { return <IconBase {...props}><rect x="3" y="3" 
 function Plus(props) { return <IconBase {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></IconBase>; }
 function Pencil(props) { return <IconBase {...props}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></IconBase>; }
 function Trash2(props) { return <IconBase {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></IconBase>; }
+function Droplet(props) { return <IconBase {...props}><path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.3 0z"/></IconBase>; }
 function X(props) { return <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>; }
 function ChevronDown(props) { return <IconBase {...props}><polyline points="6 9 12 15 18 9"/></IconBase>; }
 function Search(props) { return <IconBase {...props}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></IconBase>; }
@@ -1192,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.158";
+const VERSAO_SISTEMA = "1.159";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.159", texto: "Operação: aba Produção (boletim por máquina e turno, horímetro, paradas e diesel). Novo menu Diesel: compras, saídas e saldo dos tanques" },
   { versao: "1.158", texto: "Relatório do CT-e: relação das cartas frete emitidas no período, com filtro por proprietário" },
   { versao: "1.157", texto: "Contas a pagar: relatório impresso em paisagem" },
   { versao: "1.156", texto: "Operação: despesas lançadas da mais recente para a mais antiga" },
@@ -1386,8 +1388,9 @@ async function apiRequest(path, options = {}) {
   if (!res.ok) {
     let detalhe = res.statusText;
     let detalheProvedor;
+    let corpo = null;
     try {
-      const corpo = await res.json();
+      corpo = await res.json();
       detalhe = corpo.erro || detalhe;
       detalheProvedor = corpo.detalhe;
     } catch {
@@ -1395,6 +1398,10 @@ async function apiRequest(path, options = {}) {
     }
     const erro = new Error(detalhe);
     erro.detalhe = detalheProvedor;
+    // Algumas rotas pedem confirmação em vez de recusar (ex.: horímetro
+    // menor que o do turno anterior): a tela precisa do corpo inteiro.
+    erro.status = res.status;
+    erro.corpo = corpo;
     throw erro;
   }
   if (res.status === 204) return null;
@@ -3734,6 +3741,742 @@ function rotuloEquipamento(e) {
   return extra ? `${nome} (${extra})` : nome;
 }
 
+// Boletim de produção da operação: uma linha por máquina, por dia e turno.
+// O trabalhado é conta das leituras (somente leitura); o diesel abastecido
+// sai do tanque escolhido; o horímetro final atualiza o equipamento.
+const MOTIVOS_PARADA = [
+  { valor: "chuva", rotulo: "Chuva" },
+  { valor: "manutencao", rotulo: "Manutenção / quebra" },
+  { valor: "abastecimento", rotulo: "Abastecimento" },
+  { valor: "sem_frente", rotulo: "Sem frente de trabalho" },
+  { valor: "outro", rotulo: "Outro (ver observação)" },
+];
+const rotuloServico = (tipo) => SERVICOS_OPERACAO.find(s => s.tipo === tipo)?.rotulo || tipo;
+const rotuloUnidade = (u) => UNIDADES_SERVICO.find(x => x.valor === u)?.rotulo || u || "";
+const nomeLeitura = (controle) => (controle === "hodometro" ? "Hodômetro" : "Horímetro");
+const unidadeLeitura = (controle) => (controle === "hodometro" ? "km" : "h");
+
+function ProducaoLinhaModal({ operacaoId, apoio, linha, onFechar, onSalvo }) {
+  const novo = !linha?.id;
+  const [f, setF] = useState(() => linha?.id ? {
+    data: String(linha.data).slice(0, 10), turno: String(linha.turno), servico: linha.servico,
+    equipamentoId: String(linha.equipamentoId), colaboradorId: linha.colaboradorId ? String(linha.colaboradorId) : "",
+    leituraInicial: linha.leituraInicial ?? "", leituraFinal: linha.leituraFinal ?? "",
+    quantidade: linha.quantidade ?? "", horasParadas: linha.horasParadas ?? "", motivoParada: linha.motivoParada || "",
+    dieselLitros: linha.diesel?.litros ?? "", tanqueId: linha.diesel?.tanqueId ? String(linha.diesel.tanqueId) : (apoio.tanques.length === 1 ? String(apoio.tanques[0].id) : ""),
+    observacao: linha.observacao || "",
+  } : {
+    data: linha?.data || hojeNoFuso(), turno: linha?.turno || "1", servico: apoio.servicos.length === 1 ? apoio.servicos[0].tipo : "",
+    equipamentoId: "", colaboradorId: "", leituraInicial: "", leituraFinal: "", quantidade: "",
+    horasParadas: "", motivoParada: "", dieselLitros: "", tanqueId: apoio.tanques.length === 1 ? String(apoio.tanques[0].id) : "", observacao: "",
+  });
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const set = (campo, valor) => setF(x => ({ ...x, [campo]: valor }));
+
+  const equipamento = apoio.equipamentos.find(e => String(e.id) === f.equipamentoId);
+  const controle = equipamento?.controle;
+  const medeLeitura = controle === "horimetro" || controle === "hodometro";
+  const unidade = apoio.servicos.find(s => s.tipo === f.servico)?.unidade || "m3";
+  const ini = f.leituraInicial === "" ? null : Number(f.leituraInicial);
+  const fim = f.leituraFinal === "" ? null : Number(f.leituraFinal);
+  const trabalhado = ini !== null && fim !== null && fim >= ini ? fim - ini : null;
+
+  // Máquina escolhida num lançamento novo: o inicial sugerido é a última
+  // leitura dela (a do último boletim ou a do cadastro).
+  const escolherMaquina = (id) => {
+    const e = apoio.equipamentos.find(x => String(x.id) === id);
+    setF(x => ({ ...x, equipamentoId: id, leituraInicial: novo && x.leituraInicial === "" && e?.leituraAtual != null ? String(e.leituraAtual) : x.leituraInicial }));
+  };
+
+  const salvar = async (confirmarLeitura = false) => {
+    setErro(""); setSalvando(true);
+    try {
+      await apiRequest(novo ? `/operacoes/${operacaoId}/producao` : `/operacoes/${operacaoId}/producao/${linha.id}`, {
+        method: novo ? "POST" : "PUT",
+        body: JSON.stringify({ ...f, confirmarLeitura }),
+      });
+      onSalvo(novo ? { data: f.data, turno: f.turno } : null);
+    } catch (e) {
+      if (e.corpo?.confirmar && window.confirm(`${e.corpo.confirmar}\n\nOK grava assim mesmo; Cancelar volta para corrigir.`)) {
+        setSalvando(false);
+        return salvar(true);
+      }
+      setErro([e.message, e.detalhe].filter(Boolean).join(" — "));
+    } finally { setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 640 }}>
+        <div className="modal-header">
+          <h3>{novo ? "Lançar produção" : "Editar lançamento"}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Data<span className="req">*</span></label>
+              <input type="date" value={f.data} onChange={e => set("data", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Turno</label>
+              <select value={f.turno} onChange={e => set("turno", e.target.value)}>
+                <option value="1">1º turno</option>
+                <option value="2">2º turno</option>
+              </select>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Serviço<span className="req">*</span></label>
+              <select value={f.servico} onChange={e => set("servico", e.target.value)}>
+                <option value="">Selecione…</option>
+                {apoio.servicos.map(s => <option key={s.tipo} value={s.tipo}>{rotuloServico(s.tipo)}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="nf-grid-2">
+            <div className="field-group">
+              <label className="field-label">Máquina<span className="req">*</span></label>
+              <select value={f.equipamentoId} onChange={e => escolherMaquina(e.target.value)}>
+                <option value="">Selecione…</option>
+                {apoio.equipamentos.map(e => (
+                  <option key={e.id} value={e.id}>{rotuloEquipamento(e)}{e.naOperacao ? "" : " (saiu da operação)"}</option>
+                ))}
+              </select>
+              {!apoio.equipamentos.length && <p className="hint">Aloque as máquinas na aba Equipamentos primeiro.</p>}
+            </div>
+            <div className="field-group">
+              <label className="field-label">Operador</label>
+              <select value={f.colaboradorId} onChange={e => set("colaboradorId", e.target.value)}>
+                <option value="">—</option>
+                {apoio.colaboradores.map(c => <option key={c.id} value={c.id}>{c.nome}{c.situacao === "demitido" ? " (demitido)" : ""}</option>)}
+              </select>
+            </div>
+          </div>
+          {medeLeitura && (
+            <div className="nf-grid-3">
+              <div className="field-group">
+                <label className="field-label">{nomeLeitura(controle)} inicial</label>
+                <InputDecimal casas={1} value={f.leituraInicial} onChange={v => set("leituraInicial", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">{nomeLeitura(controle)} final</label>
+                <InputDecimal casas={1} value={f.leituraFinal} onChange={v => set("leituraFinal", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Trabalhado</label>
+                {/* Conta, não digitação: quem quer mudar, muda as leituras. */}
+                <input disabled readOnly tabIndex={-1} style={{ textAlign: "right" }}
+                  value={trabalhado !== null ? `${formatarDecimal(trabalhado, 1)} ${unidadeLeitura(controle)}` : ""} />
+              </div>
+            </div>
+          )}
+          {equipamento && !medeLeitura && <p className="hint">Esta máquina é controlada por prazo, sem horímetro.</p>}
+          <div className="nf-grid-3">
+            <div className="field-group">
+              <label className="field-label">Produção ({rotuloUnidade(unidade)})</label>
+              <InputDecimal casas={2} value={f.quantidade} onChange={v => set("quantidade", v)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Horas paradas</label>
+              <InputDecimal casas={1} value={f.horasParadas} onChange={v => set("horasParadas", v)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Motivo da parada</label>
+              <select value={f.motivoParada} onChange={e => set("motivoParada", e.target.value)} disabled={!(Number(f.horasParadas) > 0)}>
+                <option value="">—</option>
+                {MOTIVOS_PARADA.map(m => <option key={m.valor} value={m.valor}>{m.rotulo}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="nf-grid-2">
+            <div className="field-group">
+              <label className="field-label">Diesel abastecido (L)</label>
+              <InputDecimal casas={1} value={f.dieselLitros} onChange={v => set("dieselLitros", v)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Tanque de onde saiu</label>
+              <select value={f.tanqueId} onChange={e => set("tanqueId", e.target.value)} disabled={!(Number(f.dieselLitros) > 0)}>
+                <option value="">Selecione…</option>
+                {apoio.tanques.map(t => <option key={t.id} value={t.id}>{t.nome} — saldo {formatarDecimal(t.saldo, 0)} L</option>)}
+              </select>
+              {!apoio.tanques.length && Number(f.dieselLitros) > 0 && <p className="hint">Cadastre o tanque no menu Diesel.</p>}
+            </div>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Observação</label>
+            <input value={f.observacao} onChange={e => set("observacao", e.target.value)} />
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={() => salvar(false)} disabled={salvando}>{salvando ? "Gravando…" : "Gravar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProducaoAba({ operacaoId }) {
+  const hoje = hojeNoFuso();
+  const [periodo, setPeriodo] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje });
+  const [dados, setDados] = useState(null);
+  const [apoio, setApoio] = useState(null);
+  const [erro, setErro] = useState("");
+  const [emEdicao, setEmEdicao] = useState(null);
+
+  const carregar = useCallback(async () => {
+    if (!operacaoId) return;
+    try {
+      const [d, a] = await Promise.all([
+        apiRequest(`/operacoes/${operacaoId}/producao?${new URLSearchParams(periodo)}`),
+        apiRequest(`/operacoes/${operacaoId}/producao/apoio`),
+      ]);
+      setDados(d); setApoio(a); setErro("");
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  }, [operacaoId, periodo]);
+  useEffect(() => { carregar(); }, [carregar]);
+
+  const pag = usePaginacaoLocal(dados?.linhas, `${operacaoId}|${periodo.de}|${periodo.ate}`);
+
+  if (!operacaoId) return <p className="hint" style={{ padding: "0 22px" }}>Salve a operação primeiro para lançar a produção.</p>;
+  if (!dados || !apoio) return <p className="hint" style={{ padding: "0 22px" }}>{erro || "Carregando…"}</p>;
+
+  const dia = (iso) => String(iso).slice(0, 10).split("-").reverse().join("/");
+  const num = (v, c = 2) => (v || v === 0 ? formatarDecimal(v, c) : "—");
+  const R = dados.resumo;
+
+  const excluir = async (l) => {
+    if (!window.confirm(`Excluir o lançamento de ${l.equipamento.nome} em ${dia(l.data)} (${l.turno}º turno)?${l.diesel ? `\n\nO abastecimento de ${formatarDecimal(l.diesel.litros, 1)} L volta para o tanque.` : ""}`)) return;
+    try { await apiRequest(`/operacoes/${operacaoId}/producao/${l.id}`, { method: "DELETE" }); carregar(); }
+    catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  };
+
+  const imprimir = () => {
+    const janela = window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+    const esc = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const maquinas = R.porMaquina.map(m => `<tr><td>${esc(m.equipamento.nome)}</td><td>${esc(rotuloServico(m.servico))}</td>
+      <td class="n">${m.lancamentos}</td><td class="n">${num(m.trabalhado, 1)}</td><td class="n">${num(m.quantidade)} ${esc(rotuloUnidade(m.unidade))}</td>
+      <td class="n">${m.porHora != null ? num(m.porHora) : "—"}</td><td class="n">${num(m.horasParadas, 1)}</td>
+      <td class="n">${num(m.dieselLitros, 1)}</td><td class="n">${m.litrosPorHora != null ? num(m.litrosPorHora) : "—"}</td></tr>`).join("");
+    const linhas = dados.linhas.map(l => `<tr><td>${dia(l.data)}</td><td>${l.turno}º</td><td>${esc(l.equipamento.nome)}</td>
+      <td>${esc(rotuloServico(l.servico))}</td><td>${esc(l.colaborador?.nome || "")}</td>
+      <td class="n">${l.leituraInicial != null ? `${num(l.leituraInicial, 1)} → ${num(l.leituraFinal, 1)}` : ""}</td>
+      <td class="n">${l.trabalhado != null ? num(l.trabalhado, 1) : ""}</td><td class="n">${l.quantidade != null ? `${num(l.quantidade)} ${esc(rotuloUnidade(l.unidade))}` : ""}</td>
+      <td class="n">${l.horasParadas ? num(l.horasParadas, 1) : ""}</td><td class="n">${l.diesel ? num(l.diesel.litros, 1) : ""}</td></tr>`).join("");
+    janela.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Boletim de produção</title>
+      <style>
+        @page { size: A4 landscape; margin: 10mm; }
+        body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #111; margin: 0; }
+        h1 { font-size: 14px; margin: 0 0 2px; } h2 { font-size: 11.5px; margin: 14px 0 4px; }
+        .sub { font-size: 10.5px; color: #555; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 9.5px; border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 3px; }
+        td { padding: 2.5px 3px; border-bottom: 0.5px solid #ddd; }
+        th.n, td.n { text-align: right; }
+      </style></head><body>
+      <h1>Boletim de produção</h1>
+      <div class="sub">Período: ${dia(periodo.de)} a ${dia(periodo.ate)} · Diesel: ${num(R.dieselLitros, 1)} L${R.dieselCusto ? ` (R$ ${formatarMoeda(R.dieselCusto)} a custo médio)` : ""}</div>
+      <h2>Por máquina</h2>
+      <table><thead><tr><th>Máquina</th><th>Serviço</th><th class="n">Lanç.</th><th class="n">Trabalhado</th><th class="n">Produção</th>
+        <th class="n">Por hora</th><th class="n">Paradas (h)</th><th class="n">Diesel (L)</th><th class="n">L/h</th></tr></thead><tbody>${maquinas}</tbody></table>
+      <h2>Lançamentos</h2>
+      <table><thead><tr><th>Data</th><th>Turno</th><th>Máquina</th><th>Serviço</th><th>Operador</th><th class="n">Leituras</th>
+        <th class="n">Trab.</th><th class="n">Produção</th><th class="n">Paradas</th><th class="n">Diesel</th></tr></thead><tbody>${linhas}</tbody></table>
+      </body></html>`);
+    janela.document.close(); janela.focus(); setTimeout(() => janela.print(), 250);
+  };
+
+  return (
+    <div style={{ padding: "0 22px 18px" }}>
+      <section className="pf-secao" style={{ paddingTop: 6 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="field-group" style={{ marginBottom: 0 }}>
+            <label className="field-label">De</label>
+            <input type="date" value={periodo.de} onChange={e => setPeriodo(p => ({ ...p, de: e.target.value }))} />
+          </div>
+          <div className="field-group" style={{ marginBottom: 0 }}>
+            <label className="field-label">Até</label>
+            <input type="date" value={periodo.ate} onChange={e => setPeriodo(p => ({ ...p, ate: e.target.value }))} />
+          </div>
+          <div style={{ flex: 1 }} />
+          {dados.linhas.length > 0 && <button className="btn" onClick={imprimir}><FileText size={14} /> Imprimir</button>}
+          <button className="btn btn-primary" onClick={() => setEmEdicao({})}><Plus size={14} /> Lançar produção</button>
+        </div>
+        {erro && <p className="error-text">{erro}</p>}
+      </section>
+
+      {dados.contrato.length > 0 && (
+        <section className="pf-secao">
+          <h4 className="pf-secao-titulo">Andamento do contrato</h4>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+            {dados.contrato.map(c => (
+              <div key={`${c.servico}${c.unidade}`} style={{ minWidth: 200 }}>
+                <div className="subtle" style={{ fontSize: 12 }}>{rotuloServico(c.servico)}</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>
+                  {num(c.acumulado)} {rotuloUnidade(c.unidade)}
+                  {c.previsto ? <span className="subtle" style={{ fontSize: 12.5, fontWeight: 400 }}> de {num(c.previsto, 0)} ({formatarDecimal(c.acumulado / c.previsto * 100, 0)}%)</span> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {R.porMaquina.length > 0 && (
+        <section className="pf-secao">
+          <h4 className="pf-secao-titulo">
+            No período, por máquina
+            <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5 }}>
+              diesel {num(R.dieselLitros, 1)} L{R.dieselCusto ? ` · R$ ${formatarMoeda(R.dieselCusto)} a custo médio` : ""}
+              {R.dieselSemCusto ? " (há tanque sem compra com valor)" : ""}
+            </span>
+          </h4>
+          <table className="data-table tabela-densa">
+            <thead><tr><th>Máquina</th><th>Serviço</th><th style={{ textAlign: "right" }}>Trabalhado</th><th style={{ textAlign: "right" }}>Produção</th>
+              <th style={{ textAlign: "right" }}>Por hora</th><th style={{ textAlign: "right" }}>Paradas</th><th style={{ textAlign: "right" }}>Diesel</th><th style={{ textAlign: "right" }}>L/h</th></tr></thead>
+            <tbody>
+              {R.porMaquina.map(m => (
+                <tr key={`${m.equipamento.id}${m.servico}`}>
+                  <td>{rotuloEquipamento(m.equipamento)}</td>
+                  <td>{rotuloServico(m.servico)}</td>
+                  <td style={{ textAlign: "right" }}>{num(m.trabalhado, 1)} {unidadeLeitura(m.equipamento.controle)}</td>
+                  <td style={{ textAlign: "right" }}>{num(m.quantidade)} {rotuloUnidade(m.unidade)}</td>
+                  <td style={{ textAlign: "right" }}>{m.porHora != null ? `${num(m.porHora)} ${rotuloUnidade(m.unidade)}/h` : "—"}</td>
+                  <td style={{ textAlign: "right" }}>{m.horasParadas ? `${num(m.horasParadas, 1)} h` : "—"}</td>
+                  <td style={{ textAlign: "right" }}>{m.dieselLitros ? `${num(m.dieselLitros, 1)} L` : "—"}</td>
+                  <td style={{ textAlign: "right" }}>{m.litrosPorHora != null ? num(m.litrosPorHora) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      <section className="pf-secao">
+        <h4 className="pf-secao-titulo">Lançamentos</h4>
+        <table className="data-table tabela-densa">
+          <thead><tr><th style={{ width: 86 }}>Data</th><th style={{ width: 50 }}>Turno</th><th>Máquina</th><th>Serviço</th><th>Operador</th>
+            <th style={{ textAlign: "right" }}>Leituras</th><th style={{ textAlign: "right" }}>Trab.</th><th style={{ textAlign: "right" }}>Produção</th>
+            <th style={{ textAlign: "right" }}>Paradas</th><th style={{ textAlign: "right" }}>Diesel</th><th className="actions-col"></th></tr></thead>
+          <tbody>
+            {pag.itens.map(l => (
+              <tr key={l.id}>
+                <td>{dia(l.data)}</td>
+                <td>{l.turno}º</td>
+                <td>{rotuloEquipamento(l.equipamento)}</td>
+                <td>{rotuloServico(l.servico)}</td>
+                <td>{l.colaborador?.nome || "—"}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{l.leituraInicial != null ? `${num(l.leituraInicial, 1)} → ${num(l.leituraFinal, 1)}` : "—"}</td>
+                <td style={{ textAlign: "right" }}>{l.trabalhado != null ? num(l.trabalhado, 1) : "—"}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{l.quantidade != null ? `${num(l.quantidade)} ${rotuloUnidade(l.unidade)}` : "—"}</td>
+                <td style={{ textAlign: "right" }} title={MOTIVOS_PARADA.find(m => m.valor === l.motivoParada)?.rotulo || ""}>{l.horasParadas ? `${num(l.horasParadas, 1)} h` : "—"}</td>
+                <td style={{ textAlign: "right" }} title={l.diesel ? `Tanque: ${l.diesel.tanque?.nome || ""}` : ""}>{l.diesel ? `${num(l.diesel.litros, 1)} L` : "—"}</td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  <button className="icon-btn" title="Editar" onClick={() => setEmEdicao(l)}><Pencil size={14} /></button>
+                  <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(l)}><Trash2 size={14} /></button>
+                </td>
+              </tr>
+            ))}
+            {!dados.linhas.length && <tr><td colSpan={11}>Nenhum lançamento de produção nesse período.</td></tr>}
+          </tbody>
+        </table>
+        {pag.controle}
+      </section>
+
+      {emEdicao && (
+        <ProducaoLinhaModal key={emEdicao.id || emEdicao.vez || "novo"} operacaoId={operacaoId} apoio={apoio} linha={emEdicao}
+          onFechar={() => setEmEdicao(null)}
+          onSalvo={(proximo) => {
+            // Lançamento novo: a janela reabre no mesmo dia e turno, para o
+            // boletim do dia sair máquina após máquina sem redigitar a data.
+            // A chave nova faz a janela nascer limpa (só dia e turno), sem
+            // os valores da máquina anterior.
+            setEmEdicao(proximo ? { ...proximo, vez: Date.now() } : null);
+            carregar();
+          }} />
+      )}
+    </div>
+  );
+}
+
+// Controle de diesel: compras entram no tanque, abastecimentos saem dele, e
+// a medição do tanque acerta a diferença. O saldo é sempre a soma do
+// histórico; os abastecimentos do boletim de produção aparecem aqui, mas só
+// se alteram lá.
+const TIPOS_MOVIMENTO_DIESEL = {
+  entrada: { rotulo: "Compra", cor: "#00732F" },
+  saida: { rotulo: "Saída", cor: "#c62828" },
+  ajuste: { rotulo: "Ajuste", cor: "#b57a12" },
+};
+
+function MovimentoDieselModal({ tipo, movimento, tanques, apoio, onFechar, onSalvo }) {
+  const editando = Boolean(movimento?.id);
+  const [f, setF] = useState(() => ({
+    data: movimento?.data ? String(movimento.data).slice(0, 10) : hojeNoFuso(),
+    tanqueId: movimento?.tanqueId ? String(movimento.tanqueId) : (tanques.length === 1 ? String(tanques[0].id) : ""),
+    litros: movimento?.litros ?? "",
+    valorLitro: movimento?.valorLitro ?? "",
+    fornecedorId: movimento?.fornecedorId ? String(movimento.fornecedorId) : "",
+    documento: movimento?.documento || "",
+    equipamentoId: movimento?.equipamentoId ? String(movimento.equipamentoId) : "",
+    operacaoId: movimento?.operacaoId ? String(movimento.operacaoId) : "",
+    destino: movimento?.destino || "",
+    saldoMedido: "",
+    observacao: movimento?.observacao || "",
+  }));
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const set = (c, v) => setF(x => ({ ...x, [c]: v }));
+  const tanque = tanques.find(t => String(t.id) === f.tanqueId);
+  const total = Number(f.litros) > 0 && Number(f.valorLitro) > 0 ? Number(f.litros) * Number(f.valorLitro) : null;
+  const diferenca = tipo === "ajuste" && tanque && f.saldoMedido !== "" ? Number(f.saldoMedido) - tanque.saldo : null;
+
+  const salvar = async () => {
+    setErro(""); setSalvando(true);
+    try {
+      const r = tipo === "ajuste"
+        ? await apiRequest("/diesel/ajuste", { method: "POST", body: JSON.stringify(f) })
+        : await apiRequest(editando ? `/diesel/movimentos/${movimento.id}` : "/diesel/movimentos", {
+            method: editando ? "PUT" : "POST", body: JSON.stringify({ ...f, tipo }),
+          });
+      // Saída maior que o saldo: grava (a compra pode ainda não ter sido
+      // lançada), mas avisa.
+      if (r?.saldoTanque < 0) alert(`Atenção: o saldo do tanque ficou negativo (${formatarDecimal(r.saldoTanque, 1)} L). Falta lançar alguma compra?`);
+      onSalvo();
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); setSalvando(false); }
+  };
+
+  const titulo = tipo === "entrada" ? (editando ? "Editar compra" : "Compra de diesel")
+    : tipo === "saida" ? (editando ? "Editar saída" : "Saída de diesel") : "Ajuste pela medição do tanque";
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3>{titulo}</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="nf-grid-2">
+            <div className="field-group">
+              <label className="field-label">Data<span className="req">*</span></label>
+              <input type="date" value={f.data} onChange={e => set("data", e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Tanque<span className="req">*</span></label>
+              <select value={f.tanqueId} onChange={e => set("tanqueId", e.target.value)}>
+                <option value="">Selecione…</option>
+                {tanques.map(t => <option key={t.id} value={t.id}>{t.nome} — saldo {formatarDecimal(t.saldo, 0)} L</option>)}
+              </select>
+            </div>
+          </div>
+          {tipo === "ajuste" ? (
+            <>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Litros medidos no tanque<span className="req">*</span></label>
+                  <InputDecimal casas={1} value={f.saldoMedido} onChange={v => set("saldoMedido", v)} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Diferença para o sistema</label>
+                  <input disabled readOnly tabIndex={-1} style={{ textAlign: "right" }}
+                    value={diferenca !== null ? `${diferenca > 0 ? "+" : ""}${formatarDecimal(diferenca, 1)} L` : ""} />
+                </div>
+              </div>
+              <p className="hint">O sistema tem {tanque ? `${formatarDecimal(tanque.saldo, 1)} L` : "—"} neste tanque. O ajuste grava a diferença, e o saldo passa a ser o medido.</p>
+            </>
+          ) : (
+            <div className="nf-grid-2">
+              <div className="field-group">
+                <label className="field-label">Litros<span className="req">*</span></label>
+                <InputDecimal casas={1} value={f.litros} onChange={v => set("litros", v)} />
+              </div>
+              {tipo === "entrada" && (
+                <div className="field-group">
+                  <label className="field-label">Valor do litro (R$)</label>
+                  <InputDecimal casas={4} value={f.valorLitro} onChange={v => set("valorLitro", v)} />
+                </div>
+              )}
+            </div>
+          )}
+          {tipo === "entrada" && (
+            <>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Total da compra</label>
+                  <input disabled readOnly tabIndex={-1} style={{ textAlign: "right" }} value={total !== null ? `R$ ${formatarMoeda(total)}` : ""} />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Nº da nota</label>
+                  <input value={f.documento} onChange={e => set("documento", e.target.value)} />
+                </div>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Fornecedor</label>
+                <select value={f.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
+                  <option value="">—</option>
+                  {apoio.fornecedores.map(p => <option key={p.id} value={p.id}>{p.nomeRazaoSocial}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          {tipo === "saida" && (
+            <>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Equipamento</label>
+                  <select value={f.equipamentoId} onChange={e => set("equipamentoId", e.target.value)}>
+                    <option value="">— (não cadastrado)</option>
+                    {apoio.equipamentos.map(e => <option key={e.id} value={e.id}>{e.codigo ? `${e.codigo} — ` : ""}{e.nome}</option>)}
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Operação</label>
+                  <select value={f.operacaoId} onChange={e => set("operacaoId", e.target.value)}>
+                    <option value="">—</option>
+                    {apoio.operacoes.map(o => <option key={o.id} value={o.id}>{o.codigo} — {o.descricao}</option>)}
+                  </select>
+                </div>
+              </div>
+              {!f.equipamentoId && (
+                <div className="field-group">
+                  <label className="field-label">Destino<span className="req">*</span></label>
+                  <input value={f.destino} onChange={e => set("destino", e.target.value)} placeholder="Ex.: caminhão ABC1D23 de terceiro" />
+                </div>
+              )}
+              <p className="hint">Abastecimento de máquina em operação: lance no boletim de produção da operação, que a saída entra aqui sozinha.</p>
+            </>
+          )}
+          <div className="field-group">
+            <label className="field-label">{tipo === "ajuste" ? <>Motivo<span className="req">*</span></> : "Observação"}</label>
+            <input value={f.observacao} onChange={e => set("observacao", e.target.value)} placeholder={tipo === "ajuste" ? "Ex.: medição de régua do fim do mês" : ""} />
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onFechar}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Gravando…" : "Gravar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TanquesDieselModal({ onFechar, onSalvo }) {
+  const [tanques, setTanques] = useState(null);
+  const [novo, setNovo] = useState({ nome: "", capacidadeLitros: "" });
+  const [erro, setErro] = useState("");
+  const carregar = useCallback(() => apiRequest("/diesel/tanques?inativos=1").then(setTanques).catch(e => setErro(e.message)), []);
+  useEffect(() => { carregar(); }, [carregar]);
+  const criar = async () => {
+    setErro("");
+    try { await apiRequest("/diesel/tanques", { method: "POST", body: JSON.stringify(novo) }); setNovo({ nome: "", capacidadeLitros: "" }); carregar(); onSalvo(); }
+    catch (e) { setErro(e.message); }
+  };
+  const alternar = async (t) => {
+    if (t.ativo && t.saldo && !window.confirm(`${t.nome} ainda tem ${formatarDecimal(t.saldo, 1)} L no sistema. Desativar assim mesmo?`)) return;
+    try { await apiRequest(`/diesel/tanques/${t.id}`, { method: "PUT", body: JSON.stringify({ ativo: !t.ativo }) }); carregar(); onSalvo(); }
+    catch (e) { setErro(e.message); }
+  };
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3>Tanques de diesel</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <div className="field-group" style={{ flex: 2, marginBottom: 0 }}>
+              <label className="field-label">Nome</label>
+              <input value={novo.nome} onChange={e => setNovo(n => ({ ...n, nome: e.target.value }))} placeholder="Ex.: Tanque da sede, Comboio" />
+            </div>
+            <div className="field-group" style={{ flex: 1, marginBottom: 0 }}>
+              <label className="field-label">Capacidade (L)</label>
+              <InputDecimal casas={0} value={novo.capacidadeLitros} onChange={v => setNovo(n => ({ ...n, capacidadeLitros: v }))} />
+            </div>
+            <button className="btn btn-primary" onClick={criar}><Plus size={14} /> Incluir</button>
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+          <table className="data-table tabela-densa" style={{ marginTop: 14 }}>
+            <thead><tr><th>Tanque</th><th style={{ textAlign: "right" }}>Capacidade</th><th style={{ textAlign: "right" }}>Saldo</th><th></th></tr></thead>
+            <tbody>
+              {(tanques || []).map(t => (
+                <tr key={t.id} style={t.ativo ? undefined : { opacity: 0.55 }}>
+                  <td>{t.nome}{t.ativo ? "" : " (desativado)"}</td>
+                  <td style={{ textAlign: "right" }}>{t.capacidadeLitros ? `${formatarDecimal(t.capacidadeLitros, 0)} L` : "—"}</td>
+                  <td style={{ textAlign: "right" }}>{formatarDecimal(t.saldo, 1)} L</td>
+                  <td className="actions-col"><button className="btn" style={{ padding: "3px 10px", fontSize: 12 }} onClick={() => alternar(t)}>{t.ativo ? "Desativar" : "Reativar"}</button></td>
+                </tr>
+              ))}
+              {tanques && !tanques.length && <tr><td colSpan={4}>Nenhum tanque ainda.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="modal-footer"><button className="btn" onClick={onFechar}>Fechar</button></div>
+      </div>
+    </div>
+  );
+}
+
+function DieselView() {
+  const hoje = hojeNoFuso();
+  const [filtro, setFiltro] = useState({ de: `${hoje.slice(0, 8)}01`, ate: hoje, tanqueId: "" });
+  const [tanques, setTanques] = useState(null);
+  const [dados, setDados] = useState(null);
+  const [apoio, setApoio] = useState({ fornecedores: [], equipamentos: [], operacoes: [] });
+  const [erro, setErro] = useState("");
+  const [modal, setModal] = useState(null);
+
+  const carregar = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ de: filtro.de, ate: filtro.ate, ...(filtro.tanqueId ? { tanqueId: filtro.tanqueId } : {}) });
+      const [t, d] = await Promise.all([apiRequest("/diesel/tanques"), apiRequest(`/diesel/movimentos?${params}`)]);
+      setTanques(t); setDados(d); setErro("");
+    } catch (e) { setErro([e.message, e.detalhe].filter(Boolean).join(" — ")); }
+  }, [filtro]);
+  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => { apiRequest("/diesel/apoio").then(setApoio).catch(() => {}); }, []);
+
+  const pag = usePaginacaoLocal(dados?.movimentos, `${filtro.de}|${filtro.ate}|${filtro.tanqueId}`);
+  const dia = (iso) => String(iso).slice(0, 10).split("-").reverse().join("/");
+
+  const excluir = async (m) => {
+    if (!window.confirm(`Excluir este movimento de ${formatarDecimal(Math.abs(m.litros), 1)} L?`)) return;
+    try { await apiRequest(`/diesel/movimentos/${m.id}`, { method: "DELETE" }); carregar(); }
+    catch (e) { alert(e.message); }
+  };
+
+  const abrir = (tipo, movimento) => {
+    if (!tanques?.length) { setModal({ tipo: "tanques" }); return; }
+    setModal({ tipo, movimento });
+  };
+
+  const origem = (m) => {
+    if (m.tipo === "entrada") {
+      const nota = m.documento && (/^nf/i.test(m.documento) ? m.documento : `NF ${m.documento}`);
+      return [m.fornecedor?.nomeRazaoSocial, nota].filter(Boolean).join(" · ") || m.observacao || "—";
+    }
+    if (m.tipo === "saida") {
+      const quem = m.equipamento ? `${m.equipamento.codigo ? `${m.equipamento.codigo} — ` : ""}${m.equipamento.nome}` : m.destino;
+      return [quem, m.operacao && `op. ${m.operacao.codigo}`].filter(Boolean).join(" · ");
+    }
+    return m.observacao || "Medição";
+  };
+
+  return (
+    <div>
+      <div className="view-header">
+        <div className="view-title">
+          <div className="icon-badge" style={{ background: "#fbf3e2", color: "#7a5205" }}>
+            <Droplet size={20} />
+          </div>
+          <div>
+            <h2>Diesel</h2>
+            <p className="subtle">Compras, abastecimentos e saldo de cada tanque</p>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setModal({ tipo: "tanques" })}>Tanques</button>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => abrir("ajuste")}>Medição do tanque</button>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => abrir("saida")}>Saída</button>
+          <button className="btn btn-primary" onClick={() => abrir("entrada")}><Plus size={16} /> Compra</button>
+        </div>
+      </div>
+      {erro && <p className="error-text">{erro}</p>}
+
+      {tanques?.length > 0 && <div className="cte-resumo" style={{ marginBottom: 14 }}>
+        {tanques.map(t => {
+          const pct = t.capacidadeLitros ? Math.max(0, Math.min(100, t.saldo / t.capacidadeLitros * 100)) : null;
+          return (
+            <div key={t.id} style={{ minWidth: 200 }}>
+              <span className="cte-resumo-rotulo">{t.nome}</span>
+              <span className="cte-resumo-valor" style={{ color: t.saldo < 0 ? "#c62828" : undefined }}>{formatarDecimal(t.saldo, 0)} L</span>
+              {pct !== null && (
+                <div style={{ height: 5, background: "#e5e3da", borderRadius: 3, margin: "6px 0 4px" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", borderRadius: 3, background: pct < 15 ? "#c62828" : "#00732F" }} />
+                </div>
+              )}
+              <div className="subtle" style={{ fontSize: 12 }}>
+                {pct !== null ? `${formatarDecimal(pct, 0)}% de ${formatarDecimal(t.capacidadeLitros, 0)} L` : ""}
+                {t.custoMedio ? `${pct !== null ? " · " : ""}custo médio R$ ${formatarDecimal(t.custoMedio, 3)}/L` : ""}
+              </div>
+            </div>
+          );
+        })}
+      </div>}
+      {tanques && !tanques.length && <p className="hint">Cadastre o primeiro tanque em <strong>Tanques</strong> para começar.</p>}
+
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 10 }}>
+        <div className="field-group" style={{ marginBottom: 0 }}>
+          <label className="field-label">De</label>
+          <input type="date" value={filtro.de} onChange={e => setFiltro(f => ({ ...f, de: e.target.value }))} />
+        </div>
+        <div className="field-group" style={{ marginBottom: 0 }}>
+          <label className="field-label">Até</label>
+          <input type="date" value={filtro.ate} onChange={e => setFiltro(f => ({ ...f, ate: e.target.value }))} />
+        </div>
+        <div className="field-group" style={{ marginBottom: 0 }}>
+          <label className="field-label">Tanque</label>
+          <select value={filtro.tanqueId} onChange={e => setFiltro(f => ({ ...f, tanqueId: e.target.value }))}>
+            <option value="">Todos</option>
+            {(tanques || []).map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        </div>
+        {dados && (
+          <p className="subtle" style={{ margin: "0 0 6px 8px", fontSize: 13 }}>
+            No período: entrou {formatarDecimal(dados.totais.entradas, 1)} L (R$ {formatarMoeda(dados.totais.valorEntradas)}) ·
+            saiu {formatarDecimal(dados.totais.saidas, 1)} L{dados.totais.ajustes ? ` · ajustes ${formatarDecimal(dados.totais.ajustes, 1)} L` : ""}
+          </p>
+        )}
+      </div>
+
+      <table className="data-table">
+        <thead><tr><th style={{ width: 90 }}>Data</th><th style={{ width: 80 }}>Tipo</th><th>Tanque</th><th>Origem / destino</th>
+          <th style={{ textAlign: "right" }}>Litros</th><th style={{ textAlign: "right" }}>R$/L</th><th style={{ textAlign: "right" }}>Total</th><th className="actions-col"></th></tr></thead>
+        <tbody>
+          {pag.itens.map(m => {
+            const t = TIPOS_MOVIMENTO_DIESEL[m.tipo];
+            const sinal = m.tipo === "saida" ? -m.litros : m.litros;
+            return (
+              <tr key={m.id}>
+                <td>{dia(m.data)}</td>
+                <td style={{ color: t.cor, fontWeight: 500 }}>{t.rotulo}</td>
+                <td>{m.tanque?.nome}</td>
+                <td title={m.observacao || ""}>{origem(m)}{m.producao && <span className="subtle" style={{ fontSize: 12 }}> · boletim</span>}</td>
+                <td style={{ textAlign: "right", color: sinal < 0 ? "#c62828" : "#00732F" }}>{sinal > 0 ? "+" : ""}{formatarDecimal(sinal, 1)}</td>
+                <td style={{ textAlign: "right" }}>{m.valorLitro ? formatarDecimal(m.valorLitro, 3) : "—"}</td>
+                <td style={{ textAlign: "right" }}>{m.valorTotal ? `R$ ${formatarMoeda(m.valorTotal)}` : "—"}</td>
+                <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
+                  {m.producao ? (
+                    <span className="subtle" style={{ fontSize: 11.5 }} title="Altere pelo boletim de produção da operação">pelo boletim</span>
+                  ) : (
+                    <>
+                      {m.tipo !== "ajuste" && <button className="icon-btn" title="Editar" onClick={() => setModal({ tipo: m.tipo, movimento: m })}><Pencil size={14} /></button>}
+                      <button className="icon-btn icon-btn-danger" title="Excluir" onClick={() => excluir(m)}><Trash2 size={14} /></button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+          {dados && !dados.movimentos.length && <tr><td colSpan={8}>Nenhum movimento nesse período.</td></tr>}
+        </tbody>
+      </table>
+      {pag.controle}
+
+      {modal?.tipo === "tanques" && <TanquesDieselModal onFechar={() => setModal(null)} onSalvo={carregar} />}
+      {modal && modal.tipo !== "tanques" && (
+        <MovimentoDieselModal tipo={modal.tipo} movimento={modal.movimento} tanques={tanques || []} apoio={apoio}
+          onFechar={() => setModal(null)} onSalvo={() => { setModal(null); carregar(); }} />
+      )}
+    </div>
+  );
+}
+
 function EquipamentosAba({ operacaoId }) {
   const hoje = hojeNoFuso();
   const [alocacoes, setAlocacoes] = useState(null);
@@ -4374,6 +5117,11 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
               </button>
             )}
             {temViagens && (
+              <button type="button" className="cte-aba" aria-selected={aba === "producao"} onClick={() => setAba("producao")}>
+                Produção
+              </button>
+            )}
+            {temViagens && (
               <button type="button" className="cte-aba" aria-selected={aba === "despesas"} onClick={() => setAba("despesas")}>
                 Despesas
               </button>
@@ -4406,6 +5154,7 @@ function RecordForm({ moduleKey, record, onSave, onCancel }) {
           )}
           {temViagens && aba === "faturas" && <FaturasAba operacaoId={record?.id} />}
           {temViagens && aba === "despesas" && <DespesasAba operacaoId={record?.id} />}
+          {temViagens && aba === "producao" && <ProducaoAba operacaoId={record?.id} />}
           {temViagens && aba === "equipamentos" && <EquipamentosAba operacaoId={record?.id} />}
 
           {temAbaFiscal && aba === "fiscal" && (
@@ -13230,6 +13979,7 @@ function ErpBiomassa() {
     ...cadastroNaOrdem(["operacoes"]),
     ...(liberado("equipamentos") || liberado("manutencao") ? [{ key: "equipamentos", label: "Equipamentos", icon: Settings }] : []),
     ...(liberado("manutencao") ? [{ key: "manutencao", label: "Manutenção", icon: Car }] : []),
+    ...(liberado("diesel") ? [{ key: "diesel", label: "Diesel", icon: Droplet }] : []),
     ...(liberado("notasFiscais") ? [{ key: "notasFiscais", label: "Vendas/NFe", icon: FileText }] : []),
     ...(liberado("cte") ? [{ key: "cte", label: "CTe", icon: Truck }] : []),
     ...(liberado("emissao") ? [{ key: "emissao", label: "MDFe", icon: Truck }] : []),
@@ -13848,6 +14598,7 @@ function ErpBiomassa() {
         {view === "agenda" && <AgendaView />}
         {view === "equipamentos" && <EquipamentosView />}
         {view === "manutencao" && <ManutencaoView />}
+        {view === "diesel" && <DieselView />}
         {view === "contasPagar" && <ContasPagarView />}
         {view === "ponto" && <PontoView />}
         {/* key: cada cadastro é uma tela nova — sem isso a busca, a página e o

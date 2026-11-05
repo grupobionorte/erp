@@ -6,6 +6,8 @@
    chamar a rota direto — a trava precisa existir dos dois lados.
 --------------------------------------------------------------------------- */
 
+const prisma = require("./prisma");
+
 // Cada menu e os caminhos de API que ele usa.
 const MENUS = {
   dashboard: { rotulo: "Visão geral", rotas: [] },
@@ -65,6 +67,20 @@ function menuDaRota(caminho) {
   return achado ? [achado.chave] : null;
 }
 
+/**
+ * Menus liberados para esta pessoa NESTA empresa.
+ *
+ * A permissão é do par usuário + empresa. Sem configuração para a empresa
+ * escolhida, vale a lista antiga do usuário; sem nenhuma das duas, tudo
+ * liberado — que é o comportamento de quem foi cadastrado antes desta trava
+ * existir, e evita trancar alguém por falta de configuração.
+ */
+function menusDoUsuario(usuario, empresaId) {
+  const daEmpresa = usuario.permissoesPorEmpresa?.find((p) => p.empresaId === empresaId);
+  if (daEmpresa) return daEmpresa.menus || [];
+  return usuario.permissoes || [];
+}
+
 // Menu que o admin nunca perde. Sem esta garantia, uma configuração errada
 // trancaria todo mundo do lado de fora, sem ninguém para destravar.
 const MENU_DE_RESGATE = "usuarios";
@@ -76,7 +92,7 @@ const MENU_DE_RESGATE = "usuarios";
  * administrar, não que ela deva ver tudo. A única exceção é o menu de
  * usuários, que o admin mantém para poder corrigir as permissões.
  */
-function exigirPermissaoDeMenu(req, res, next) {
+async function exigirPermissaoDeMenu(req, res, next) {
   const usuario = req.usuario;
   if (!usuario) return next();
 
@@ -95,10 +111,30 @@ function exigirPermissaoDeMenu(req, res, next) {
 
   if (menus.some((menu) => permissoes.includes(menu))) return next();
 
+  // A lista do token é a do login. Menu liberado depois disso (ou menu novo
+  // do sistema, marcado em Usuários) aparecia na tela, que lê o cadastro,
+  // e era recusado aqui até a pessoa sair e entrar de novo. Antes de
+  // recusar, confere o cadastro.
+  try {
+    const cadastro = await prisma.usuario.findUnique({
+      where: { id: Number(usuario.id) },
+      select: { ativo: true, permissoes: true, permissoesPorEmpresa: { select: { empresaId: true, menus: true } } },
+    });
+    if (cadastro?.ativo) {
+      const atuais = menusDoUsuario(cadastro, usuario.empresaId);
+      if (!atuais.length || menus.some((menu) => atuais.includes(menu))) {
+        req.usuario.permissoes = atuais;
+        return next();
+      }
+    }
+  } catch (erro) {
+    return next(erro);
+  }
+
   return res.status(403).json({
     erro: "Seu usuário não tem acesso a essa parte do sistema",
     detalhe: "Peça a um administrador para liberar em Usuários.",
   });
 }
 
-module.exports = { MENUS, MENU_DE_RESGATE, exigirPermissaoDeMenu };
+module.exports = { MENUS, MENU_DE_RESGATE, exigirPermissaoDeMenu, menusDoUsuario };

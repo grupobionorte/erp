@@ -161,7 +161,9 @@ separadas — é o que o sistema anterior da empresa fazia.
 **Permissões são por usuário E empresa.** Resolvidas no login conforme a
 empresa escolhida, bloqueadas no servidor (`src/lib/permissoes.js`), não só
 escondidas na tela. Vale para admin também, exceto o menu de usuários, que é
-a saída de emergência quando a configuração trava alguém.
+a saída de emergência quando a configuração trava alguém. Os menus
+vão no token do login; antes de recusar, `exigirPermissaoDeMenu` confere o
+cadastro, para o menu liberado depois do login valer na hora.
 
 **Imagem não vai para o banco sem redução.** A logo da empresa chegou a
 pesar megabytes e deixou o login lento; hoje é reduzida a 320px no

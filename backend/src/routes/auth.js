@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const { autenticar } = require("../middleware/auth");
+const { menusDoUsuario } = require("../lib/permissoes");
 
 const asyncHandler = require("../lib/asyncHandler");
 const router = express.Router();
@@ -11,20 +12,6 @@ const router = express.Router();
 // é renovado a cada abertura. Exigir senha toda manhã num aplicativo de
 // agenda faria as pessoas simplesmente pararem de abrir.
 const DURACAO_TOKEN = { web: "8h", app: "30d" };
-
-/**
- * Menus liberados para esta pessoa NESTA empresa.
- *
- * A permissão é do par usuário + empresa. Sem configuração para a empresa
- * escolhida, vale a lista antiga do usuário; sem nenhuma das duas, tudo
- * liberado — que é o comportamento de quem foi cadastrado antes desta trava
- * existir, e evita trancar alguém por falta de configuração.
- */
-function menusDoUsuario(usuario, empresaId) {
-  const daEmpresa = usuario.permissoesPorEmpresa?.find((p) => p.empresaId === empresaId);
-  if (daEmpresa) return daEmpresa.menus || [];
-  return usuario.permissoes || [];
-}
 
 function gerarToken(usuario, empresaId, origem = "web") {
   return jwt.sign(

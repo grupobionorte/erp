@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.159";
+const VERSAO_SISTEMA = "1.160";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.160", texto: "Diesel: a compra tem operação e pode gerar o Contas a pagar, à vista ou parcelado" },
   { versao: "1.159", texto: "Operação: aba Produção (boletim por máquina e turno, horímetro, paradas e diesel). Novo menu Diesel: compras, saídas e saldo dos tanques" },
   { versao: "1.158", texto: "Relatório do CT-e: relação das cartas frete emitidas no período, com filtro por proprietário" },
   { versao: "1.157", texto: "Contas a pagar: relatório impresso em paisagem" },
@@ -4126,12 +4127,23 @@ function MovimentoDieselModal({ tipo, movimento, tanques, apoio, onFechar, onSal
     destino: movimento?.destino || "",
     saldoMedido: "",
     observacao: movimento?.observacao || "",
+    // Conta a pagar da compra: na edição, volta como foi gerada.
+    gerarConta: Boolean(movimento?.contas?.length),
+    vencimento: movimento?.contas?.[0]?.vencimento ? String(movimento.contas[0].vencimento).slice(0, 10) : "",
+    parcelas: String(movimento?.contas?.[0]?.parcelaTotal || 1),
+    categoriaId: movimento?.contas?.[0]?.categoriaId ? String(movimento.contas[0].categoriaId)
+      : String((apoio.categorias || []).find(c => /diesel|combust/i.test(c.nome))?.id || ""),
   }));
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const set = (c, v) => setF(x => ({ ...x, [c]: v }));
   const tanque = tanques.find(t => String(t.id) === f.tanqueId);
   const total = Number(f.litros) > 0 && Number(f.valorLitro) > 0 ? Number(f.litros) * Number(f.valorLitro) : null;
+  const parcelaPaga = (movimento?.contas || []).some(c => c.status === "paga");
+  // Prévia das parcelas, com a mesma regra do servidor: sobra de centavos
+  // na primeira.
+  const vezes = Math.max(1, Math.min(Number(f.parcelas) || 1, 24));
+  const valorParcela = total ? Math.floor((total / vezes) * 100) / 100 : null;
   const diferenca = tipo === "ajuste" && tanque && f.saldoMedido !== "" ? Number(f.saldoMedido) - tanque.saldo : null;
 
   const salvar = async () => {
@@ -4214,13 +4226,58 @@ function MovimentoDieselModal({ tipo, movimento, tanques, apoio, onFechar, onSal
                   <input value={f.documento} onChange={e => set("documento", e.target.value)} />
                 </div>
               </div>
-              <div className="field-group">
-                <label className="field-label">Fornecedor</label>
-                <select value={f.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
-                  <option value="">—</option>
-                  {apoio.fornecedores.map(p => <option key={p.id} value={p.id}>{p.nomeRazaoSocial}</option>)}
-                </select>
+              <div className="nf-grid-2">
+                <div className="field-group">
+                  <label className="field-label">Fornecedor</label>
+                  <select value={f.fornecedorId} onChange={e => set("fornecedorId", e.target.value)}>
+                    <option value="">—</option>
+                    {apoio.fornecedores.map(p => <option key={p.id} value={p.id}>{p.nomeRazaoSocial}</option>)}
+                  </select>
+                </div>
+                <div className="field-group">
+                  <label className="field-label">Operação</label>
+                  <select value={f.operacaoId} onChange={e => set("operacaoId", e.target.value)}>
+                    <option value="">— (despesa geral)</option>
+                    {apoio.operacoes.map(o => <option key={o.id} value={o.id}>{o.codigo} — {o.descricao}</option>)}
+                  </select>
+                </div>
               </div>
+              <section className="pf-secao" style={{ marginTop: 4 }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 500, cursor: "pointer" }}>
+                  <input type="checkbox" checked={f.gerarConta} disabled={parcelaPaga}
+                    onChange={e => setF(x => ({ ...x, gerarConta: e.target.checked, vencimento: x.vencimento || x.data }))} />
+                  Gerar conta a pagar
+                </label>
+                {parcelaPaga && <p className="hint">Esta compra já tem parcela paga no Contas a pagar. Para alterar, estorne a baixa lá.</p>}
+                {f.gerarConta && (
+                  <>
+                    <div className="nf-grid-3" style={{ marginTop: 8 }}>
+                      <div className="field-group">
+                        <label className="field-label">1º vencimento<span className="req">*</span></label>
+                        <input type="date" value={f.vencimento} onChange={e => set("vencimento", e.target.value)} />
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Parcelas</label>
+                        <select value={f.parcelas} onChange={e => set("parcelas", e.target.value)}>
+                          {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i === 0 ? "À vista (1x)" : `${i + 1}x`}</option>)}
+                        </select>
+                      </div>
+                      <div className="field-group">
+                        <label className="field-label">Categoria</label>
+                        <select value={f.categoriaId} onChange={e => set("categoriaId", e.target.value)}>
+                          <option value="">—</option>
+                          {(apoio.categorias || []).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <p className="hint" style={{ margin: 0 }}>
+                      {total ? `${vezes}x de R$ ${formatarMoeda(valorParcela)}${vezes > 1 ? ", mês a mês" : ""}, com fornecedor, nota e operação desta compra.`
+                        : "Informe o valor do litro para gerar a conta."}
+                      {editando && f.gerarConta ? " As parcelas em aberto são refeitas ao gravar." : ""}
+                    </p>
+                  </>
+                )}
+              </section>
             </>
           )}
           {tipo === "saida" && (
@@ -4446,10 +4503,19 @@ function DieselView() {
                 <td>{dia(m.data)}</td>
                 <td style={{ color: t.cor, fontWeight: 500 }}>{t.rotulo}</td>
                 <td>{m.tanque?.nome}</td>
-                <td title={m.observacao || ""}>{origem(m)}{m.producao && <span className="subtle" style={{ fontSize: 12 }}> · boletim</span>}</td>
+                <td title={m.observacao || ""}>
+                  {origem(m)}{m.producao && <span className="subtle" style={{ fontSize: 12 }}> · boletim</span>}
+                  {m.tipo === "entrada" && m.operacao && <span className="subtle" style={{ fontSize: 12 }}> · op. {m.operacao.codigo}</span>}
+                  {m.contas?.length > 0 && (
+                    <span style={{ fontSize: 11.5, marginLeft: 6, color: m.contas.every(c => c.status === "paga") ? "#00732F" : "#b57a12" }}
+                      title={m.contas.map(c => `${String(c.vencimento).slice(0, 10).split("-").reverse().join("/")} R$ ${formatarMoeda(c.valor)} — ${c.status}`).join("\n")}>
+                      · conta a pagar {m.contas.length > 1 ? `${m.contas.length}x` : ""} ({m.contas.filter(c => c.status === "paga").length}/{m.contas.length} paga{m.contas.length > 1 ? "s" : ""})
+                    </span>
+                  )}
+                </td>
                 <td style={{ textAlign: "right", color: sinal < 0 ? "#c62828" : "#00732F" }}>{sinal > 0 ? "+" : ""}{formatarDecimal(sinal, 1)}</td>
                 <td style={{ textAlign: "right" }}>{m.valorLitro ? formatarDecimal(m.valorLitro, 3) : "—"}</td>
-                <td style={{ textAlign: "right" }}>{m.valorTotal ? `R$ ${formatarMoeda(m.valorTotal)}` : "—"}</td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>{m.valorTotal ? `R$ ${formatarMoeda(m.valorTotal)}` : "—"}</td>
                 <td className="actions-col" style={{ whiteSpace: "nowrap" }}>
                   {m.producao ? (
                     <span className="subtle" style={{ fontSize: 11.5 }} title="Altere pelo boletim de produção da operação">pelo boletim</span>

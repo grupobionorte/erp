@@ -1,8 +1,10 @@
+const crypto = require("crypto");
 const express = require("express");
 const prisma = require("../lib/prisma");
 const asyncHandler = require("../lib/asyncHandler");
 const { intervaloNoFuso } = require("../lib/fuso");
 const { arredondar, situacaoDosTanques } = require("../lib/diesel");
+const { somarMeses, dividirEmParcelas } = require("../lib/parcelas");
 
 const router = express.Router();
 
@@ -19,6 +21,10 @@ const incluirMovimento = {
   equipamento: { select: { id: true, codigo: true, nome: true } },
   operacao: { select: { id: true, codigo: true, descricao: true } },
   producao: { select: { id: true, operacaoId: true, turno: true } },
+  contas: {
+    select: { id: true, status: true, valor: true, vencimento: true, parcelaNumero: true, parcelaTotal: true, categoriaId: true },
+    orderBy: { vencimento: "asc" },
+  },
 };
 
 async function tanqueDaEmpresa(id, req, { ativo = true } = {}) {
@@ -96,7 +102,7 @@ router.get("/movimentos", asyncHandler(async (req, res) => {
 // diesel não precisa ter os menus de cadastro.
 router.get("/apoio", asyncHandler(async (req, res) => {
   const empresaId = req.usuario.empresaId;
-  const [fornecedores, equipamentos, operacoes] = await Promise.all([
+  const [fornecedores, equipamentos, operacoes, categorias] = await Promise.all([
     // Mesmo critério do cadastro: os sem empresa (anteriores à separação
     // por empresa) continuam visíveis.
     prisma.pessoa.findMany({
@@ -114,8 +120,13 @@ router.get("/apoio", asyncHandler(async (req, res) => {
       select: { id: true, codigo: true, descricao: true },
       orderBy: { codigo: "asc" },
     }),
+    prisma.categoriaDespesa.findMany({
+      where: { empresaId, ativo: true },
+      select: { id: true, nome: true },
+      orderBy: { nome: "asc" },
+    }),
   ]);
-  res.json({ fornecedores, equipamentos, operacoes });
+  res.json({ fornecedores, equipamentos, operacoes, categorias });
 }));
 
 /**
@@ -134,6 +145,14 @@ async function dadosDoMovimento(body, req) {
   if (!(litros > 0)) return { erro: "Informe os litros" };
 
   const dados = { tipo, data, litros: arredondar(litros), tanqueId: tanque.id, observacao: texto(body.observacao) };
+  // Operação: na saída, onde foi consumido; na compra, para qual frente o
+  // diesel foi comprado (é ela que recebe a conta a pagar).
+  let operacaoId = null;
+  if (body.operacaoId) {
+    const o = await prisma.operacao.findFirst({ where: { id: Number(body.operacaoId), empresaId: req.usuario.empresaId } });
+    if (!o) return { erro: "Operação não encontrada" };
+    operacaoId = o.id;
+  }
   if (tipo === "entrada") {
     const valorLitro = numero(body.valorLitro);
     if (valorLitro !== null && !(valorLitro > 0)) return { erro: "Valor do litro inválido" };
@@ -150,20 +169,14 @@ async function dadosDoMovimento(body, req) {
       valorTotal: valorLitro === null ? null : arredondar(litros * valorLitro),
       fornecedorId,
       documento: texto(body.documento),
-      equipamentoId: null, operacaoId: null, destino: null,
+      equipamentoId: null, operacaoId, destino: null,
     });
   } else {
     let equipamentoId = null;
-    let operacaoId = null;
     if (body.equipamentoId) {
       const e = await prisma.equipamento.findFirst({ where: { id: Number(body.equipamentoId), empresaId: req.usuario.empresaId } });
       if (!e) return { erro: "Equipamento não encontrado" };
       equipamentoId = e.id;
-    }
-    if (body.operacaoId) {
-      const o = await prisma.operacao.findFirst({ where: { id: Number(body.operacaoId), empresaId: req.usuario.empresaId } });
-      if (!o) return { erro: "Operação não encontrada" };
-      operacaoId = o.id;
     }
     const destino = texto(body.destino);
     if (!equipamentoId && !destino) return { erro: "Diga quem abasteceu: o equipamento ou, se não for cadastrado, o destino" };
@@ -175,6 +188,54 @@ async function dadosDoMovimento(body, req) {
   return { dados, tanque };
 }
 
+/**
+ * Contas a pagar da compra, uma por parcela, no mesmo formato das lançadas
+ * no Contas a pagar (descrição com "1/3", sobra de centavos na primeira,
+ * vencimentos mês a mês). Só sai de compra com valor: sem o R$/L não há o
+ * que pagar.
+ */
+async function contasDaCompra(body, dados, tanque, req) {
+  if (!body.gerarConta) return { contas: [] };
+  if (!dados.valorTotal) return { erro: "Para gerar a conta a pagar, informe o valor do litro" };
+  if (!/^\d{4}-\d{2}-\d{2}/.test(String(body.vencimento || ""))) return { erro: "Informe o vencimento da conta a pagar" };
+  const vezes = Math.max(1, Math.min(Number(body.parcelas) || 1, 24));
+  let categoriaId = null;
+  if (body.categoriaId) {
+    const c = await prisma.categoriaDespesa.findFirst({ where: { id: Number(body.categoriaId), empresaId: req.usuario.empresaId } });
+    if (!c) return { erro: "Categoria não encontrada" };
+    categoriaId = c.id;
+  }
+  const nota = dados.documento ? (/^nf/i.test(dados.documento) ? dados.documento : `NF ${dados.documento}`) : null;
+  const descricao = `Diesel ${String(dados.litros).replace(".", ",")} L${nota ? ` — ${nota}` : ""}`;
+  // Vencimento ao meio-dia UTC, como no Contas a pagar: os filtros de lá
+  // contam com isso.
+  const primeiro = new Date(`${String(body.vencimento).slice(0, 10)}T12:00:00Z`);
+  const valores = dividirEmParcelas(dados.valorTotal, vezes);
+  const grupo = vezes > 1 ? crypto.randomUUID() : null;
+  return {
+    contas: valores.map((valor, i) => ({
+      descricao: vezes > 1 ? `${descricao} (${i + 1}/${vezes})` : descricao,
+      valor,
+      vencimento: somarMeses(primeiro, i),
+      fornecedorId: dados.fornecedorId,
+      operacaoId: dados.operacaoId,
+      categoriaId,
+      documento: dados.documento,
+      observacao: `Compra de diesel — ${tanque.nome}`,
+      empresaId: req.usuario.empresaId,
+      grupo,
+      parcelaNumero: vezes > 1 ? i + 1 : null,
+      parcelaTotal: vezes > 1 ? vezes : null,
+    })),
+  };
+}
+
+// Conta paga é dinheiro que já saiu: a compra que a gerou não muda mais por
+// aqui. Para corrigir, estorna-se a baixa no Contas a pagar.
+async function contaPagaDaCompra(movimentoId) {
+  return prisma.contaPagar.findFirst({ where: { movimentoDieselId: movimentoId, status: "paga" } });
+}
+
 // Saldo que ficou: devolvido para a tela avisar quando a saída passou do que
 // havia (lançamento fora de ordem, compra ainda não lançada).
 async function saldoDepois(tanqueId, empresaId) {
@@ -183,11 +244,17 @@ async function saldoDepois(tanqueId, empresaId) {
 }
 
 router.post("/movimentos", asyncHandler(async (req, res) => {
-  const { erro, dados } = await dadosDoMovimento(req.body, req);
+  const { erro, dados, tanque } = await dadosDoMovimento(req.body, req);
   if (erro) return res.status(400).json({ erro });
-  const movimento = await prisma.movimentoDiesel.create({
-    data: { ...dados, empresaId: req.usuario.empresaId, criadoPorId: req.usuario.id },
-    include: incluirMovimento,
+  const { erro: erroConta, contas } = dados.tipo === "entrada" ? await contasDaCompra(req.body, dados, tanque, req) : { contas: [] };
+  if (erroConta) return res.status(400).json({ erro: erroConta });
+  // Compra e contas juntas: nunca uma sem a outra.
+  const movimento = await prisma.$transaction(async (tx) => {
+    const criado = await tx.movimentoDiesel.create({
+      data: { ...dados, empresaId: req.usuario.empresaId, criadoPorId: req.usuario.id },
+    });
+    if (contas.length) await tx.contaPagar.createMany({ data: contas.map((c) => ({ ...c, movimentoDieselId: criado.id })) });
+    return tx.movimentoDiesel.findUnique({ where: { id: criado.id }, include: incluirMovimento });
   });
   res.status(201).json({ ...movimento, saldoTanque: await saldoDepois(movimento.tanqueId, req.usuario.empresaId) });
 }));
@@ -205,16 +272,36 @@ router.put("/movimentos/:id", asyncHandler(async (req, res) => {
   const { m, erro: erroM, status } = await movimentoEditavel(req.params.id, req);
   if (erroM) return res.status(status).json({ erro: erroM });
   if (m.tipo === "ajuste") return res.status(409).json({ erro: "Ajuste não se edita: exclua e faça a medição de novo" });
-  const { erro, dados } = await dadosDoMovimento({ ...req.body, tipo: m.tipo }, req);
+  if (await contaPagaDaCompra(m.id)) {
+    return res.status(409).json({ erro: "Essa compra já tem parcela paga no Contas a pagar", detalhe: "Estorne a baixa lá antes de alterar a compra." });
+  }
+  const { erro, dados, tanque } = await dadosDoMovimento({ ...req.body, tipo: m.tipo }, req);
   if (erro) return res.status(400).json({ erro });
-  const movimento = await prisma.movimentoDiesel.update({ where: { id: m.id }, data: dados, include: incluirMovimento });
+  const { erro: erroConta, contas } = m.tipo === "entrada" ? await contasDaCompra(req.body, dados, tanque, req) : { contas: [] };
+  if (erroConta) return res.status(400).json({ erro: erroConta });
+  // As contas em aberto são refeitas com os dados novos da compra: valor,
+  // fornecedor e parcelas sempre batem com ela.
+  const movimento = await prisma.$transaction(async (tx) => {
+    await tx.movimentoDiesel.update({ where: { id: m.id }, data: dados });
+    await tx.contaPagar.deleteMany({ where: { movimentoDieselId: m.id, status: "aberta" } });
+    if (contas.length) await tx.contaPagar.createMany({ data: contas.map((c) => ({ ...c, movimentoDieselId: m.id })) });
+    return tx.movimentoDiesel.findUnique({ where: { id: m.id }, include: incluirMovimento });
+  });
   res.json({ ...movimento, saldoTanque: await saldoDepois(movimento.tanqueId, req.usuario.empresaId) });
 }));
 
 router.delete("/movimentos/:id", asyncHandler(async (req, res) => {
   const { m, erro, status } = await movimentoEditavel(req.params.id, req);
   if (erro) return res.status(status).json({ erro });
-  await prisma.movimentoDiesel.delete({ where: { id: m.id } });
+  if (await contaPagaDaCompra(m.id)) {
+    return res.status(409).json({ erro: "Essa compra já tem parcela paga no Contas a pagar", detalhe: "Estorne a baixa lá antes de excluir a compra." });
+  }
+  // As parcelas em aberto vão junto: conta de compra que não existe mais
+  // não deve continuar esperando pagamento.
+  await prisma.$transaction([
+    prisma.contaPagar.deleteMany({ where: { movimentoDieselId: m.id, status: "aberta" } }),
+    prisma.movimentoDiesel.delete({ where: { id: m.id } }),
+  ]);
   res.status(204).send();
 }));
 

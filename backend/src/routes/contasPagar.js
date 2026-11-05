@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { somarMeses } = require("../lib/parcelas");
 const express = require("express");
 
 const prisma = require("../lib/prisma");
@@ -56,17 +57,6 @@ function filtroOperacao(operacaoId) {
   return {};
 }
 
-// Soma meses preservando o fim do mês: vencimento dia 31 em fevereiro cai
-// no último dia, não no dia 3 de março.
-function somarMeses(data, meses) {
-  const d = new Date(data);
-  const dia = d.getUTCDate();
-  d.setUTCDate(1);
-  d.setUTCMonth(d.getUTCMonth() + meses);
-  const ultimoDia = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-  d.setUTCDate(Math.min(dia, ultimoDia));
-  return d;
-}
 
 // ---------------------------------------------------------------------------
 // Categorias de despesa

@@ -26,6 +26,8 @@ const agendaRouter = require("./routes/agenda");
 const pushRouter = require("./routes/push");
 const lembretesRouter = require("./routes/lembretes");
 const cartasFreteRouter = require("./routes/cartasFrete");
+const dieselRouter = require("./routes/diesel");
+const producaoOperacaoRouter = require("./routes/producaoOperacao");
 const { autenticar } = require("./middleware/auth");
 const { exigirPermissaoDeMenu } = require("./lib/permissoes");
 
@@ -87,6 +89,8 @@ app.use("/manutencao", manutencaoRouter);
 app.use("/manutencao", manutencaoEquipamentosRouter);
 app.use("/motoristas", motoristasRouter);
 app.use("/operacoes", operacoesRouter);
+app.use("/operacoes", producaoOperacaoRouter);
+app.use("/diesel", dieselRouter);
 app.use("/relatorios", relatoriosRouter);
 app.use("/contas-pagar", contasPagarRouter);
 app.use("/agenda", agendaRouter);

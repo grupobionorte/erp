@@ -1127,6 +1127,12 @@ model ContaPagar {
   parcelaNumero Int? @map("parcela_numero")
   parcelaTotal  Int? @map("parcela_total")
 
+  // Compra de diesel que gerou a conta: as parcelas em aberto acompanham a
+  // compra (mudam e somem com ela). Excluída a compra por outro caminho, a
+  // conta fica, sem o vínculo.
+  movimentoDieselId Int?             @map("movimento_diesel_id")
+  movimentoDiesel   MovimentoDiesel? @relation(fields: [movimentoDieselId], references: [id], onDelete: SetNull)
+
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 
@@ -1134,6 +1140,7 @@ model ContaPagar {
 
   @@index([empresaId, status, vencimento])
   @@index([operacaoId])
+  @@index([movimentoDieselId])
   @@map("contas_pagar")
 }
 
@@ -1649,7 +1656,11 @@ model MovimentoDiesel {
   fornecedor   Pessoa? @relation(fields: [fornecedorId], references: [id])
   documento    String? // nº da NF da compra
 
-  // Saída: quem consumiu e em que frente.
+  // Contas a pagar geradas pela compra (uma por parcela).
+  contas ContaPagar[]
+
+  // Saída: quem consumiu e em que frente. Na entrada, a operação para a
+  // qual o diesel foi comprado.
   equipamentoId Int?         @map("equipamento_id")
   equipamento   Equipamento? @relation(fields: [equipamentoId], references: [id])
   operacaoId    Int?         @map("operacao_id")

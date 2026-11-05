@@ -105,7 +105,10 @@ pessoa digita o medido; grava a diferença com sinal). Saldo e custo médio
 nunca são gravados: saem da soma dos movimentos. O diesel do boletim é uma
 saída ligada à linha (`producaoId`), que nasce, muda e some com ela e não se
 edita pelo menu Diesel. Saldo negativo é aceito com aviso (compra lançada
-depois).
+depois). A compra leva a operação e pode gerar o Contas a pagar (à vista ou
+parcelado, `ContaPagar.movimentoDieselId`): as parcelas em aberto são
+refeitas ao editar a compra e somem ao excluí-la; com parcela paga, a compra
+trava até estornar a baixa.
 
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra

@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.160.1";
+const VERSAO_SISTEMA = "1.160.2";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.160.2", texto: "MDF-e: NCM achado mesmo com acento ou espaço diferente no nome do produto, e opção \"Produto e NCM\" no menu do rascunho" },
   { versao: "1.160.1", texto: "Permissões: menu liberado em Usuários passa a valer na hora, sem precisar sair e entrar de novo" },
   { versao: "1.160", texto: "Diesel: a compra tem operação e pode gerar o Contas a pagar, à vista ou parcelado" },
   { versao: "1.159", texto: "Operação: aba Produção (boletim por máquina e turno, horímetro, paradas e diesel). Novo menu Diesel: compras, saídas e saldo dos tanques" },
@@ -7394,6 +7395,69 @@ function GerarMdfeModal({ ctePreSelecionado, onGerar, onCancel }) {
 
 // Corrige o seguro de um MDF-e em rascunho ou rejeitado, sem precisar
 // excluir o manifesto e gerar de novo. Pode puxar o do cadastro da empresa.
+// Produto predominante e NCM do MDF-e escolhidos à mão, para quando a
+// descrição que veio do CT-e não bate com o cadastro de Produtos. Escolher
+// um produto do cadastro traz a descrição e o NCM juntos; o NCM também pode
+// ser digitado.
+function ProdutoNcmMdfeModal({ mdfe, onSalvo, onCancel }) {
+  const [produtos, setProdutos] = useState(null);
+  const [descricao, setDescricao] = useState(mdfe.produtoPredominante || "");
+  const [ncm, setNcm] = useState(mdfe.ncmProdutoPredominante || "");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  useEffect(() => { apiRequest("/documentos-fiscais/produtos-ncm").then(setProdutos).catch(() => setProdutos([])); }, []);
+
+  const escolher = (id) => {
+    const p = (produtos || []).find(x => String(x.id) === id);
+    if (p) { setDescricao(p.descricao); setNcm(p.ncm); }
+  };
+  const salvar = async () => {
+    setErro(""); setSalvando(true);
+    try {
+      await apiRequest(`/documentos-fiscais/${mdfe.id}/produto-predominante`, {
+        method: "PUT", body: JSON.stringify({ produtoPredominante: descricao, ncm }),
+      });
+      onSalvo();
+    } catch (e) { setErro(e.message); setSalvando(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3>Produto predominante e NCM</h3>
+          <button className="icon-btn" onClick={onCancel} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="field-group">
+            <label className="field-label">Escolher do cadastro de Produtos</label>
+            <select defaultValue="" onChange={e => escolher(e.target.value)}>
+              <option value="">{produtos ? "Selecione…" : "Carregando…"}</option>
+              {(produtos || []).map(p => <option key={p.id} value={p.id}>{p.descricao} — NCM {p.ncm}</option>)}
+            </select>
+          </div>
+          <div className="nf-grid-2">
+            <div className="field-group">
+              <label className="field-label">Descrição do produto<span className="req">*</span></label>
+              <input value={descricao} onChange={e => setDescricao(e.target.value)} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">NCM (8 números)<span className="req">*</span></label>
+              <input value={ncm} inputMode="numeric" maxLength={10} onChange={e => setNcm(e.target.value)} />
+            </div>
+          </div>
+          <p className="hint">Depois de gravar, use "Tentar emitir de novo" no menu do MDF-e.</p>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel}>Cancelar</button>
+          <button className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? "Gravando…" : "Gravar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CorrigirSeguroMdfeModal({ mdfeId, onSalvo, onCancel }) {
   const [seguro, setSeguro] = useState(null);
   const [erro, setErro] = useState("");
@@ -7492,6 +7556,7 @@ function MdfeView() {
   const [menuAberto, setMenuAberto] = useState(null);
   const [mostrarGerar, setMostrarGerar] = useState(false);
   const [corrigindoSeguro, setCorrigindoSeguro] = useState(null);
+  const [produtoNcmDe, setProdutoNcmDe] = useState(null);
 
   useEffect(() => {
     const fechar = () => setMenuAberto(null);
@@ -7771,6 +7836,10 @@ function MdfeView() {
                             onClick={() => { setMenuAberto(null); informarCiot(mdfe); }}>
                             <Pencil size={14} /> {mdfe.ciot ? `CIOT ${mdfe.ciot}` : "Informar CIOT"}
                           </button>
+                          <button className="nf-dropdown-item"
+                            onClick={() => { setMenuAberto(null); setProdutoNcmDe(mdfe); }}>
+                            <Pencil size={14} /> {mdfe.ncmProdutoPredominante ? `Produto e NCM (${mdfe.ncmProdutoPredominante})` : "Produto e NCM"}
+                          </button>
                           <button className="nf-dropdown-item nf-dropdown-item-danger"
                             onClick={() => { setMenuAberto(null); excluirRascunho(mdfe.id); }}>
                             <Trash2 size={14} /> Excluir rascunho
@@ -7835,6 +7904,11 @@ function MdfeView() {
         naPagina={(mdfes || []).length} onMudar={setPagina} />
 
       {mostrarGerar && <GerarMdfeModal onGerar={gerar} onCancel={() => setMostrarGerar(false)} />}
+      {produtoNcmDe && (
+        <ProdutoNcmMdfeModal mdfe={produtoNcmDe}
+          onSalvo={() => { setProdutoNcmDe(null); carregar(); }}
+          onCancel={() => setProdutoNcmDe(null)} />
+      )}
       {corrigindoSeguro && (
         <CorrigirSeguroMdfeModal mdfeId={corrigindoSeguro}
           onSalvo={() => { setCorrigindoSeguro(null); carregar(); }}

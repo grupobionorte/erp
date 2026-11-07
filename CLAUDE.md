@@ -226,7 +226,10 @@ porquê.
 - **684** — CIOT obrigatório quando o RNTRC do dono do veículo é de TAC na
   ANTT. O CIOT vem da administradora do frete: é digitado no MDF-e (na
   geração ou no menu do rejeitado), nunca gerado pelo sistema
-- **301** — NCM do produto predominante no MDF-e
+- **301** — NCM do produto predominante no MDF-e. Vem do cadastro de
+  Produtos pela descrição do CT-e, comparada sem maiúsculas, acentos e
+  espaços repetidos, primeiro na empresa emitente e depois nas outras do
+  grupo; sem achar, o menu do rascunho tem "Produto e NCM" para escolher
 - **523** — MDF-e com cavalo mecânico exige reboque; sem reboque no CT-e,
   vale a composição do cavalo no cadastro de veículos
 - **Schema infSeg / xSeg** — CNPJ da seguradora obrigatório e nenhum espaço

@@ -46,6 +46,40 @@
     return false;
   }
 
+  // Texto que a pessoa vê ao lado de um botão de opção: o <label> que o
+  // envolve, o <label for> dele, ou o texto logo depois.
+  function textoDaOpcao(input) {
+    const envolve = input.closest("label");
+    if (envolve) return envolve.textContent;
+    if (input.id) {
+      const rotulo = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
+      if (rotulo) return rotulo.textContent;
+    }
+    const depois = input.nextSibling && input.nextSibling.textContent;
+    if (depois && depois.trim()) return depois;
+    // O bloco de fora só serve se tiver uma opção só: com as duas juntas, o
+    // texto dele casaria com qualquer uma.
+    const pai = input.parentElement;
+    return pai && pai.querySelectorAll('input[type="radio"]').length === 1 ? pai.textContent : "";
+  }
+
+  // Marca o botão de opção pelo texto da tela, clicando nele como a pessoa
+  // faria. Não depende do nome interno do campo (que a SEMA pode mudar): o
+  // clique avisa o AngularJS da própria tela, que grava a escolha.
+  async function marcarOpcaoPeloTexto(texto, limite = 5000) {
+    const alvo = normal(texto);
+    let opcao = null;
+    await aguardar(() => {
+      opcao = [...document.querySelectorAll('form[name="formGerenciar"] input[type="radio"]')]
+        .find((i) => normal(textoDaOpcao(i)).replace(/\s+/g, " ").includes(alvo) && i.offsetParent !== null);
+      return Boolean(opcao);
+    }, limite);
+    if (!opcao) return "nao-achei";
+    if (opcao.disabled) return "travado";
+    if (!opcao.checked) opcao.click();
+    return "ok";
+  }
+
   // ---- NF-e: chave e protocolo.
   async function preencherNfe(s, d, avisos) {
     if (s.tela.isNfe === true) {
@@ -102,6 +136,12 @@
         });
       }
     }
+
+    // Local de entrega: sempre "Endereço do comprador" (pedido do Leandro).
+    // A opção só aparece depois que o destino está escolhido; espera a tela.
+    const local = await marcarOpcaoPeloTexto("Endereço do comprador");
+    if (local === "nao-achei") avisos.push("Não achei a opção \"Endereço do comprador\" em Local de entrega; marque à mão.");
+    if (local === "travado") avisos.push("Local de entrega travado pela tela; não mexi.");
 
     const memorial = String(d.destinatario.memorial || "").slice(0, 4000);
     if (memorial) aplicar(s, () => { s.entidade.MemorialDescritivo = memorial; });

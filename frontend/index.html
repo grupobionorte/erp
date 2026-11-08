@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.161";
+const VERSAO_SISTEMA = "1.162";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.162", texto: "CT-e: \"Produto vendido por\" preenchido pela unidade do produto, também quando ele vem da NF-e importada" },
   { versao: "1.161", texto: "CT-e novo: CFOP, CST e informações padrão da empresa preenchidos logo depois do login e após mudar as Configurações" },
   { versao: "1.161", texto: "MDF-e: NCM achado mesmo com acento ou espaço diferente no nome do produto, e opção \"Produto e NCM\" no menu do rascunho" },
   { versao: "1.161", texto: "Permissões: menu liberado em Usuários passa a valer na hora, sem precisar sair e entrar de novo" },
@@ -12300,6 +12301,10 @@ function NfeCteField({ onSelecionar }) {
   );
 }
 
+// Produto sugerido pelo CT-e quando ninguém escolheu: a natureza da
+// mercadoria da primeira NF-e transportada que tiver uma.
+const sugestaoProdutoDosDocs = (docs) => (docs || []).find(d => d.naturezaMercadoria)?.naturezaMercadoria || "";
+
 function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras, veiculos, colaboradores, motoristas, criarCliente, criarTransportadora, criarVeiculo, onSave, onCancel }) {
   const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(cte?.dataEmissao ? diaDoInstante(cte.dataEmissao) : hoje);
@@ -12682,17 +12687,48 @@ naturezaOperacao: naturezaOperacao || undefined,
   // Como o produto é negociado: decide quais medidas saem no DACTe.
   const [unidadeMedidaCarga, setUnidadeMedidaCarga] = useState(cte?.unidadeMedidaCarga || "KG");
 
-  // Escolher o produto no cadastro já define como a carga é medida — é a
-  // unidade do próprio produto que diz se a venda é por peso ou por volume.
-  const escolherProdutoPredominante = (descricao) => {
-    setProdutoPredominante(descricao);
-    const produto = (produtos || []).find(p => p.descricao === descricao);
-    if (!produto?.unidade) return;
-    const unidade = String(produto.unidade).toUpperCase();
-    if (unidade === "M3") setUnidadeMedidaCarga("M3");
-    else if (unidade === "TON") setUnidadeMedidaCarga("TON");
-    else if (unidade === "KG") setUnidadeMedidaCarga("KG");
+  // Produtos das outras empresas do grupo: o produto da NF-e da Comércio
+  // pode não estar no cadastro da Transportes, e é a unidade dele que diz
+  // como a carga é vendida.
+  const [produtosGrupo, setProdutosGrupo] = useState([]);
+  useEffect(() => {
+    apiRequest("/documentos-fiscais/produtos-ncm").then(setProdutosGrupo).catch(() => {});
+  }, []);
+  const normalizarNome = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
+  const acharProduto = (descricao) => {
+    const alvo = normalizarNome(descricao);
+    if (!alvo) return null;
+    return (produtos || []).find(p => normalizarNome(p.descricao) === alvo && p.unidade)
+      || produtosGrupo.find(p => normalizarNome(p.descricao) === alvo && p.unidade)
+      || null;
   };
+  // Unidade do cadastro → como o produto é vendido. SC e UN não são peso
+  // nem volume: nesses, o campo fica como está.
+  const vendidoPor = (unidade) => {
+    const u = normalizarNome(unidade).replace(/[^A-Z0-9]/g, "");
+    if (["M3", "MT3", "METROCUBICO"].includes(u)) return "M3";
+    if (["TON", "T", "TN", "TONELADA", "TONELADAS"].includes(u)) return "TON";
+    if (["KG", "KGS", "QUILO", "QUILOS", "KILO"].includes(u)) return "KG";
+    return null;
+  };
+
+  const escolherProdutoPredominante = (descricao) => setProdutoPredominante(descricao);
+
+  // O produto (escolhido, ou sugerido pela NF-e importada) já define como a
+  // carga é medida: é a unidade do cadastro que diz se a venda é por peso ou
+  // por volume. Roda quando o produto muda; o rascunho reaberto fica com o
+  // que foi gravado, e quem troca o "vendido por" à mão é respeitado até o
+  // produto mudar de novo.
+  const produtoEfetivo = produtoPredominante || sugestaoProdutoDosDocs(documentosTransportados);
+  const produtoAplicado = useRef(cte ? produtoEfetivo : null);
+  useEffect(() => {
+    if (produtoAplicado.current === produtoEfetivo) return;
+    const produto = acharProduto(produtoEfetivo);
+    const unidade = produto && vendidoPor(produto.unidade);
+    if (!produto) return; // ainda digitando, ou lista não carregou: tenta de novo depois
+    produtoAplicado.current = produtoEfetivo;
+    if (unidade) setUnidadeMedidaCarga(unidade);
+  }, [produtoEfetivo, produtos, produtosGrupo]);
 
   // Lista dos campos de produto: descrição, com código e unidade embaixo.
   const opcoesProdutos = (produtos || []).filter(p => p.descricao).map(p => ({
@@ -12716,7 +12752,7 @@ naturezaOperacao: naturezaOperacao || undefined,
   const somaPesoBruto = somarNotas("pesoBruto");
   const somaPesoLiquido = somarNotas("pesoLiquido");
   const somaM3 = somarNotas("m3");
-  const sugestaoProduto = documentosTransportados.find(d => d.naturezaMercadoria)?.naturezaMercadoria || "";
+  const sugestaoProduto = sugestaoProdutoDosDocs(documentosTransportados);
 
   const [aba, setAba] = useState("rota");
 

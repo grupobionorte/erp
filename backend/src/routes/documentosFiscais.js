@@ -437,7 +437,7 @@ router.get("/:id/xml", asyncHandler(async (req, res) => {
 router.get("/produtos-ncm", asyncHandler(async (req, res) => {
   const produtos = await prisma.produto.findMany({
     where: { ativo: true, ncm: { not: "" } },
-    select: { id: true, descricao: true, ncm: true, empresaId: true },
+    select: { id: true, descricao: true, ncm: true, unidade: true, empresaId: true },
     orderBy: { descricao: "asc" },
   });
   const daEmpresa = (p) => (p.empresaId === req.usuario.empresaId ? 0 : 1);
@@ -448,7 +448,9 @@ router.get("/produtos-ncm", asyncHandler(async (req, res) => {
       const chave = `${normalizarDescricao(p.descricao)}|${String(p.ncm).replace(/\D/g, "")}`;
       return !vistos.has(chave) && vistos.add(chave);
     })
-    .map(({ id, descricao, ncm }) => ({ id, descricao, ncm: String(ncm).replace(/\D/g, "") })));
+    // A unidade vai junto: é ela que diz ao CT-e se o produto é vendido por
+    // peso ou por volume.
+    .map(({ id, descricao, ncm, unidade }) => ({ id, descricao, ncm: String(ncm).replace(/\D/g, ""), unidade })));
 }));
 
 router.get("/:id", asyncHandler(async (req, res) => {

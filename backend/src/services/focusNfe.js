@@ -1173,7 +1173,8 @@ function validarPayloadMdfe(payload) {
   if (umDocumentoSo && !payload.codigo_ncm_produto) {
     problemas.push(
       "Manifesto de carga lotação exige o NCM do produto predominante. " +
-      "Confira se o produto está cadastrado com NCM em Produtos."
+      `Procurei "${payload.descricao_produto || "(sem produto no CT-e)"}" no cadastro de Produtos e não achei com NCM. ` +
+      "Escolha o produto em \"Produto e NCM\", no menu do MDF-e, e emita de novo."
     );
   }
   if (umDocumentoSo && (!payload.cep_carregamento || !payload.cep_descarregamento)) {

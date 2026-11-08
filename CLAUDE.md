@@ -161,7 +161,9 @@ separadas — é o que o sistema anterior da empresa fazia.
 **Permissões são por usuário E empresa.** Resolvidas no login conforme a
 empresa escolhida, bloqueadas no servidor (`src/lib/permissoes.js`), não só
 escondidas na tela. Vale para admin também, exceto o menu de usuários, que é
-a saída de emergência quando a configuração trava alguém.
+a saída de emergência quando a configuração trava alguém. Os menus
+vão no token do login; antes de recusar, `exigirPermissaoDeMenu` confere o
+cadastro, para o menu liberado depois do login valer na hora.
 
 **Imagem não vai para o banco sem redução.** A logo da empresa chegou a
 pesar megabytes e deixou o login lento; hoje é reduzida a 320px no
@@ -224,7 +226,10 @@ porquê.
 - **684** — CIOT obrigatório quando o RNTRC do dono do veículo é de TAC na
   ANTT. O CIOT vem da administradora do frete: é digitado no MDF-e (na
   geração ou no menu do rejeitado), nunca gerado pelo sistema
-- **301** — NCM do produto predominante no MDF-e
+- **301** — NCM do produto predominante no MDF-e. Vem do cadastro de
+  Produtos pela descrição do CT-e, comparada sem maiúsculas, acentos e
+  espaços repetidos, primeiro na empresa emitente e depois nas outras do
+  grupo; sem achar, o menu do rascunho tem "Produto e NCM" para escolher
 - **523** — MDF-e com cavalo mecânico exige reboque; sem reboque no CT-e,
   vale a composição do cavalo no cadastro de veículos
 - **Schema infSeg / xSeg** — CNPJ da seguradora obrigatório e nenhum espaço

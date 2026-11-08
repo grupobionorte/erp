@@ -428,6 +428,29 @@ router.get("/:id/xml", asyncHandler(async (req, res) => {
   res.send(xml);
 }));
 
+// Produtos com NCM para escolher o predominante do MDF-e. Vem por aqui, e
+// não por /produtos, porque quem emite manifesto não precisa ter o menu de
+// cadastro de produtos.
+// Inclui os produtos das outras empresas do grupo, como a busca automática:
+// a Transportes leva o produto que a Comércio cadastrou. Mesmo produto com
+// o mesmo NCM aparece uma vez só.
+router.get("/produtos-ncm", asyncHandler(async (req, res) => {
+  const produtos = await prisma.produto.findMany({
+    where: { ativo: true, ncm: { not: "" } },
+    select: { id: true, descricao: true, ncm: true, empresaId: true },
+    orderBy: { descricao: "asc" },
+  });
+  const daEmpresa = (p) => (p.empresaId === req.usuario.empresaId ? 0 : 1);
+  const vistos = new Set();
+  res.json(produtos
+    .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR") || daEmpresa(a) - daEmpresa(b))
+    .filter((p) => {
+      const chave = `${normalizarDescricao(p.descricao)}|${String(p.ncm).replace(/\D/g, "")}`;
+      return !vistos.has(chave) && vistos.add(chave);
+    })
+    .map(({ id, descricao, ncm }) => ({ id, descricao, ncm: String(ncm).replace(/\D/g, "") })));
+}));
+
 router.get("/:id", asyncHandler(async (req, res) => {
   const documento = await prisma.documentoFiscal.findUnique({
     where: { id: Number(req.params.id) },
@@ -715,17 +738,26 @@ router.post("/mdfe/rascunho", asyncHandler(async (req, res) => {
 
 // O MDF-e de carga lotação exige o NCM do produto predominante, e essa
 // informação vive no cadastro de produtos. Procura pela descrição, que é o
-// que foi escolhido no CT-e.
+// que foi escolhido no CT-e. A comparação ignora maiúsculas, acentos e
+// espaços repetidos: "Cavaco  de madeira" no CT-e e "CAVACO DE MADEIRA" no
+// cadastro são o mesmo produto, e a busca exata recusava o manifesto com o
+// produto cadastrado. Primeiro o cadastro da empresa emitente; sem ele, o
+// das outras empresas do grupo (NCM é do produto, não de quem o cadastrou).
+const normalizarDescricao = (t) => String(t || "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ").trim().toUpperCase();
+
 async function ncmDoProduto(descricao, empresaId) {
-  if (!descricao) return null;
-  const produto = await prisma.produto.findFirst({
-    where: {
-      empresaId: empresaId ?? undefined,
-      descricao: { equals: String(descricao).trim(), mode: "insensitive" },
-    },
-    select: { ncm: true },
+  const alvo = normalizarDescricao(descricao);
+  if (!alvo) return null;
+  const produtos = await prisma.produto.findMany({
+    where: { ncm: { not: "" } },
+    select: { descricao: true, ncm: true, empresaId: true, ativo: true },
   });
-  return produto?.ncm || null;
+  const iguais = produtos.filter((p) => normalizarDescricao(p.descricao) === alvo && String(p.ncm).replace(/\D/g, ""));
+  const prioridade = (p) => (p.empresaId === empresaId ? 0 : p.empresaId == null ? 1 : 2) + (p.ativo ? 0 : 3);
+  const escolhido = iguais.sort((a, b) => prioridade(a) - prioridade(b))[0];
+  return escolhido ? String(escolhido.ncm).replace(/\D/g, "") : null;
 }
 
 // Produto predominante e NCM do MDF-e. O cadastro de produtos é por empresa:
@@ -1274,6 +1306,32 @@ router.put("/:id/ciot", asyncHandler(async (req, res) => {
   if (ciot && ciot.length !== 12) return res.status(400).json({ erro: "O CIOT tem 12 números" });
 
   const atualizado = await prisma.documentoFiscal.update({ where: { id }, data: { ciot: ciot || null } });
+  res.json(atualizado);
+}));
+
+// Produto predominante e NCM de um MDF-e ainda não autorizado, escolhidos à
+// mão quando a busca automática não acha (descrição do CT-e diferente da do
+// cadastro). O NCM vem do cadastro ou digitado por quem emite: o sistema não
+// adivinha.
+router.put("/:id/produto-predominante", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "MDFe") return res.status(400).json({ erro: "Produto predominante só existe no MDF-e" });
+  if (documento.status !== "rascunho" && documento.status !== "rejeitado") {
+    return res.status(409).json({ erro: "Só dá para alterar o produto de MDF-e em rascunho ou rejeitado" });
+  }
+  const descricao = String(req.body.produtoPredominante || "").replace(/\s+/g, " ").trim();
+  const ncm = String(req.body.ncm || "").replace(/\D/g, "");
+  if (!descricao) return res.status(400).json({ erro: "Informe a descrição do produto" });
+  if (ncm.length !== 8) return res.status(400).json({ erro: "O NCM tem 8 números" });
+  const atualizado = await prisma.documentoFiscal.update({
+    where: { id },
+    data: { produtoPredominante: descricao, ncmProdutoPredominante: ncm },
+  });
   res.json(atualizado);
 }));
 

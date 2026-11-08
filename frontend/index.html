@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.160.2";
+const VERSAO_SISTEMA = "1.160.3";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.160.3", texto: "CT-e novo: CFOP, CST e informações padrão da empresa preenchidos logo depois do login e após mudar as Configurações" },
   { versao: "1.160.2", texto: "MDF-e: NCM achado mesmo com acento ou espaço diferente no nome do produto, e opção \"Produto e NCM\" no menu do rascunho" },
   { versao: "1.160.1", texto: "Permissões: menu liberado em Usuários passa a valer na hora, sem precisar sair e entrar de novo" },
   { versao: "1.160", texto: "Diesel: a compra tem operação e pode gerar o Contas a pagar, à vista ou parcelado" },
@@ -5334,14 +5335,21 @@ function LoginScreen({ onLogin }) {
     };
   }
 
-  function finalizarLogin(resultado) {
+  async function finalizarLogin(resultado) {
     setToken(resultado.token);
     try {
       if (lembrarEmail) localStorage.setItem(EMAIL_LEMBRADO_KEY, email);
       else localStorage.removeItem(EMAIL_LEMBRADO_KEY);
       if (resultado.empresa?.id) localStorage.setItem(EMPRESA_LEMBRADA_KEY, String(resultado.empresa.id));
     } catch { /* localStorage indisponível — segue sem lembrar */ }
-    onLogin({ ...resultado.usuario, empresa: resultado.empresa || null });
+    // O login devolve a empresa só com nome; os padrões do CT-e, o seguro do
+    // MDF-e e o painel de folgas vêm do /auth/me. Sem isso, o CT-e novo saía
+    // sem CFOP e sem as informações padrão até alguém apertar F5.
+    try {
+      onLogin(await apiRequest("/auth/me"));
+    } catch {
+      onLogin({ ...resultado.usuario, empresa: resultado.empresa || null });
+    }
   }
 
   const enviar = async (e) => {
@@ -12559,6 +12567,24 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
   const [informacoesComplementares, setInformacoesComplementares] = useState(cte ? (cte.informacoesComplementares || "") : observacaoPadraoCte());
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // CT-e novo: busca os padrões atuais da empresa. Os guardados na sessão
+  // são os do login e não enxergam o que mudou em Configurações depois
+  // disso. Só preenche o que ainda está vazio, para não apagar o que a
+  // pessoa já começou a digitar.
+  useEffect(() => {
+    if (cte) return;
+    let vivo = true;
+    apiRequest("/auth/me").then(dados => {
+      if (!vivo || !dados?.empresa) return;
+      definirUsuarioLogado({ ...(usuarioLogado || {}), ...dados });
+      const e = dados.empresa;
+      if (e.cfopPadraoCte) setCfopPrestacao(v => v || e.cfopPadraoCte);
+      if (e.cstPadraoCte) setCstIcmsPrestacao(v => v || e.cstPadraoCte);
+      if (e.observacaoPadraoCte) setInformacoesComplementares(v => v || e.observacaoPadraoCte);
+    }).catch(() => { /* sem rede: fica com o que já veio da sessão */ });
+    return () => { vivo = false; };
+  }, []);
 
   const salvar = async () => {
     if (!tomadorId) { setErro("Selecione o destinatário."); return; }

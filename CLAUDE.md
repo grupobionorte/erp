@@ -262,7 +262,9 @@ linha. Boa parte do conhecimento fiscal deste projeto está nos comentários —
 mantenha esse padrão.
 
 **Versão** em `VERSAO_SISTEMA` no `index.html`, exibida na barra lateral.
-Terceiro dígito para correção, segundo para recurso novo. Atualize a cada
+Sempre no formato 1.NNN, somando 1 a cada entrega, seja correção ou recurso
+novo (1.160 → 1.161 → 1.162). Nunca terceiro número (1.160.1): pedido do
+Leandro. Atualize a cada
 entrega, e acrescente uma linha curta em `NOVIDADES` (logo abaixo), do ponto
 de vista de quem usa: ela aparece na tela de entrada.
 

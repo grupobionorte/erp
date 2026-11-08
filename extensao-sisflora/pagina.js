@@ -66,12 +66,17 @@
   // Marca o botão de opção pelo texto da tela, clicando nele como a pessoa
   // faria. Não depende do nome interno do campo (que a SEMA pode mudar): o
   // clique avisa o AngularJS da própria tela, que grava a escolha.
-  async function marcarOpcaoPeloTexto(texto, limite = 5000) {
+  // "exato": o texto da opção tem de ser só aquilo (para palavras curtas,
+  // como "Isento", que poderiam aparecer dentro de outra opção).
+  async function marcarOpcaoPeloTexto(texto, { limite = 5000, exato = false } = {}) {
     const alvo = normal(texto);
     let opcao = null;
     await aguardar(() => {
       opcao = [...document.querySelectorAll('form[name="formGerenciar"] input[type="radio"]')]
-        .find((i) => normal(textoDaOpcao(i)).replace(/\s+/g, " ").includes(alvo) && i.offsetParent !== null);
+        .find((i) => {
+          const t = normal(textoDaOpcao(i)).replace(/\s+/g, " ");
+          return (exato ? t === alvo : t.includes(alvo)) && i.offsetParent !== null;
+        });
       return Boolean(opcao);
     }, limite);
     if (!opcao) return "nao-achei";
@@ -142,6 +147,11 @@
     const local = await marcarOpcaoPeloTexto("Endereço do comprador");
     if (local === "nao-achei") avisos.push("Não achei a opção \"Endereço do comprador\" em Local de entrega; marque à mão.");
     if (local === "travado") avisos.push("Local de entrega travado pela tela; não mexi.");
+
+    // Taxa de emissão da GF: sempre "Isento" (pedido do Leandro).
+    const taxa = await marcarOpcaoPeloTexto("Isento", { exato: true, limite: 3000 });
+    if (taxa === "nao-achei") avisos.push("Não achei a opção \"Isento\" em Taxa de Emissão de GF; marque à mão.");
+    if (taxa === "travado") avisos.push("Taxa de emissão travada pela tela; não mexi.");
 
     const memorial = String(d.destinatario.memorial || "").slice(0, 4000);
     if (memorial) aplicar(s, () => { s.entidade.MemorialDescritivo = memorial; });

@@ -1193,15 +1193,15 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.160.3";
+const VERSAO_SISTEMA = "1.161";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
-  { versao: "1.160.3", texto: "CT-e novo: CFOP, CST e informações padrão da empresa preenchidos logo depois do login e após mudar as Configurações" },
-  { versao: "1.160.2", texto: "MDF-e: NCM achado mesmo com acento ou espaço diferente no nome do produto, e opção \"Produto e NCM\" no menu do rascunho" },
-  { versao: "1.160.1", texto: "Permissões: menu liberado em Usuários passa a valer na hora, sem precisar sair e entrar de novo" },
+  { versao: "1.161", texto: "CT-e novo: CFOP, CST e informações padrão da empresa preenchidos logo depois do login e após mudar as Configurações" },
+  { versao: "1.161", texto: "MDF-e: NCM achado mesmo com acento ou espaço diferente no nome do produto, e opção \"Produto e NCM\" no menu do rascunho" },
+  { versao: "1.161", texto: "Permissões: menu liberado em Usuários passa a valer na hora, sem precisar sair e entrar de novo" },
   { versao: "1.160", texto: "Diesel: a compra tem operação e pode gerar o Contas a pagar, à vista ou parcelado" },
   { versao: "1.159", texto: "Operação: aba Produção (boletim por máquina e turno, horímetro, paradas e diesel). Novo menu Diesel: compras, saídas e saldo dos tanques" },
   { versao: "1.158", texto: "Relatório do CT-e: relação das cartas frete emitidas no período, com filtro por proprietário" },
@@ -5505,8 +5505,9 @@ function LoginScreen({ onLogin }) {
         <div className="login-novidades">
           <div className="login-novidades-titulo">Novidades</div>
           <ul>
-            {NOVIDADES.slice(0, 4).map(n => (
-              <li key={n.versao}><span className="versao">{n.versao}</span>{n.texto}</li>
+            {NOVIDADES.slice(0, 4).map((n, i) => (
+              // A mesma versão pode ter mais de uma novidade: a chave é a posição.
+              <li key={`${n.versao}-${i}`}><span className="versao">{n.versao}</span>{n.texto}</li>
             ))}
           </ul>
         </div>

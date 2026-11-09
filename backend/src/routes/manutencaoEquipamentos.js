@@ -118,10 +118,14 @@ router.get("/equipamentos", asyncHandler(async (req, res) => {
       ativo: req.query.inativos === "1" ? undefined : true,
     },
     include: incluirEquipamento,
-    orderBy: [{ codigo: { sort: "asc", nulls: "last" } }, { nome: "asc" }],
   });
 
-  const comAlerta = equipamentos.map(comSituacao);
+  // Ordem alfabética pelo nome (pedido do Leandro), feita aqui e não no
+  // banco: o português põe "Éder" junto de "Eder" e "Picador 2" antes de
+  // "Picador 10", o que a ordenação do banco não faz.
+  const comAlerta = equipamentos
+    .sort((a, b) => String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", { sensitivity: "base", numeric: true }))
+    .map(comSituacao);
 
   res.json({
     equipamentos: comAlerta,

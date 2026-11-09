@@ -1259,9 +1259,17 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
   // produto. No CT-e é o contrário — cada viagem carrega notas diferentes.
   const copiarItens = req.body?.copiarItens !== false;
 
+  // Responsável é quem está clonando, não quem fez a nota original: é ele
+  // que vai conferir e emitir. O vínculo vem do cadastro do usuário (o do
+  // token é o do login). Usuário sem colaborador vinculado deixa o campo em
+  // branco, para não atribuir a nota a outra pessoa.
+  const usuario = await prisma.usuario.findUnique({ where: { id: Number(req.usuario.id) }, select: { colaboradorId: true } });
+  const colaboradorResponsavelId = usuario?.colaboradorId ?? null;
+
   const clone = await prisma.documentoFiscal.create({
     data: {
       ...dados,
+      colaboradorResponsavelId,
       status: "rascunho",
       // Só as datas mudam: o documento novo é de hoje, não do dia do
       // original. O resto vem inteiro do documento clonado.

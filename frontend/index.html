@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.167";
+const VERSAO_SISTEMA = "1.168";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.168", texto: "Manutenção: código e nome do equipamento em colunas separadas, alinhados" },
   { versao: "1.167", texto: "Equipamentos: lista em ordem alfabética pelo nome" },
   { versao: "1.166", texto: "MDF-e: filtro por situação na lista, que abre nos autorizados em aberto" },
   { versao: "1.165", texto: "NF-e e CT-e clonados: o colaborador responsável passa a ser quem está clonando" },
@@ -10349,6 +10350,9 @@ function ManutencaoView() {
         <table className="data-table tabela-densa">
           <thead>
             <tr>
+              {/* Código em coluna própria: junto do nome, quem não tem
+                  código começava mais à esquerda e a lista ficava torta. */}
+              <th style={{ width: 90 }}>Código</th>
               <th>Equipamento</th>
               <th style={{ width: 130 }}>Tipo</th>
               <th style={{ width: 120 }}>Leitura</th>
@@ -10359,8 +10363,8 @@ function ManutencaoView() {
           <tbody>
             {pagEquip.itens.map(eq => (
               <tr key={eq.id}>
+                <td><strong style={{ fontWeight: 500 }}>{eq.codigo || "—"}</strong></td>
                 <td>
-                  {eq.codigo && <strong style={{ fontWeight: 500 }}>{eq.codigo} — </strong>}
                   {eq.nome}
                   {eq.veiculo?.placa && <span className="subtle"> · {eq.veiculo.placa}</span>}
                 </td>
@@ -10403,7 +10407,7 @@ function ManutencaoView() {
               </tr>
             ))}
             {!dados.equipamentos.length && (
-              <tr><td colSpan={5}>Nenhum equipamento cadastrado ainda.</td></tr>
+              <tr><td colSpan={6}>Nenhum equipamento cadastrado ainda.</td></tr>
             )}
           </tbody>
         </table>

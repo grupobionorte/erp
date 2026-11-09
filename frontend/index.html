@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.165";
+const VERSAO_SISTEMA = "1.166";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.166", texto: "MDF-e: filtro por situação na lista, que abre nos autorizados em aberto" },
   { versao: "1.165", texto: "NF-e e CT-e clonados: o colaborador responsável passa a ser quem está clonando" },
   { versao: "1.164", texto: "CT-e: com NF-e escolhida, o \"Produto vendido por\" vem da unidade da própria nota" },
   { versao: "1.163", texto: "Extensão do SISFLORA (GF): o botão Destino marca o Local de entrega em \"Endereço do comprador\" e a Taxa de Emissão como \"Isento\"" },
@@ -7580,11 +7581,17 @@ function MdfeView() {
   // 50 por tela, paginado no servidor como a NF-e e o CT-e.
   const [pagina, setPagina] = useState(1);
   const [paginacao, setPaginacao] = useState({ total: 0, paginas: 1 });
+  // Abre nos autorizados em aberto: são os que pedem atenção (precisam ser
+  // encerrados quando a carga é entregue).
+  const [situacao, setSituacao] = useState("autorizado");
 
   const carregar = useCallback(async () => {
     try {
       setErro(null);
-      const params = new URLSearchParams({ tipo: "MDFe", pagina: String(pagina), porPagina: String(POR_PAGINA) });
+      const params = new URLSearchParams({
+        tipo: "MDFe", pagina: String(pagina), porPagina: String(POR_PAGINA),
+        ...(situacao ? { status: situacao } : {}),
+      });
       const dados = await apiRequest(`/documentos-fiscais?${params}`);
       if (!dados.documentos.length && pagina > 1) { setPagina(dados.paginas); return; }
       setMdfes(dados.documentos);
@@ -7593,7 +7600,7 @@ function MdfeView() {
       setErro(e.message);
       setMdfes([]);
     }
-  }, [pagina]);
+  }, [pagina, situacao]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -7752,7 +7759,18 @@ function MdfeView() {
             </p>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select value={situacao} aria-label="Situação"
+          style={{ width: "auto", padding: "7px 10px", fontSize: 13, borderRadius: 8, border: "1px solid #d9d6cc", background: "#fff" }}
+          onChange={e => { setSituacao(e.target.value); setPagina(1); }}>
+          <option value="autorizado">Autorizados (em aberto)</option>
+          <option value="encerrado">Encerrados</option>
+          <option value="rascunho">Rascunhos</option>
+          <option value="rejeitado">Rejeitados</option>
+          <option value="enviado">Enviados (aguardando SEFAZ)</option>
+          <option value="cancelado">Cancelados</option>
+          <option value="">Todos</option>
+        </select>
         <button className="btn" onClick={limparDescartados} disabled={limpando}>
           {limpando ? "Limpando…" : "Limpar descartados"}
         </button>
@@ -7764,7 +7782,10 @@ function MdfeView() {
 
       {erro && <p className="form-error">{erro}</p>}
 
-      {mdfes?.length === 0 && (
+      {mdfes?.length === 0 && situacao && (
+        <p className="hint">Nenhum manifesto nessa situação. Escolha "Todos" para ver os demais.</p>
+      )}
+      {mdfes?.length === 0 && !situacao && (
         <p className="hint">
           Nenhum manifesto ainda. O MDF-e é montado a partir de um CT-e autorizado e é exigido no transporte
           intermunicipal e interestadual.

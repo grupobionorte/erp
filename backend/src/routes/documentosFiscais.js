@@ -353,6 +353,19 @@ router.get("/", asyncHandler(async (req, res) => {
     where.AND = [{ OR: [{ dataEmissao: { gte: inicio, lte: fim } }, { status: "rascunho" }] }];
   }
 
+  // Situação. No MDF-e, "encerrado" não existe no banco: é o autorizado com
+  // data de encerramento. Por isso ali "autorizado" quer dizer o que ainda
+  // está em aberto (o que precisa ser encerrado), e "encerrado" o fechado.
+  const situacao = String(req.query.status || "");
+  const SITUACOES = ["rascunho", "enviado", "autorizado", "rejeitado", "cancelado", "encerrado"];
+  if (SITUACOES.includes(situacao)) {
+    const filtro = tipo === "MDFe" && situacao === "autorizado" ? { status: "autorizado", dataEncerramento: null }
+      : tipo === "MDFe" && situacao === "encerrado" ? { status: "autorizado", dataEncerramento: { not: null } }
+      : situacao === "encerrado" ? null
+      : { status: situacao };
+    if (filtro) where.AND = [...(where.AND || []), filtro];
+  }
+
   // Com "pagina", a resposta vem paginada: { documentos, total, pagina,
   // paginas }. Sem, continua a lista simples — o CT-e e o MDF-e usam esta
   // mesma rota para escolher documentos.

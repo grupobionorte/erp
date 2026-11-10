@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.169";
+const VERSAO_SISTEMA = "1.170";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.170", texto: "Equipamentos: campo Propriedade (próprio ou alugado), com marca \"alugado\" na lista" },
   { versao: "1.169", texto: "Equipamentos: tipos Cavalo mecânico, Carreta e Trator; data, valor e % de depreciação da aquisição, com o valor estimado de hoje" },
   { versao: "1.168", texto: "Manutenção: código e nome do equipamento em colunas separadas, alinhados" },
   { versao: "1.167", texto: "Equipamentos: lista em ordem alfabética pelo nome" },
@@ -9780,6 +9781,7 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
     leituraAtual: equipamento?.leituraAtual ?? "",
     veiculoId: equipamento?.veiculoId ? String(equipamento.veiculoId) : "",
     observacao: equipamento?.observacao || "",
+    propriedade: equipamento?.propriedade || "proprio",
     dataAquisicao: equipamento?.dataAquisicao ? String(equipamento.dataAquisicao).slice(0, 10) : "",
     valorAquisicao: equipamento?.valorAquisicao ?? "",
     percentualDepreciacao: equipamento?.percentualDepreciacao ?? "",
@@ -9880,6 +9882,13 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
                   {(veiculos || []).map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                 </select>
                 <p className="hint">Para caminhão e carro já cadastrados.</p>
+              </div>
+              <div className="field-group">
+                <label className="field-label">Propriedade</label>
+                <select value={dados.propriedade} onChange={e => set("propriedade", e.target.value)}>
+                  <option value="proprio">Próprio</option>
+                  <option value="alugado">Alugado</option>
+                </select>
               </div>
             </div>
           </section>
@@ -10231,7 +10240,10 @@ function EquipamentosView() {
               return (
                 <tr key={eq.id}>
                   <td style={{ fontWeight: 500 }}>{eq.codigo || "—"}</td>
-                  <td>{eq.nome}</td>
+                  <td>
+                    {eq.nome}
+                    {eq.propriedade === "alugado" && <span style={{ marginLeft: 6, fontSize: 11.5, fontWeight: 600, color: "#b57a12" }}>alugado</span>}
+                  </td>
                   <td className="subtle">{TIPOS_EQUIPAMENTO.find(t => t.valor === eq.tipo)?.rotulo || eq.tipo}</td>
                   <td>{[eq.marca, eq.modelo, eq.ano].filter(Boolean).join(" ") || "—"}</td>
                   <td>{eq.veiculo?.placa || eq.identificacao || "—"}</td>

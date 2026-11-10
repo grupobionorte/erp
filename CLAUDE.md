@@ -110,6 +110,14 @@ parcelado, `ContaPagar.movimentoDieselId`): as parcelas em aberto são
 refeitas ao editar a compra e somem ao excluí-la; com parcela paga, a compra
 trava até estornar a baixa.
 
+**Ativo imobilizado** (botão na tela de Equipamentos,
+`GET /manutencao/equipamentos-ativo?posicao=&propriedade=&agrupar=&formato=xlsx`):
+depreciação linear por **mês completo** até a posição (valor × % a.a. ÷ 12 ×
+meses, até zerar); na sociedade, a parte da empresa é 100% menos os sócios.
+Alugado fica fora do ativo; sem data/valor de aquisição, numa lista à parte;
+adquirido depois da posição, de fora. A planilha sai de `lib/xlsx.js`, um
+gerador mínimo sobre o `archiver` (sem biblioteca de Excel).
+
 Configurações → **Copiar cadastros** (admin) copia clientes, fornecedores,
 transportadoras, motoristas e veículos de uma empresa para outra
 (`lib/copiarCadastros.js`). É cópia, nunca mudança de dono; pula quem já existe

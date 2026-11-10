@@ -1294,6 +1294,12 @@ model Equipamento {
   ativo      Boolean @default(true)
   observacao String?
 
+  // Aquisição e depreciação (linear, % ao ano). O valor estimado de hoje é
+  // conta da tela, nunca gravado.
+  dataAquisicao         DateTime? @map("data_aquisicao")
+  valorAquisicao        Float?    @map("valor_aquisicao")
+  percentualDepreciacao Float?    @map("percentual_depreciacao")
+
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])
 

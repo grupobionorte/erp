@@ -1273,7 +1273,8 @@ model Equipamento {
   // Código interno da empresa (ex.: BN-1001). Único por empresa.
   codigo String?
   nome  String
-  // picador | escavadeira | pa-carregadeira | caminhao | carro | outro
+  // picador | escavadeira | pa-carregadeira | caminhao | carro |
+  // cavalo-mecanico | carreta | trator | outro
   tipo  String  @default("outro")
   marca String?
   modelo String?
@@ -1292,6 +1293,12 @@ model Equipamento {
 
   ativo      Boolean @default(true)
   observacao String?
+
+  // Aquisição e depreciação (linear, % ao ano). O valor estimado de hoje é
+  // conta da tela, nunca gravado.
+  dataAquisicao         DateTime? @map("data_aquisicao")
+  valorAquisicao        Float?    @map("valor_aquisicao")
+  percentualDepreciacao Float?    @map("percentual_depreciacao")
 
   empresaId Int?     @map("empresa_id")
   empresa   Empresa? @relation(fields: [empresaId], references: [id])

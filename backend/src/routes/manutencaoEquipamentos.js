@@ -137,9 +137,33 @@ router.get("/equipamentos", asyncHandler(async (req, res) => {
   });
 }));
 
+// Aquisição: dia (ao meio-dia UTC, como as datas dos planos), valor e %
+// de depreciação. Vazio limpa; ausente não mexe. Valem na criação e na
+// edição — campo que a edição esquece de gravar já custou caro aqui.
+function dadosDeAquisicao(body) {
+  const numero = (v) => (v === undefined ? undefined : v === "" || v === null ? null : Number(v));
+  const dia = body.dataAquisicao;
+  const dados = {
+    dataAquisicao: dia === undefined ? undefined
+      : dia ? new Date(`${String(dia).slice(0, 10)}T12:00:00Z`) : null,
+    valorAquisicao: numero(body.valorAquisicao),
+    percentualDepreciacao: numero(body.percentualDepreciacao),
+  };
+  if (dados.valorAquisicao != null && !(dados.valorAquisicao >= 0)) return { erro: "Valor de aquisição inválido" };
+  if (dados.percentualDepreciacao != null && !(dados.percentualDepreciacao >= 0 && dados.percentualDepreciacao <= 100)) {
+    return { erro: "A depreciação vai de 0 a 100% ao ano" };
+  }
+  return { dados };
+}
+
 router.post("/equipamentos", asyncHandler(async (req, res) => {
-  const { nome, planos, veiculoId, leituraAtual, alocacoes, codigo: codigoBruto, ...dados } = req.body;
+  const {
+    nome, planos, veiculoId, leituraAtual, alocacoes, codigo: codigoBruto,
+    dataAquisicao, valorAquisicao, percentualDepreciacao, ...dados
+  } = req.body;
   if (!nome) return res.status(400).json({ erro: "Informe o nome do equipamento" });
+  const aquisicao = dadosDeAquisicao(req.body);
+  if (aquisicao.erro) return res.status(400).json({ erro: aquisicao.erro });
   const codigo = limparCodigo(codigoBruto);
   const repetido = await codigoEmUso(codigo, req.usuario.empresaId);
   if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
@@ -149,6 +173,7 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
   const equipamento = await prisma.equipamento.create({
     data: {
       ...dados,
+      ...aquisicao.dados,
       nome,
       codigo: codigo || undefined,
       ano: dados.ano ? Number(dados.ano) : undefined,
@@ -165,8 +190,13 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
 }));
 
 router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
-  const { planos, veiculoId, empresaId, leituraAtual, alocacoes, codigo: codigoBruto, ...dados } = req.body;
+  const {
+    planos, veiculoId, empresaId, leituraAtual, alocacoes, codigo: codigoBruto,
+    dataAquisicao, valorAquisicao, percentualDepreciacao, ...dados
+  } = req.body;
   const id = Number(req.params.id);
+  const aquisicao = dadosDeAquisicao(req.body);
+  if (aquisicao.erro) return res.status(400).json({ erro: aquisicao.erro });
   const codigo = limparCodigo(codigoBruto);
   const repetido = await codigoEmUso(codigo, req.usuario.empresaId, id);
   if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
@@ -183,6 +213,7 @@ router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
     where: { id },
     data: {
       ...dados,
+      ...aquisicao.dados,
       codigo,
       ano: dados.ano ? Number(dados.ano) : undefined,
       leituraAtual: temLeitura ? Number(leituraAtual) : undefined,

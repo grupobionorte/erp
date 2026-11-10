@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.168";
+const VERSAO_SISTEMA = "1.169";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.169", texto: "Equipamentos: tipos Cavalo mecânico, Carreta e Trator; data, valor e % de depreciação da aquisição, com o valor estimado de hoje" },
   { versao: "1.168", texto: "Manutenção: código e nome do equipamento em colunas separadas, alinhados" },
   { versao: "1.167", texto: "Equipamentos: lista em ordem alfabética pelo nome" },
   { versao: "1.166", texto: "MDF-e: filtro por situação na lista, que abre nos autorizados em aberto" },
@@ -9751,6 +9752,9 @@ const TIPOS_EQUIPAMENTO = [
   { valor: "pa-carregadeira", rotulo: "Pá carregadeira" },
   { valor: "caminhao", rotulo: "Caminhão" },
   { valor: "carro", rotulo: "Carro" },
+  { valor: "cavalo-mecanico", rotulo: "Cavalo mecânico" },
+  { valor: "carreta", rotulo: "Carreta" },
+  { valor: "trator", rotulo: "Trator" },
   { valor: "outro", rotulo: "Outro" },
 ];
 
@@ -9776,6 +9780,9 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
     leituraAtual: equipamento?.leituraAtual ?? "",
     veiculoId: equipamento?.veiculoId ? String(equipamento.veiculoId) : "",
     observacao: equipamento?.observacao || "",
+    dataAquisicao: equipamento?.dataAquisicao ? String(equipamento.dataAquisicao).slice(0, 10) : "",
+    valorAquisicao: equipamento?.valorAquisicao ?? "",
+    percentualDepreciacao: equipamento?.percentualDepreciacao ?? "",
     planos: equipamento?.planos?.map(p => ({
       descricao: p.descricao,
       intervalo: p.intervalo,
@@ -9789,6 +9796,17 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
 
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
   const porPrazo = dados.controle === "prazo";
+
+  // Valor estimado hoje: depreciação linear, a % ao ano sobre o valor de
+  // aquisição, proporcional aos dias desde a compra. Conta, não digitação.
+  const valorEstimadoHoje = (() => {
+    const valor = Number(dados.valorAquisicao);
+    const pct = Number(dados.percentualDepreciacao);
+    if (!(valor > 0) || !dados.dataAquisicao || dados.percentualDepreciacao === "") return null;
+    const anos = (new Date(`${hojeNoFuso()}T12:00:00Z`) - new Date(`${dados.dataAquisicao}T12:00:00Z`)) / (365.25 * 86400000);
+    if (anos < 0) return valor;
+    return Math.max(0, valor * (1 - (pct / 100) * anos));
+  })();
   const unidade = unidadeDoControle(dados.controle);
 
   const salvar = async () => {
@@ -9882,10 +9900,34 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
                     onChange={e => set("leituraAtual", e.target.value)} />
                 </div>
               )}
-              <div className="field-group" style={{ gridColumn: "span 2" }}>
-                <label className="field-label">Observação</label>
-                <input value={dados.observacao} onChange={e => set("observacao", e.target.value)} />
+            </div>
+          </section>
+
+          <section className="pf-secao">
+            <h4 className="pf-secao-titulo">Aquisição</h4>
+            <div className="nf-grid-4">
+              <div className="field-group">
+                <label className="field-label">Data de aquisição</label>
+                <input type="date" value={dados.dataAquisicao} onChange={e => set("dataAquisicao", e.target.value)} />
               </div>
+              <div className="field-group">
+                <label className="field-label">Valor de aquisição (R$)</label>
+                <InputDecimal casas={2} value={dados.valorAquisicao} onChange={v => set("valorAquisicao", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">% de depreciação ao ano</label>
+                <InputDecimal casas={2} value={dados.percentualDepreciacao} onChange={v => set("percentualDepreciacao", v)} />
+              </div>
+              <div className="field-group">
+                <label className="field-label">Valor estimado hoje</label>
+                <input disabled readOnly tabIndex={-1} style={{ textAlign: "right" }}
+                  value={valorEstimadoHoje !== null ? `R$ ${formatarDecimal(valorEstimadoHoje, 2)}` : ""} />
+              </div>
+            </div>
+            <div className="field-group">
+              <label className="field-label">Observação</label>
+              <textarea rows={3} value={dados.observacao} onChange={e => set("observacao", e.target.value)}
+                style={{ width: "100%", resize: "vertical", fontFamily: "inherit", fontSize: 14 }} />
             </div>
           </section>
 

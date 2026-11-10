@@ -21,6 +21,10 @@ const incluirEquipamento = {
   veiculo: { select: { id: true, placa: true } },
   // Operação em que o equipamento está agora (alocação sem saída).
   alocacoes: { where: { dataSaida: null }, select: { operacao: { select: { id: true, codigo: true, descricao: true } } } },
+  socios: {
+    select: { id: true, percentual: true, fornecedorId: true, fornecedor: { select: { id: true, nomeRazaoSocial: true, documento: true } } },
+    orderBy: { id: "asc" },
+  },
 };
 
 // Código é opcional, mas não se repete na empresa: é por ele que o
@@ -145,7 +149,7 @@ function dadosDeAquisicao(body) {
   const dia = body.dataAquisicao;
   const dados = {
     // Lista fechada: valor desconhecido não entra (fica o que já era).
-    propriedade: ["proprio", "alugado"].includes(body.propriedade) ? body.propriedade : undefined,
+    propriedade: ["proprio", "alugado", "sociedade"].includes(body.propriedade) ? body.propriedade : undefined,
     dataAquisicao: dia === undefined ? undefined
       : dia ? new Date(`${String(dia).slice(0, 10)}T12:00:00Z`) : null,
     valorAquisicao: numero(body.valorAquisicao),
@@ -158,14 +162,63 @@ function dadosDeAquisicao(body) {
   return { dados };
 }
 
+/**
+ * Sócios do equipamento em sociedade: fornecedores da empresa, cada um com
+ * a sua parte. A soma não passa de 100% (o que sobra é da empresa) e o
+ * mesmo sócio não aparece duas vezes. Devolve a lista pronta para gravar,
+ * ou o erro em português.
+ */
+async function sociosValidos(body, req) {
+  const lista = Array.isArray(body.socios) ? body.socios : [];
+  if (!lista.length) return { erro: "Informe pelo menos um sócio da sociedade" };
+  if (lista.length > 20) return { erro: "No máximo 20 sócios" };
+  const socios = [];
+  for (const [i, s] of lista.entries()) {
+    const fornecedorId = Number(s.fornecedorId);
+    const percentual = Number(s.percentual);
+    if (!fornecedorId) return { erro: `Escolha o ${i + 1}º sócio no cadastro de fornecedores` };
+    if (!(percentual > 0 && percentual <= 100)) return { erro: `Informe o percentual do ${i + 1}º sócio (de 0 a 100%)` };
+    if (socios.some((x) => x.fornecedorId === fornecedorId)) return { erro: "O mesmo sócio aparece duas vezes" };
+    socios.push({ fornecedorId, percentual: Math.round(percentual * 100) / 100 });
+  }
+  const soma = socios.reduce((t, x) => t + x.percentual, 0);
+  if (soma > 100.001) return { erro: `A soma dos percentuais dos sócios dá ${soma.toLocaleString("pt-BR")}%, passa de 100%` };
+  const achados = await prisma.pessoa.findMany({
+    where: {
+      id: { in: socios.map((x) => x.fornecedorId) }, papel: "fornecedor",
+      OR: [{ empresaId: req.usuario.empresaId ?? undefined }, { empresaId: null }],
+    },
+    select: { id: true },
+  });
+  if (achados.length !== socios.length) return { erro: "Sócio não encontrado no cadastro de fornecedores" };
+  return { socios };
+}
+
+// Fornecedores para escolher os sócios. Vem por aqui porque quem cadastra
+// equipamento não precisa ter o menu de fornecedores.
+router.get("/equipamentos-fornecedores", asyncHandler(async (req, res) => {
+  const empresaId = req.usuario.empresaId;
+  res.json(await prisma.pessoa.findMany({
+    where: { ativo: true, papel: "fornecedor", OR: [{ empresaId: empresaId ?? undefined }, { empresaId: null }] },
+    select: { id: true, nomeRazaoSocial: true, documento: true },
+    orderBy: { nomeRazaoSocial: "asc" },
+  }));
+}));
+
 router.post("/equipamentos", asyncHandler(async (req, res) => {
   const {
     nome, planos, veiculoId, leituraAtual, alocacoes, codigo: codigoBruto,
-    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, ...dados
+    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, socios: _socios, ...dados
   } = req.body;
   if (!nome) return res.status(400).json({ erro: "Informe o nome do equipamento" });
   const aquisicao = dadosDeAquisicao(req.body);
   if (aquisicao.erro) return res.status(400).json({ erro: aquisicao.erro });
+  let socios = [];
+  if (aquisicao.dados.propriedade === "sociedade") {
+    const v = await sociosValidos(req.body, req);
+    if (v.erro) return res.status(400).json({ erro: v.erro });
+    socios = v.socios;
+  }
   const codigo = limparCodigo(codigoBruto);
   const repetido = await codigoEmUso(codigo, req.usuario.empresaId);
   if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
@@ -184,6 +237,7 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
       veiculoId: veiculoId ? Number(veiculoId) : undefined,
       empresaId: req.usuario.empresaId || undefined,
       planos: prepararPlanos(planos).length ? { create: prepararPlanos(planos) } : undefined,
+      socios: socios.length ? { create: socios } : undefined,
     },
     include: incluirEquipamento,
   });
@@ -194,11 +248,21 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
 router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
   const {
     planos, veiculoId, empresaId, leituraAtual, alocacoes, codigo: codigoBruto,
-    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, ...dados
+    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, socios: _socios, ...dados
   } = req.body;
   const id = Number(req.params.id);
   const aquisicao = dadosDeAquisicao(req.body);
   if (aquisicao.erro) return res.status(400).json({ erro: aquisicao.erro });
+  // Sócios são substituídos por inteiro, como os planos. Deixou de ser
+  // sociedade: os sócios saem.
+  let socios = null;
+  if (aquisicao.dados.propriedade === "sociedade") {
+    const v = await sociosValidos(req.body, req);
+    if (v.erro) return res.status(400).json({ erro: v.erro });
+    socios = v.socios;
+  } else if (aquisicao.dados.propriedade) {
+    socios = [];
+  }
   const codigo = limparCodigo(codigoBruto);
   const repetido = await codigoEmUso(codigo, req.usuario.empresaId, id);
   if (repetido) return res.status(409).json({ erro: `O código ${codigo} já é do equipamento ${repetido.nome}` });
@@ -210,6 +274,10 @@ router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
   }
 
   const temLeitura = leituraAtual !== undefined && leituraAtual !== "" && leituraAtual !== null;
+
+  // Só agora, com tudo conferido: recusa (código repetido, etc.) não pode
+  // deixar o equipamento sem os sócios que tinha.
+  if (socios) await prisma.equipamentoSocio.deleteMany({ where: { equipamentoId: id } });
 
   const equipamento = await prisma.equipamento.update({
     where: { id },
@@ -224,6 +292,7 @@ router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
       planos: Array.isArray(planos) && prepararPlanos(planos).length
         ? { create: prepararPlanos(planos) }
         : undefined,
+      socios: socios?.length ? { create: socios } : undefined,
     },
     include: incluirEquipamento,
   });

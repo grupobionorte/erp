@@ -1294,6 +1294,9 @@ model Equipamento {
   ativo      Boolean @default(true)
   observacao String?
 
+  // proprio | alugado
+  propriedade String @default("proprio")
+
   // Aquisição e depreciação (linear, % ao ano). O valor estimado de hoje é
   // conta da tela, nunca gravado.
   dataAquisicao         DateTime? @map("data_aquisicao")

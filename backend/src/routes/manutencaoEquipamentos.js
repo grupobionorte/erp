@@ -144,6 +144,8 @@ function dadosDeAquisicao(body) {
   const numero = (v) => (v === undefined ? undefined : v === "" || v === null ? null : Number(v));
   const dia = body.dataAquisicao;
   const dados = {
+    // Lista fechada: valor desconhecido não entra (fica o que já era).
+    propriedade: ["proprio", "alugado"].includes(body.propriedade) ? body.propriedade : undefined,
     dataAquisicao: dia === undefined ? undefined
       : dia ? new Date(`${String(dia).slice(0, 10)}T12:00:00Z`) : null,
     valorAquisicao: numero(body.valorAquisicao),
@@ -159,7 +161,7 @@ function dadosDeAquisicao(body) {
 router.post("/equipamentos", asyncHandler(async (req, res) => {
   const {
     nome, planos, veiculoId, leituraAtual, alocacoes, codigo: codigoBruto,
-    dataAquisicao, valorAquisicao, percentualDepreciacao, ...dados
+    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, ...dados
   } = req.body;
   if (!nome) return res.status(400).json({ erro: "Informe o nome do equipamento" });
   const aquisicao = dadosDeAquisicao(req.body);
@@ -192,7 +194,7 @@ router.post("/equipamentos", asyncHandler(async (req, res) => {
 router.put("/equipamentos/:id", asyncHandler(async (req, res) => {
   const {
     planos, veiculoId, empresaId, leituraAtual, alocacoes, codigo: codigoBruto,
-    dataAquisicao, valorAquisicao, percentualDepreciacao, ...dados
+    dataAquisicao, valorAquisicao, percentualDepreciacao, propriedade, ...dados
   } = req.body;
   const id = Number(req.params.id);
   const aquisicao = dadosDeAquisicao(req.body);

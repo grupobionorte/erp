@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.171";
+const VERSAO_SISTEMA = "1.172";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.172", texto: "NF-e, CT-e e MDF-e: passar o mouse no motivo mostra a justificativa inteira do cancelamento (ou o motivo da rejeição)" },
   { versao: "1.171", texto: "Equipamentos: uma linha por equipamento na lista; o texto longo aparece inteiro ao passar o mouse" },
   { versao: "1.170", texto: "Equipamentos: campo Propriedade (próprio ou alugado), com marca \"alugado\" na lista" },
   { versao: "1.169", texto: "Equipamentos: tipos Cavalo mecânico, Carreta e Trator; data, valor e % de depreciação da aquisição, com o valor estimado de hoje" },
@@ -7840,7 +7841,7 @@ function MdfeView() {
                     <span style={{ color: "#8a887f", fontSize: 11.5, marginLeft: 6 }}>· aguardando…</span>
                   )}
                 </td>
-                <td title={mdfe.chaveAcesso || mdfe.motivoRejeicao || ""}>
+                <td title={dicaChaveMotivo(mdfe)}>
                   {mdfe.chaveAcesso || (mdfe.status === "rejeitado" ? mdfe.motivoRejeicao : null) || "—"}
                 </td>
                 <td>
@@ -8543,6 +8544,18 @@ const STATUS_DOCUMENTO_COR = {
   cancelado: "#c62828",
   encerrado: "#1F3B57",
 };
+
+// Texto inteiro da coluna "Chave / Motivo", para o mouse: no cancelado, a
+// justificativa (antes o mouse mostrava só a chave, e a justificativa
+// cortada não tinha como ser lida); no rejeitado, o motivo; com a chave
+// embaixo quando houver.
+function dicaChaveMotivo(d) {
+  const linhas = [];
+  if (d.status === "cancelado" && d.justificativaCancelamento) linhas.push(`Cancelada: ${d.justificativaCancelamento}`);
+  if (d.status === "rejeitado" && d.motivoRejeicao) linhas.push(d.motivoRejeicao);
+  if (d.chaveAcesso) linhas.push(`Chave: ${d.chaveAcesso}`);
+  return linhas.join("\n");
+}
 
 function StatusDocumento({ status }) {
   return (
@@ -12141,7 +12154,7 @@ Detalhe: ${e.detalhe}` : ""}`);
                     return <span style={{ fontSize: 12, color: gf.cor }}>{gf.texto}</span>;
                   })() : "—"}
                 </td>
-                <td style={{ maxWidth: 180 }} title={nota.chaveAcesso || nota.motivoRejeicao || nota.justificativaCancelamento || ""}>
+                <td style={{ maxWidth: 180 }} title={dicaChaveMotivo(nota)}>
                   {nota.status === "cancelado" && nota.justificativaCancelamento
                     ? `Cancelada: ${nota.justificativaCancelamento}`
                     : nota.chaveAcesso || (nota.status === "rejeitado" ? nota.motivoRejeicao : null) || "—"}
@@ -14041,7 +14054,7 @@ function CteView({ onIrParaMdfe }) {
                     : cte.averbacaoMensagem || "";
                   return <td title={dica} style={{ color: a[1], fontWeight: 600, whiteSpace: "normal" }}>{a[0]}</td>;
                 })()}
-                <td title={cte.chaveAcesso || cte.motivoRejeicao || cte.justificativaCancelamento || ""}>
+                <td title={dicaChaveMotivo(cte)}>
                   {cte.status === "cancelado" && cte.justificativaCancelamento
                     ? `Cancelado: ${cte.justificativaCancelamento}`
                     : cte.chaveAcesso || (cte.status === "rejeitado" ? cte.motivoRejeicao : null) || "—"}

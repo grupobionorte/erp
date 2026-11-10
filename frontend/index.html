@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.173";
+const VERSAO_SISTEMA = "1.174";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.174", texto: "Equipamentos: a lista mostra a Propriedade (próprio, alugado ou sociedade) no lugar do tipo" },
   { versao: "1.173", texto: "Equipamentos: propriedade em Sociedade, com os sócios (do cadastro de fornecedores) e o percentual de cada um" },
   { versao: "1.172", texto: "NF-e, CT-e e MDF-e: passar o mouse no motivo mostra a justificativa inteira do cancelamento (ou o motivo da rejeição)" },
   { versao: "1.171", texto: "Equipamentos: uma linha por equipamento na lista; o texto longo aparece inteiro ao passar o mouse" },
@@ -10344,7 +10345,7 @@ function EquipamentosView() {
                   colunas tomavam tudo e o nome sumia. */}
               <th style={{ width: 80 }}>Código</th>
               <th>Equipamento</th>
-              <th style={{ width: "10%" }}>Tipo</th>
+              <th style={{ width: "10%" }}>Propriedade</th>
               <th style={{ width: "15%" }}>Marca / modelo</th>
               <th style={{ width: "10%" }}>Série / placa</th>
               <th style={{ width: "13%" }}>Onde está</th>
@@ -10357,15 +10358,18 @@ function EquipamentosView() {
               return (
                 <tr key={eq.id}>
                   <td style={{ fontWeight: 500 }}>{eq.codigo || "—"}</td>
-                  <td title={eq.nome}>
-                    {eq.propriedade === "alugado" && <span style={{ marginRight: 6, fontSize: 11.5, fontWeight: 600, color: "#b57a12" }}>alugado</span>}
-                    {eq.propriedade === "sociedade" && (
-                      <span style={{ marginRight: 6, fontSize: 11.5, fontWeight: 600, color: "#1565c0" }}
-                        title={(eq.socios || []).map(sc => `${sc.fornecedor?.nomeRazaoSocial}: ${formatarDecimal(sc.percentual, 2)}%`).join("\n")}>sociedade</span>
-                    )}
-                    {eq.nome}
-                  </td>
-                  <td className="subtle">{TIPOS_EQUIPAMENTO.find(t => t.valor === eq.tipo)?.rotulo || eq.tipo}</td>
+                  <td title={eq.nome}>{eq.nome}</td>
+                  {/* Propriedade no lugar do tipo (pedido do Leandro). Na
+                      sociedade, os sócios e a parte de cada um no mouse. */}
+                  {(() => {
+                    const p = eq.propriedade === "alugado" ? ["Alugado", "#b57a12"]
+                      : eq.propriedade === "sociedade" ? ["Sociedade", "#1565c0"]
+                      : ["Próprio", undefined];
+                    const dica = eq.propriedade === "sociedade"
+                      ? (eq.socios || []).map(sc => `${sc.fornecedor?.nomeRazaoSocial}: ${formatarDecimal(sc.percentual, 2)}%`).join("\n")
+                      : "";
+                    return <td title={dica} style={{ color: p[1], fontWeight: p[1] ? 600 : undefined }}>{p[0]}</td>;
+                  })()}
                   {(() => {
                     const marca = [eq.marca, eq.modelo, eq.ano].filter(Boolean).join(" ") || "—";
                     return <td title={marca}>{marca}</td>;

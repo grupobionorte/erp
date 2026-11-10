@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.174";
+const VERSAO_SISTEMA = "1.175";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.175", texto: "Equipamentos: relatório de Ativo imobilizado (depreciação por mês, sociedades) para imprimir ou baixar em Excel" },
   { versao: "1.174", texto: "Equipamentos: a lista mostra a Propriedade (próprio, alugado ou sociedade) no lugar do tipo" },
   { versao: "1.173", texto: "Equipamentos: propriedade em Sociedade, com os sócios (do cadastro de fornecedores) e o percentual de cada um" },
   { versao: "1.172", texto: "NF-e, CT-e e MDF-e: passar o mouse no motivo mostra a justificativa inteira do cancelamento (ou o motivo da rejeição)" },
@@ -10284,12 +10285,146 @@ function OrdemManutencaoForm({ ordem, equipamentos, colaboradores, onFechar, onS
 
 // Cadastro de equipamentos, com menu próprio. A mesma lista alimenta a
 // Manutenção (planos e leituras) e a aba Equipamentos da operação.
+// Relatório de ativo imobilizado dos equipamentos. A conta (depreciação
+// linear por mês completo, parte da empresa nas sociedades) vem pronta do
+// servidor, a mesma para a impressão e para a planilha.
+function AtivoImobilizadoModal({ onFechar }) {
+  const [filtro, setFiltro] = useState({ posicao: hojeNoFuso(), propriedade: "todos", agrupar: true });
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState("");
+  const parametros = (extra = {}) => new URLSearchParams({
+    posicao: filtro.posicao, propriedade: filtro.propriedade, agrupar: filtro.agrupar ? "1" : "0", ...extra,
+  });
+
+  const imprimir = (r) => {
+    const janela = window.open("", "_blank");
+    if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+    const esc = (t) => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const dia = (d) => (d ? d.split("-").reverse().join("/") : "");
+    const din = (v) => formatarDecimal(v, 2);
+    const pct = (v) => `${formatarDecimal(v, 2)}%`;
+    const cnpj = String(r.empresa?.cnpj || "").replace(/\D/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+    const agora = new Date().toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO }).replace(",", "");
+    const total = (t, rotulo, classe) => `<tr class="${classe}"><td colspan="5">${esc(rotulo)}</td>
+      <td class="n">${din(t.valorAquisicao)}</td><td></td><td></td><td class="n">${din(t.depreciacao)}</td>
+      <td class="n">${din(t.valorAtual)}</td><td></td><td class="n">${din(t.valorParte)}</td></tr>`;
+    const corpo = r.grupos.map(g => `
+      ${g.tipo ? `<tr class="grupo"><td colspan="12">${esc(g.tipo)}</td></tr>` : ""}
+      ${g.itens.map(l => `<tr>
+        <td>${esc(l.codigo || "")}</td><td>${esc(l.nome)}</td><td>${esc(l.marcaModelo)}</td><td>${esc(l.seriePlaca)}</td>
+        <td>${dia(l.aquisicao)}</td><td class="n">${din(l.valorAquisicao)}</td><td class="n">${pct(l.percentual)}</td>
+        <td class="n">${l.meses}</td><td class="n">${din(l.depreciacao)}</td>
+        <td class="n">${l.totalmenteDepreciado ? "<em>totalmente depreciado</em>" : din(l.valorAtual)}</td>
+        <td class="n">${pct(l.parteEmpresa)}</td><td class="n">${din(l.valorParte)}</td></tr>`).join("")}
+      ${g.tipo ? total(g.totais, `Subtotal ${g.tipo}`, "sub") : ""}`).join("");
+    const sociedades = r.grupos.flatMap(g => g.itens).filter(l => l.socios.length);
+    const quadroSociedades = sociedades.length ? `<h2>Sociedades</h2>${sociedades.map(l => `
+      <p class="soc"><strong>${esc(l.codigo ? `${l.codigo} — ` : "")}${esc(l.nome)}</strong> — valor atual R$ ${din(l.valorAtual)}<br>
+      • Empresa ${pct(l.parteEmpresa)}: R$ ${din(l.valorParte)}<br>
+      ${l.socios.map(sc => `• ${esc(sc.nome)} ${pct(sc.percentual)}: R$ ${din(sc.valor)}`).join("<br>")}</p>`).join("")}` : "";
+    const lista = (titulo, itens) => itens.length ? `<h2>${titulo}</h2><p class="soc">${itens.map(l => `${esc(l.codigo ? `${l.codigo} — ` : "")}${esc(l.nome)}${l.marcaModelo ? ` (${esc(l.marcaModelo)})` : ""}`).join("<br>")}</p>` : "";
+    const filtroTexto = { todos: "", proprio: " · só próprios", sociedade: " · só sociedades" }[r.filtro];
+    janela.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ativo imobilizado</title>
+      <style>
+        @page { size: A4 landscape; margin: 10mm 9mm 12mm;
+          @top-right { content: "Folha " counter(page) " de " counter(pages); font: 10px Arial, sans-serif; } }
+        body { font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 9.5px; margin: 0; }
+        .topo { display: flex; justify-content: space-between; font-size: 10.5px; line-height: 1.5; }
+        h1 { text-align: center; font-size: 13px; margin: 8px 0 2px; }
+        h2 { font-size: 11.5px; margin: 14px 0 4px; }
+        .sub-titulo { text-align: center; font-size: 10.5px; margin-bottom: 6px; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th { font-size: 9px; text-align: left; border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 3px; }
+        td { padding: 2.5px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        th.n, td.n { text-align: right; }
+        .grupo td { font-weight: 700; font-size: 10.5px; border-bottom: 1px solid #111; padding-top: 6px; }
+        .sub td { font-weight: 700; border-top: 0.5px solid #999; }
+        .geral td { font-weight: 700; border-top: 1.5px solid #111; padding-top: 4px; font-size: 10px; }
+        .soc { line-height: 1.6; margin: 4px 0 8px; }
+        tr { page-break-inside: avoid; }
+      </style></head><body>
+      <div class="topo">
+        <div>${esc(r.empresa?.razaoSocial || "")}<br>${esc(cnpj)}</div>
+        <div style="text-align:right">Emissão em: ${esc(agora)}<br>Emitido por: ${esc(usuarioLogado?.nome || "")}</div>
+      </div>
+      <h1>Relatório de Ativo Imobilizado — Equipamentos</h1>
+      <div class="sub-titulo">Posição em ${dia(r.posicao)}${filtroTexto} · depreciação linear por mês completo</div>
+      <table>
+        <colgroup><col style="width:6%"><col style="width:17%"><col style="width:11%"><col style="width:7%">
+          <col style="width:6.5%"><col style="width:8.5%"><col style="width:5%"><col style="width:5%">
+          <col style="width:8.5%"><col style="width:9.5%"><col style="width:6.5%"><col style="width:9.5%"></colgroup>
+        <thead><tr><th>Código</th><th>Equipamento</th><th>Marca / modelo / ano</th><th>Série / placa</th><th>Aquisição</th>
+          <th class="n">Valor aquisição</th><th class="n">% a.a.</th><th class="n">Meses</th><th class="n">Deprec. acumulada</th>
+          <th class="n">Valor atual</th><th class="n">Parte empresa</th><th class="n">Valor parte empresa</th></tr></thead>
+        <tbody>${corpo}${total(r.totais, `Total geral (${r.quantidade} equipamento${r.quantidade === 1 ? "" : "s"})`, "geral")}</tbody>
+      </table>
+      ${quadroSociedades}
+      ${lista("Equipamentos de terceiros (alugados) — fora do ativo", r.terceiros)}
+      ${lista("Sem data ou valor de aquisição — completar no cadastro", r.semDados)}
+      </body></html>`);
+    janela.document.close(); janela.focus(); setTimeout(() => janela.print(), 250);
+  };
+
+  const gerar = async () => {
+    setErro(""); setOcupado("gerar");
+    try {
+      const r = await apiRequest(`/manutencao/equipamentos-ativo?${parametros()}`);
+      if (!r.quantidade && !r.semDados.length) { setErro("Nenhum equipamento com dados de aquisição nessa posição."); return; }
+      imprimir(r);
+    } catch (e) { setErro(e.message); } finally { setOcupado(""); }
+  };
+  const baixarExcel = async () => {
+    setErro(""); setOcupado("excel");
+    try { await apiDownload(`/manutencao/equipamentos-ativo?${parametros({ formato: "xlsx" })}`, `Ativo-imobilizado-${filtro.posicao}.xlsx`); }
+    catch (e) { setErro(e.message); } finally { setOcupado(""); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <h3>Ativo imobilizado</h3>
+          <button className="icon-btn" onClick={onFechar} aria-label="Fechar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <div className="nf-grid-2">
+            <div className="field-group">
+              <label className="field-label">Posição em</label>
+              <input type="date" value={filtro.posicao} onChange={e => setFiltro(f => ({ ...f, posicao: e.target.value }))} />
+            </div>
+            <div className="field-group">
+              <label className="field-label">Propriedade</label>
+              <select value={filtro.propriedade} onChange={e => setFiltro(f => ({ ...f, propriedade: e.target.value }))}>
+                <option value="todos">Todos (próprios e sociedades)</option>
+                <option value="proprio">Só próprios</option>
+                <option value="sociedade">Só sociedades</option>
+              </select>
+            </div>
+          </div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer", marginBottom: 8 }}>
+            <input type="checkbox" checked={filtro.agrupar} onChange={e => setFiltro(f => ({ ...f, agrupar: e.target.checked }))} />
+            Agrupar por tipo, com subtotal
+          </label>
+          <p className="hint">Depreciação linear por mês completo, com a % ao ano do cadastro. Alugados ficam fora do ativo; equipamentos sem data ou valor de aquisição saem numa lista à parte.</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" onClick={gerar} disabled={Boolean(ocupado)}>{ocupado === "gerar" ? "Gerando…" : "Gerar relatório"}</button>
+            <button className="btn" onClick={baixarExcel} disabled={Boolean(ocupado)}>{ocupado === "excel" ? "Preparando…" : "Baixar Excel"}</button>
+          </div>
+          {erro && <p className="error-text">{erro}</p>}
+        </div>
+        <div className="modal-footer"><button className="btn" onClick={onFechar}>Fechar</button></div>
+      </div>
+    </div>
+  );
+}
+
 function EquipamentosView() {
   const { items: veiculos } = useApiCollection("veiculos");
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [busca, setBusca] = useState("");
   const [emEdicao, setEmEdicao] = useState(null);
+  const [ativoAberto, setAtivoAberto] = useState(false);
 
   const carregar = useCallback(async () => {
     setErro("");
@@ -10323,10 +10458,16 @@ function EquipamentosView() {
             <p className="subtle">{dados ? `${dados.equipamentos.length} equipamento${dados.equipamentos.length !== 1 ? "s" : ""}` : "—"}</p>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setEmEdicao({})}>
-          <Plus size={16} /> Novo equipamento
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn" style={{ padding: "6px 12px", fontSize: 13 }} onClick={() => setAtivoAberto(true)}>
+            <FileText size={14} /> Ativo imobilizado
+          </button>
+          <button className="btn btn-primary" onClick={() => setEmEdicao({})}>
+            <Plus size={16} /> Novo equipamento
+          </button>
+        </div>
       </div>
+      {ativoAberto && <AtivoImobilizadoModal onFechar={() => setAtivoAberto(false)} />}
 
       <div className="search-bar">
         <Search size={16} className="search-icon" />

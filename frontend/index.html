@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.172";
+const VERSAO_SISTEMA = "1.173";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.173", texto: "Equipamentos: propriedade em Sociedade, com os sócios (do cadastro de fornecedores) e o percentual de cada um" },
   { versao: "1.172", texto: "NF-e, CT-e e MDF-e: passar o mouse no motivo mostra a justificativa inteira do cancelamento (ou o motivo da rejeição)" },
   { versao: "1.171", texto: "Equipamentos: uma linha por equipamento na lista; o texto longo aparece inteiro ao passar o mouse" },
   { versao: "1.170", texto: "Equipamentos: campo Propriedade (próprio ou alugado), com marca \"alugado\" na lista" },
@@ -9796,6 +9797,13 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
     veiculoId: equipamento?.veiculoId ? String(equipamento.veiculoId) : "",
     observacao: equipamento?.observacao || "",
     propriedade: equipamento?.propriedade || "proprio",
+    // Sócios da sociedade: o texto do campo (nome ou código) e o fornecedor
+    // que ele achou no cadastro.
+    socios: (equipamento?.socios || []).map(sc => ({
+      texto: rotuloPessoa({ nome: sc.fornecedor?.nomeRazaoSocial, documento: sc.fornecedor?.documento }),
+      fornecedorId: sc.fornecedorId,
+      percentual: sc.percentual ?? "",
+    })),
     dataAquisicao: equipamento?.dataAquisicao ? String(equipamento.dataAquisicao).slice(0, 10) : "",
     valorAquisicao: equipamento?.valorAquisicao ?? "",
     percentualDepreciacao: equipamento?.percentualDepreciacao ?? "",
@@ -9813,6 +9821,44 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
   const set = (campo, valor) => setDados(d => ({ ...d, [campo]: valor }));
   const porPrazo = dados.controle === "prazo";
 
+  // Sociedade: os sócios vêm do cadastro de fornecedores, achados pelo nome
+  // (a lista mostra nome e CNPJ) ou pelo código digitado.
+  const [fornecedores, setFornecedores] = useState([]);
+  useEffect(() => {
+    apiRequest("/manutencao/equipamentos-fornecedores")
+      .then(lista => setFornecedores(lista.map(f => ({ id: f.id, nome: f.nomeRazaoSocial, documento: f.documento }))))
+      .catch(() => {});
+  }, []);
+  const opcoesFornecedores = fornecedores.map(f => ({ chave: f.id, valor: rotuloPessoa(f), detalhe: `Cód. ${f.id}` }));
+  const acharFornecedor = (texto) => {
+    const t = String(texto || "").trim();
+    if (!t) return null;
+    if (/^\d+$/.test(t)) return fornecedores.find(f => String(f.id) === t) || null;
+    const exato = fornecedores.find(f => rotuloPessoa(f) === t);
+    if (exato) return exato;
+    const mesmoNome = fornecedores.filter(f => textoDeBusca(f.nome) === textoDeBusca(t));
+    return mesmoNome.length === 1 ? mesmoNome[0] : null;
+  };
+  const sociedade = dados.propriedade === "sociedade";
+  const somaSocios = dados.socios.reduce((t, sc) => t + (Number(sc.percentual) || 0), 0);
+  const mudarPropriedade = (valor) => setDados(d => ({
+    ...d, propriedade: valor,
+    // Ao virar sociedade, já abre a linha do primeiro sócio.
+    socios: valor === "sociedade" && !d.socios.length ? [{ texto: "", fornecedorId: null, percentual: "" }] : d.socios,
+  }));
+  const mudarQuantidadeSocios = (n) => setDados(d => ({
+    ...d,
+    socios: Array.from({ length: n }, (_, i) => d.socios[i] || { texto: "", fornecedorId: null, percentual: "" }),
+  }));
+  const mudarSocio = (i, campo, valor) => setDados(d => ({
+    ...d,
+    socios: d.socios.map((sc, j) => {
+      if (j !== i) return sc;
+      if (campo !== "texto") return { ...sc, [campo]: valor };
+      return { ...sc, texto: valor, fornecedorId: acharFornecedor(valor)?.id || null };
+    }),
+  }));
+
   // Valor estimado hoje: depreciação linear, a % ao ano sobre o valor de
   // aquisição, proporcional aos dias desde a compra. Conta, não digitação.
   const valorEstimadoHoje = (() => {
@@ -9827,6 +9873,11 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
 
   const salvar = async () => {
     if (!dados.nome) { setErro("Informe o nome do equipamento."); return; }
+    if (sociedade) {
+      const semSocio = dados.socios.findIndex(sc => !sc.fornecedorId);
+      if (semSocio >= 0) { setErro(`Escolha o ${semSocio + 1}º sócio na lista de fornecedores.`); return; }
+      if (somaSocios > 100.001) { setErro("A soma dos percentuais dos sócios passa de 100%."); return; }
+    }
     setSalvando(true); setErro("");
     try {
       const caminho = equipamento?.id
@@ -9834,7 +9885,10 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
         : "/manutencao/equipamentos";
       await apiRequest(caminho, {
         method: equipamento?.id ? "PUT" : "POST",
-        body: JSON.stringify(dados),
+        body: JSON.stringify({
+          ...dados,
+          socios: sociedade ? dados.socios.map(sc => ({ fornecedorId: sc.fornecedorId, percentual: sc.percentual })) : [],
+        }),
       });
       onSalvo();
     } catch (e) {
@@ -9899,13 +9953,58 @@ function EquipamentoForm({ equipamento, veiculos, onFechar, onSalvo }) {
               </div>
               <div className="field-group">
                 <label className="field-label">Propriedade</label>
-                <select value={dados.propriedade} onChange={e => set("propriedade", e.target.value)}>
+                <select value={dados.propriedade} onChange={e => mudarPropriedade(e.target.value)}>
                   <option value="proprio">Próprio</option>
                   <option value="alugado">Alugado</option>
+                  <option value="sociedade">Sociedade</option>
                 </select>
               </div>
+              {sociedade && (
+                <div className="field-group">
+                  <label className="field-label">Quantidade de sócios</label>
+                  <select value={dados.socios.length || 1} onChange={e => mudarQuantidadeSocios(Number(e.target.value))}>
+                    {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
           </section>
+
+          {sociedade && (
+            <section className="pf-secao">
+              <h4 className="pf-secao-titulo">
+                Sócios
+                <span className="subtle" style={{ fontWeight: 400, marginLeft: 8, fontSize: 12.5, color: somaSocios > 100.001 ? "#c62828" : undefined }}>
+                  {somaSocios > 100.001
+                    ? `a soma passa de 100% (${formatarDecimal(somaSocios, 2)}%)`
+                    : `parte da empresa: ${formatarDecimal(100 - somaSocios, 2)}%`}
+                </span>
+              </h4>
+              {dados.socios.map((sc, i) => (
+                <div key={i} className="nf-grid-4">
+                  <div className="field-group" style={{ gridColumn: "span 3" }}>
+                    <label className="field-label">{i + 1}º sócio (nome ou código do fornecedor)</label>
+                    <CampoComLista value={sc.texto} opcoes={opcoesFornecedores} ariaLabel={`${i + 1}º sócio`}
+                      placeholder="Digite o nome ou o código"
+                      onChange={v => mudarSocio(i, "texto", v)} />
+                    {sc.texto && !sc.fornecedorId && (
+                      <p className="hint" style={{ color: "#c62828", margin: "4px 0 0" }}>Não encontrado no cadastro de fornecedores.</p>
+                    )}
+                    {/* Digitou o código: confirma de quem é. */}
+                    {sc.fornecedorId && /^\d+$/.test(String(sc.texto).trim()) && (
+                      <p className="hint" style={{ color: "#00732F", margin: "4px 0 0" }}>
+                        {rotuloPessoa(fornecedores.find(f => f.id === sc.fornecedorId))}
+                      </p>
+                    )}
+                  </div>
+                  <div className="field-group">
+                    <label className="field-label">Percentual (%)</label>
+                    <InputDecimal casas={2} value={sc.percentual} onChange={v => mudarSocio(i, "percentual", v)} />
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
 
           <section className="pf-secao">
             <h4 className="pf-secao-titulo">Controle</h4>
@@ -10260,6 +10359,10 @@ function EquipamentosView() {
                   <td style={{ fontWeight: 500 }}>{eq.codigo || "—"}</td>
                   <td title={eq.nome}>
                     {eq.propriedade === "alugado" && <span style={{ marginRight: 6, fontSize: 11.5, fontWeight: 600, color: "#b57a12" }}>alugado</span>}
+                    {eq.propriedade === "sociedade" && (
+                      <span style={{ marginRight: 6, fontSize: 11.5, fontWeight: 600, color: "#1565c0" }}
+                        title={(eq.socios || []).map(sc => `${sc.fornecedor?.nomeRazaoSocial}: ${formatarDecimal(sc.percentual, 2)}%`).join("\n")}>sociedade</span>
+                    )}
                     {eq.nome}
                   </td>
                   <td className="subtle">{TIPOS_EQUIPAMENTO.find(t => t.valor === eq.tipo)?.rotulo || eq.tipo}</td>

@@ -281,6 +281,7 @@ model Pessoa {
   // ter cada uma seu cadastro, e a mesma empresa pode ter o CNPJ como
   // cliente e como fornecedor, sem um mexer no outro.
   comprasDiesel MovimentoDiesel[]
+  sociedadesEquipamento EquipamentoSocio[]
   @@unique([documento, empresaId, papel])
   @@map("pessoas")
   contasPagar ContaPagar[]
@@ -1294,7 +1295,8 @@ model Equipamento {
   ativo      Boolean @default(true)
   observacao String?
 
-  // proprio | alugado
+  // proprio | alugado | sociedade. Na sociedade, os sócios (fornecedores)
+  // e o percentual de cada um ficam em EquipamentoSocio.
   propriedade String @default("proprio")
 
   // Aquisição e depreciação (linear, % ao ano). O valor estimado de hoje é
@@ -1314,6 +1316,7 @@ model Equipamento {
 
   producoes        ProducaoOperacao[]
   abastecimentos   MovimentoDiesel[]
+  socios EquipamentoSocio[]
   @@index([empresaId, nome])
   @@map("equipamentos")
 }
@@ -1736,4 +1739,19 @@ model ProducaoOperacao {
   @@unique([equipamentoId, data, turno])
   @@index([operacaoId, data])
   @@map("producoes_operacao")
+}
+
+// Sócio de um equipamento em sociedade: um fornecedor e a parte dele. A
+// parte da empresa é o que sobra até 100%.
+model EquipamentoSocio {
+  id         Int   @id @default(autoincrement())
+  percentual Float
+
+  equipamentoId Int         @map("equipamento_id")
+  equipamento   Equipamento @relation(fields: [equipamentoId], references: [id], onDelete: Cascade)
+  fornecedorId  Int         @map("fornecedor_id")
+  fornecedor    Pessoa      @relation(fields: [fornecedorId], references: [id])
+
+  @@index([equipamentoId])
+  @@map("equipamento_socios")
 }

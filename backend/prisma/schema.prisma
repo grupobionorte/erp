@@ -1273,7 +1273,8 @@ model Equipamento {
   // Código interno da empresa (ex.: BN-1001). Único por empresa.
   codigo String?
   nome  String
-  // picador | escavadeira | pa-carregadeira | caminhao | carro | outro
+  // picador | escavadeira | pa-carregadeira | caminhao | carro |
+  // cavalo-mecanico | carreta | trator | outro
   tipo  String  @default("outro")
   marca String?
   modelo String?

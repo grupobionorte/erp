@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.168";
+const VERSAO_SISTEMA = "1.169";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.169", texto: "Equipamentos: novos tipos Cavalo mecânico, Carreta e Trator" },
   { versao: "1.168", texto: "Manutenção: código e nome do equipamento em colunas separadas, alinhados" },
   { versao: "1.167", texto: "Equipamentos: lista em ordem alfabética pelo nome" },
   { versao: "1.166", texto: "MDF-e: filtro por situação na lista, que abre nos autorizados em aberto" },
@@ -9751,6 +9752,9 @@ const TIPOS_EQUIPAMENTO = [
   { valor: "pa-carregadeira", rotulo: "Pá carregadeira" },
   { valor: "caminhao", rotulo: "Caminhão" },
   { valor: "carro", rotulo: "Carro" },
+  { valor: "cavalo-mecanico", rotulo: "Cavalo mecânico" },
+  { valor: "carreta", rotulo: "Carreta" },
+  { valor: "trator", rotulo: "Trator" },
   { valor: "outro", rotulo: "Outro" },
 ];
 

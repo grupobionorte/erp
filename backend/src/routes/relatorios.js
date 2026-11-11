@@ -21,14 +21,21 @@ const { intervaloNoFuso, partesNoFuso } = require("../lib/fuso");
 /**
  * Relação de NF-e emitidas, por período e opcionalmente por cliente.
  */
-// Natureza da operação da NF-e: venda ou remessa em comodato. Pela palavra,
+// Natureza da operação da NF-e: venda ou remessa. Pela palavra,
 // e não pelo texto exato: já houve "VENDA DE MERCADORIAS" e "Venda de
 // mercadoria" gravados; nota sem natureza gravada saiu como venda.
 function filtroNatureza(natureza) {
   if (natureza === "venda") {
     return { OR: [{ naturezaOperacao: { contains: "venda", mode: "insensitive" } }, { naturezaOperacao: null }] };
   }
-  if (natureza === "comodato") return { naturezaOperacao: { contains: "comodato", mode: "insensitive" } };
+  // Remessa: a atual ("Remessa de mercadoria") e as notas antigas
+  // ("Remessa em comodato").
+  if (natureza === "remessa" || natureza === "comodato") {
+    return { OR: [
+      { naturezaOperacao: { startsWith: "remessa", mode: "insensitive" } },
+      { naturezaOperacao: { contains: "comodato", mode: "insensitive" } },
+    ] };
+  }
   return {};
 }
 

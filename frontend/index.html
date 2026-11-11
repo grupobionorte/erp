@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.178";
+const VERSAO_SISTEMA = "1.179";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.179", texto: "NF-e: a natureza \"Remessa em comodato\" passa a se chamar \"Remessa de mercadoria\", com CFOP 5.949/6.949" },
   { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs. Natureza escrita como \"Venda de mercadoria\" e \"Remessa em comodato\"" },
   { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
   { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
@@ -7988,7 +7989,9 @@ function enderecoDaRetirada(p) {
 
 // Naturezas da operação da NF-e (lista fechada, pedido do Leandro). O texto
 // sai no DANFE como está.
-const NATUREZAS_NFE = ["Venda de mercadoria", "Remessa em comodato"];
+// "Remessa de mercadoria" substituiu "Remessa em comodato" (pedido do
+// Leandro); as notas já feitas com o texto antigo ficam como estão.
+const NATUREZAS_NFE = ["Venda de mercadoria", "Remessa de mercadoria"];
 // Primeira versão da lista, toda em maiúsculas: nota gravada assim abre com
 // o texto atual.
 const NATUREZA_NFE_ANTIGA = { "VENDA DE MERCADORIAS": "Venda de mercadoria", "REMESSA EM COMODATO": "Remessa em comodato" };
@@ -8097,20 +8100,23 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  // Remessa em comodato: CFOP 5.908 para destinatário no mesmo estado da
-  // empresa, 6.908 para outro. Sem saber as duas UFs, não escolhe: o CFOP
+  // Remessa: CFOP 5.949 (outra saída não especificada) para destinatário no
+  // mesmo estado da empresa, 6.949 para outro — escolha do Leandro, no lugar
+  // do 5.908/6.908 do comodato. Sem saber as duas UFs, não escolhe: o CFOP
   // fica como está e a tela pede conferência.
-  const comodato = /COMODATO/i.test(naturezaOperacao);
+  // Remessa de mercadoria, ou o texto antigo "Remessa em comodato".
+  const ehRemessa = (n) => /^\s*REMESSA/i.test(n || "") || /COMODATO/i.test(n || "");
+  const comodato = ehRemessa(naturezaOperacao);
   const ufEmpresa = usuarioLogado?.empresa?.endereco?.uf || "";
   const cfopComodatoPara = (id) => {
     const uf = (clientes || []).find(c => String(c.id) === String(id))?.endereco?.uf || "";
     if (!uf || !ufEmpresa) return null;
-    return uf.toUpperCase() === ufEmpresa.toUpperCase() ? "5908" : "6908";
+    return uf.toUpperCase() === ufEmpresa.toUpperCase() ? "5949" : "6949";
   };
   const cfopComodato = cfopComodatoPara(destinatarioId);
   const mudarNatureza = (valor) => {
     setNaturezaOperacao(valor);
-    if (/COMODATO/i.test(valor)) {
+    if (ehRemessa(valor)) {
       // Remessa não é venda: sem pagamento, e o CFOP da remessa em todos os itens.
       setFormaPagamento("Sem pagamento");
       if (cfopComodato) setItens(prev => prev.map(it => ({ ...it, cfopUtilizado: cfopComodato })));
@@ -8235,8 +8241,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {comodato && (
                   <p className="hint" style={{ margin: "4px 0 0", color: cfopComodato ? undefined : "#c62828" }}>
                     {cfopComodato
-                      ? `Remessa: CFOP ${cfopComodato.replace(/^(\d)/, "$1.")} nos itens e forma de pagamento "Sem pagamento". Confira o CST do ICMS com o contador.`
-                      : "Remessa: não sei a UF do cliente ou da empresa para escolher entre 5.908 e 6.908. Confira o CFOP dos itens."}
+                      ? `Remessa: CFOP ${cfopComodato.replace(/^(\d)/, "$1.")} (outra saída não especificada) nos itens e forma de pagamento "Sem pagamento". Confira o CST do ICMS com o contador.`
+                      : "Remessa: não sei a UF do cliente ou da empresa para escolher entre 5.949 e 6.949. Confira o CFOP dos itens."}
                   </p>
                 )}
               </div>
@@ -8874,7 +8880,7 @@ function RelatorioNfeModal({ onFechar }) {
 
   const { items: clientes } = useApiCollection("clientes");
   const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", status: "autorizado", natureza: "" });
-  const NATUREZA_FILTRO = { "": "Todas", venda: "Venda de mercadoria", comodato: "Remessa em comodato" };
+  const NATUREZA_FILTRO = { "": "Todas", venda: "Venda de mercadoria", remessa: "Remessa de mercadoria" };
   const [dadosAtuais, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);

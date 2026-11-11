@@ -1199,7 +1199,7 @@ const VERSAO_SISTEMA = "1.178";
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
-  { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs" },
+  { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs. Natureza escrita como \"Venda de mercadoria\" e \"Remessa em comodato\"" },
   { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
   { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
   { versao: "1.175", texto: "Equipamentos: relatório de Ativo imobilizado (depreciação por mês, sociedades) para imprimir ou baixar em Excel" },
@@ -7988,7 +7988,10 @@ function enderecoDaRetirada(p) {
 
 // Naturezas da operação da NF-e (lista fechada, pedido do Leandro). O texto
 // sai no DANFE como está.
-const NATUREZAS_NFE = ["VENDA DE MERCADORIAS", "REMESSA EM COMODATO"];
+const NATUREZAS_NFE = ["Venda de mercadoria", "Remessa em comodato"];
+// Primeira versão da lista, toda em maiúsculas: nota gravada assim abre com
+// o texto atual.
+const NATUREZA_NFE_ANTIGA = { "VENDA DE MERCADORIAS": "Venda de mercadoria", "REMESSA EM COMODATO": "Remessa em comodato" };
 
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = hojeNoFuso();
@@ -8040,7 +8043,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   };
   // Natureza em lista fechada (pedido do Leandro). Nota antiga com outro
   // texto continua mostrando o dela, como opção a mais.
-  const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || NATUREZAS_NFE[0]);
+  const [naturezaOperacao, setNaturezaOperacao] = useState(
+    NATUREZA_NFE_ANTIGA[nota?.naturezaOperacao] || nota?.naturezaOperacao || NATUREZAS_NFE[0]
+  );
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? diaDoInstante(nota.dataSaida) : "");
   // A hora vem junto da data no banco; aqui os dois campos são separados
@@ -8869,7 +8874,7 @@ function RelatorioNfeModal({ onFechar }) {
 
   const { items: clientes } = useApiCollection("clientes");
   const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", status: "autorizado", natureza: "" });
-  const NATUREZA_FILTRO = { "": "Todas", venda: "Venda de mercadorias", comodato: "Remessa em comodato" };
+  const NATUREZA_FILTRO = { "": "Todas", venda: "Venda de mercadoria", comodato: "Remessa em comodato" };
   const [dadosAtuais, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);

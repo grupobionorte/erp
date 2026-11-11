@@ -1199,7 +1199,7 @@ const VERSAO_SISTEMA = "1.179";
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
-  { versao: "1.179", texto: "NF-e: a natureza \"Remessa em comodato\" passa a se chamar \"Remessa de mercadoria\"" },
+  { versao: "1.179", texto: "NF-e: a natureza \"Remessa em comodato\" passa a se chamar \"Remessa de mercadoria\", com CFOP 5.949/6.949" },
   { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs. Natureza escrita como \"Venda de mercadoria\" e \"Remessa em comodato\"" },
   { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
   { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
@@ -8100,8 +8100,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  // Remessa (hoje em comodato): CFOP 5.908 para destinatário no mesmo estado da
-  // empresa, 6.908 para outro. Sem saber as duas UFs, não escolhe: o CFOP
+  // Remessa: CFOP 5.949 (outra saída não especificada) para destinatário no
+  // mesmo estado da empresa, 6.949 para outro — escolha do Leandro, no lugar
+  // do 5.908/6.908 do comodato. Sem saber as duas UFs, não escolhe: o CFOP
   // fica como está e a tela pede conferência.
   // Remessa de mercadoria, ou o texto antigo "Remessa em comodato".
   const ehRemessa = (n) => /^\s*REMESSA/i.test(n || "") || /COMODATO/i.test(n || "");
@@ -8110,7 +8111,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const cfopComodatoPara = (id) => {
     const uf = (clientes || []).find(c => String(c.id) === String(id))?.endereco?.uf || "";
     if (!uf || !ufEmpresa) return null;
-    return uf.toUpperCase() === ufEmpresa.toUpperCase() ? "5908" : "6908";
+    return uf.toUpperCase() === ufEmpresa.toUpperCase() ? "5949" : "6949";
   };
   const cfopComodato = cfopComodatoPara(destinatarioId);
   const mudarNatureza = (valor) => {
@@ -8240,8 +8241,8 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
                 {comodato && (
                   <p className="hint" style={{ margin: "4px 0 0", color: cfopComodato ? undefined : "#c62828" }}>
                     {cfopComodato
-                      ? `Remessa: CFOP ${cfopComodato.replace(/^(\d)/, "$1.")} (remessa em comodato) nos itens e forma de pagamento "Sem pagamento". Se a remessa for de outro tipo, troque o CFOP no item. Confira o CST do ICMS com o contador.`
-                      : "Remessa: não sei a UF do cliente ou da empresa para escolher entre 5.908 e 6.908. Confira o CFOP dos itens."}
+                      ? `Remessa: CFOP ${cfopComodato.replace(/^(\d)/, "$1.")} (outra saída não especificada) nos itens e forma de pagamento "Sem pagamento". Confira o CST do ICMS com o contador.`
+                      : "Remessa: não sei a UF do cliente ou da empresa para escolher entre 5.949 e 6.949. Confira o CFOP dos itens."}
                   </p>
                 )}
               </div>

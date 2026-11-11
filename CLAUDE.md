@@ -226,6 +226,8 @@ porquê.
 - **302 / schema infPag** — MDF-e de carga lotação exige o grupo de
   pagamento, com banco e agência; "a pagar" no CT-e não é "a prazo" no MDF-e
 - **506** — saída não pode ser anterior à emissão
+- **904** — "Sem pagamento" (forma 90, usada na remessa/comodato) vai com
+  valor de pagamento zero, nunca com o total da nota
 - **578 / 711 / 726 / 745** — contratantes, manifesto em aberto, CEPs da
   carga lotação, tipo de transportador
 - **868** — grupo do veículo proibido fora do mesmo município

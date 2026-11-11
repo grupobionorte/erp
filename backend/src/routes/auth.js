@@ -255,6 +255,8 @@ router.get("/me", autenticar, asyncHandler(async (req, res) => {
         id: true, razaoSocial: true, cfopPadraoCte: true, cstPadraoCte: true, observacaoPadraoCte: true,
         // Se a Visão geral mostra o painel de folgas nesta empresa.
         painelFolgas: true,
+        // A UF da empresa decide o CFOP da remessa (5.xxx no estado, 6.xxx fora).
+        endereco: { select: { uf: true } },
         // O seguro vem junto: é ele que preenche o MDF-e novo.
         seguroNomeSeguradora: true, seguroCnpjSeguradora: true, seguroNumeroApolice: true,
       },

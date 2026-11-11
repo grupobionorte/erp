@@ -21,6 +21,17 @@ const { intervaloNoFuso, partesNoFuso } = require("../lib/fuso");
 /**
  * Relação de NF-e emitidas, por período e opcionalmente por cliente.
  */
+// Natureza da operação da NF-e: venda ou remessa em comodato. Pela palavra,
+// e não pelo texto exato: já houve "VENDA DE MERCADORIAS" e "Venda de
+// mercadoria" gravados; nota sem natureza gravada saiu como venda.
+function filtroNatureza(natureza) {
+  if (natureza === "venda") {
+    return { OR: [{ naturezaOperacao: { contains: "venda", mode: "insensitive" } }, { naturezaOperacao: null }] };
+  }
+  if (natureza === "comodato") return { naturezaOperacao: { contains: "comodato", mode: "insensitive" } };
+  return {};
+}
+
 router.get("/nfe", asyncHandler(async (req, res) => {
   const { de, ate, destinatarioId, status: statusPedido } = req.query;
   if (!de || !ate) return res.status(400).json({ erro: "Informe o período (de e ate)" });
@@ -40,6 +51,7 @@ router.get("/nfe", asyncHandler(async (req, res) => {
       status: { in: status },
       dataEmissao: { gte: inicio, lte: fim },
       ...(destinatarioId ? { destinatarioId: Number(destinatarioId) } : {}),
+      ...filtroNatureza(req.query.natureza),
     },
     include: {
       destinatario: { select: { id: true, nomeRazaoSocial: true, documento: true } },
@@ -232,6 +244,7 @@ router.get("/nfe/xmls", asyncHandler(async (req, res) => {
       empresaId: req.usuario.empresaId || undefined,
       status: { in: status },
       dataEmissao: { gte: inicio, lte: fim },
+      ...filtroNatureza(req.query.natureza),
       xmlUrl: { not: null },
     },
     select: { numero: true, chaveAcesso: true, xmlUrl: true, status: true },

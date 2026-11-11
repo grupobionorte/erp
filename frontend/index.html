@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.177";
+const VERSAO_SISTEMA = "1.178";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs" },
   { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
   { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
   { versao: "1.175", texto: "Equipamentos: relatório de Ativo imobilizado (depreciação por mês, sociedades) para imprimir ou baixar em Excel" },
@@ -8867,7 +8868,8 @@ function RelatorioNfeModal({ onFechar }) {
   const primeiroDia = `${hoje.slice(0, 8)}01`;
 
   const { items: clientes } = useApiCollection("clientes");
-  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", status: "autorizado" });
+  const [filtro, setFiltro] = useState({ de: primeiroDia, ate: hoje, destinatarioId: "", status: "autorizado", natureza: "" });
+  const NATUREZA_FILTRO = { "": "Todas", venda: "Venda de mercadorias", comodato: "Remessa em comodato" };
   const [dadosAtuais, setDados] = useState(null);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -8879,7 +8881,7 @@ function RelatorioNfeModal({ onFechar }) {
   const baixarXmls = async () => {
     setErro(""); setBaixando(true);
     try {
-      const params = new URLSearchParams({ de: filtro.de, ate: filtro.ate, status: filtro.status });
+      const params = new URLSearchParams({ de: filtro.de, ate: filtro.ate, status: filtro.status, ...(filtro.natureza ? { natureza: filtro.natureza } : {}) });
       await apiDownload(`/relatorios/nfe/xmls?${params}`, `XMLs-NFe-${filtro.de}-a-${filtro.ate}.zip`);
     } catch (e) {
       setErro(e.message);
@@ -8895,6 +8897,7 @@ function RelatorioNfeModal({ onFechar }) {
         de: filtro.de,
         ate: filtro.ate,
         ...(filtro.destinatarioId ? { destinatarioId: filtro.destinatarioId } : {}),
+        ...(filtro.natureza ? { natureza: filtro.natureza } : {}),
         status: filtro.status,
       });
       const resultado = await apiRequest(`/relatorios/nfe?${params}`);
@@ -8956,6 +8959,7 @@ function RelatorioNfeModal({ onFechar }) {
         <div class="sub">
           Período de ${dataBr(`${filtro.de}T12:00:00Z`)} a ${dataBr(`${filtro.ate}T12:00:00Z`)}
           ${cliente ? ` · Cliente: ${cliente.nome}` : ""}
+          ${filtro.natureza ? ` · Natureza: ${NATUREZA_FILTRO[filtro.natureza]}` : ""}
           · Emitido em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Cuiaba" })}
         </div>
 
@@ -9015,6 +9019,13 @@ function RelatorioNfeModal({ onFechar }) {
               <option value="todas">Todas</option>
             </select>
           </div>
+        </div>
+
+        <div className="field-group">
+          <label className="field-label">Natureza da operação</label>
+          <select value={filtro.natureza} onChange={e => setFiltro(f => ({ ...f, natureza: e.target.value }))}>
+            {Object.entries(NATUREZA_FILTRO).map(([v, r]) => <option key={v} value={v}>{r}</option>)}
+          </select>
         </div>
 
         <div className="field-group">

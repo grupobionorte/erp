@@ -80,7 +80,9 @@ const CODIGO_MODALIDADE_FRETE = {
 };
 const CODIGO_FORMA_PAGAMENTO = {
   "Dinheiro": "01", "Cartão de Crédito": "03", "Cartão de Débito": "04", "PIX": "17",
-  "Boleto": "15", "Transferência Bancária": "16", "Sem pagamento (a prazo)": "90",
+  "Boleto": "15", "Transferência Bancária": "16", "Sem pagamento": "90",
+  // Nome antigo da mesma opção, ainda gravado em notas antigas.
+  "Sem pagamento (a prazo)": "90",
 };
 
 // --- Helpers de formatação fiscal -----------------------------------------
@@ -329,10 +331,13 @@ function montarPayloadNfe({ empresa, destinatario, itens, documento, transportad
         }]
       : undefined,
 
-    formas_pagamento: [{
-      forma_pagamento: CODIGO_FORMA_PAGAMENTO[documento.formaPagamento] ?? "90",
-      valor_pagamento: documento.valorTotal,
-    }],
+    // "90 - Sem pagamento" (remessa, comodato) exige valor de pagamento
+    // zero: com o total da nota, a SEFAZ recusa com a rejeição 904
+    // ("Informado indevidamente campo valor de pagamento").
+    formas_pagamento: (() => {
+      const forma = CODIGO_FORMA_PAGAMENTO[documento.formaPagamento] ?? "90";
+      return [{ forma_pagamento: forma, valor_pagamento: forma === "90" ? 0 : documento.valorTotal }];
+    })(),
 
     valor_frete: documento.valorFrete || undefined,
     valor_seguro: documento.valorSeguro || undefined,

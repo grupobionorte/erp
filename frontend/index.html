@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.176";
+const VERSAO_SISTEMA = "1.177";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
   { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
   { versao: "1.175", texto: "Equipamentos: relatório de Ativo imobilizado (depreciação por mês, sociedades) para imprimir ou baixar em Excel" },
   { versao: "1.174", texto: "Equipamentos: a lista mostra a Propriedade (próprio, alugado ou sociedade) no lugar do tipo" },
@@ -7969,7 +7970,9 @@ function MdfeView() {
 const MODALIDADES_FRETE = ["Sem frete", "Por conta do emitente", "Por conta do destinatário", "Por conta de terceiros"];
 const FINALIDADES_OPERACAO = ["Normal", "Complementar", "Ajuste", "Devolução"];
 const INDICADORES_PRESENCA = ["Não se aplica", "Presencial", "Internet", "Teleatendimento", "Entrega a domicílio", "Presencial fora do estabelecimento"];
-const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento (a prazo)"];
+// "Sem pagamento" é o código 90 da SEFAZ: remessa, comodato, bonificação.
+// Não é venda a prazo — chamava-se "Sem pagamento (a prazo)" e confundia.
+const FORMAS_PAGAMENTO = ["Dinheiro", "Cartão de Crédito", "Cartão de Débito", "PIX", "Boleto", "Transferência Bancária", "Sem pagamento"];
 
 // Endereço numa linha, para conferir o local de retirada escolhido.
 function enderecoDaRetirada(p) {
@@ -8064,7 +8067,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [chaveNfeReferenciada, setChaveNfeReferenciada] = useState(nota?.chaveNfeReferenciada || "");
   const [consumidorFinal, setConsumidorFinal] = useState(nota?.consumidorFinal ?? false);
   const [indicadorPresenca, setIndicadorPresenca] = useState(nota?.indicadorPresenca || "Não se aplica");
-  const [formaPagamento, setFormaPagamento] = useState(nota?.formaPagamento || "Dinheiro");
+  const [formaPagamento, setFormaPagamento] = useState(
+    nota?.formaPagamento === "Sem pagamento (a prazo)" ? "Sem pagamento" : (nota?.formaPagamento || "Dinheiro")
+  );
   const [valorFrete, setValorFrete] = useState(nota?.valorFrete ?? "");
   const [valorSeguro, setValorSeguro] = useState(nota?.valorSeguro ?? "");
   const [valorDesconto, setValorDesconto] = useState(nota?.valorDesconto ?? "");
@@ -8101,7 +8106,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
     setNaturezaOperacao(valor);
     if (/COMODATO/i.test(valor)) {
       // Remessa não é venda: sem pagamento, e o CFOP da remessa em todos os itens.
-      setFormaPagamento("Sem pagamento (a prazo)");
+      setFormaPagamento("Sem pagamento");
       if (cfopComodato) setItens(prev => prev.map(it => ({ ...it, cfopUtilizado: cfopComodato })));
     } else {
       // De volta à venda: cada item volta ao CFOP do cadastro do produto.

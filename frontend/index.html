@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.175";
+const VERSAO_SISTEMA = "1.176";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.176", texto: "NF-e: natureza da operação em lista (venda ou remessa em comodato); o comodato já põe CFOP 5.908/6.908 e \"Sem pagamento\"" },
   { versao: "1.175", texto: "Equipamentos: relatório de Ativo imobilizado (depreciação por mês, sociedades) para imprimir ou baixar em Excel" },
   { versao: "1.174", texto: "Equipamentos: a lista mostra a Propriedade (próprio, alugado ou sociedade) no lugar do tipo" },
   { versao: "1.173", texto: "Equipamentos: propriedade em Sociedade, com os sócios (do cadastro de fornecedores) e o percentual de cada um" },
@@ -7981,6 +7982,10 @@ function enderecoDaRetirada(p) {
   return linha || "sem endereço no cadastro";
 }
 
+// Naturezas da operação da NF-e (lista fechada, pedido do Leandro). O texto
+// sai no DANFE como está.
+const NATUREZAS_NFE = ["VENDA DE MERCADORIAS", "REMESSA EM COMODATO"];
+
 function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, colaboradores, veiculos, criarCliente, criarTransportadora, criarVeiculo, criarColaborador, onSave, onCancel }) {
   const hoje = hojeNoFuso();
   const [dataEmissao, setDataEmissao] = useState(nota?.dataEmissao ? diaDoInstante(nota.dataEmissao) : hoje);
@@ -8029,7 +8034,9 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
     quickAdd.setter(String(criado.id));
     setQuickAdd(null);
   };
-  const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || "Venda de mercadoria");
+  // Natureza em lista fechada (pedido do Leandro). Nota antiga com outro
+  // texto continua mostrando o dela, como opção a mais.
+  const [naturezaOperacao, setNaturezaOperacao] = useState(nota?.naturezaOperacao || NATUREZAS_NFE[0]);
   const [modalidadeFrete, setModalidadeFrete] = useState(nota?.modalidadeFrete || "Sem frete");
   const [dataSaida, setDataSaida] = useState(nota?.dataSaida ? diaDoInstante(nota.dataSaida) : "");
   // A hora vem junto da data no banco; aqui os dois campos são separados
@@ -8079,6 +8086,37 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  // Remessa em comodato: CFOP 5.908 para destinatário no mesmo estado da
+  // empresa, 6.908 para outro. Sem saber as duas UFs, não escolhe: o CFOP
+  // fica como está e a tela pede conferência.
+  const comodato = /COMODATO/i.test(naturezaOperacao);
+  const ufEmpresa = usuarioLogado?.empresa?.endereco?.uf || "";
+  const cfopComodatoPara = (id) => {
+    const uf = (clientes || []).find(c => String(c.id) === String(id))?.endereco?.uf || "";
+    if (!uf || !ufEmpresa) return null;
+    return uf.toUpperCase() === ufEmpresa.toUpperCase() ? "5908" : "6908";
+  };
+  const cfopComodato = cfopComodatoPara(destinatarioId);
+  const mudarNatureza = (valor) => {
+    setNaturezaOperacao(valor);
+    if (/COMODATO/i.test(valor)) {
+      // Remessa não é venda: sem pagamento, e o CFOP da remessa em todos os itens.
+      setFormaPagamento("Sem pagamento (a prazo)");
+      if (cfopComodato) setItens(prev => prev.map(it => ({ ...it, cfopUtilizado: cfopComodato })));
+    } else {
+      // De volta à venda: cada item volta ao CFOP do cadastro do produto.
+      setItens(prev => prev.map(it => {
+        const produto = (produtosDisponiveis || []).find(p => String(p.id) === String(it.produtoId));
+        return produto ? { ...it, cfopUtilizado: produto.cfop || "" } : it;
+      }));
+    }
+  };
+  // Trocou o destinatário com a nota em comodato: dentro ou fora do estado
+  // pode ter mudado.
+  useEffect(() => {
+    if (comodato && cfopComodato) setItens(prev => prev.map(it => ({ ...it, cfopUtilizado: cfopComodato })));
+  }, [destinatarioId]);
+
   const atualizarItem = (index, campo, valor) => {
     setItens(prev => prev.map((it, i) => {
       if (i !== index) return it;
@@ -8087,7 +8125,7 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
         const produto = (produtosDisponiveis || []).find(p => String(p.id) === valor);
         if (produto) {
           atualizado.valorUnitario = produto.valorUnitario ?? "";
-          atualizado.cfopUtilizado = produto.cfop || "";
+          atualizado.cfopUtilizado = (comodato && cfopComodato) || produto.cfop || "";
           atualizado.ncmUtilizado = produto.ncm || "";
           atualizado.cstUtilizado = produto.cst || "";
         }
@@ -8179,7 +8217,17 @@ function NotaFiscalForm({ nota, clientes, produtosDisponiveis, transportadoras, 
             <div className="nf-grade4">
               <div className="field-group" style={{ gridColumn: "span 2" }}>
                 <label className="field-label">Natureza da operação</label>
-                <input value={naturezaOperacao} onChange={e => setNaturezaOperacao(e.target.value)} />
+                <select value={naturezaOperacao} onChange={e => mudarNatureza(e.target.value)}>
+                  {[...NATUREZAS_NFE, ...(NATUREZAS_NFE.includes(naturezaOperacao) ? [] : [naturezaOperacao])]
+                    .map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+                {comodato && (
+                  <p className="hint" style={{ margin: "4px 0 0", color: cfopComodato ? undefined : "#c62828" }}>
+                    {cfopComodato
+                      ? `Remessa: CFOP ${cfopComodato.replace(/^(\d)/, "$1.")} nos itens e forma de pagamento "Sem pagamento". Confira o CST do ICMS com o contador.`
+                      : "Remessa: não sei a UF do cliente ou da empresa para escolher entre 5.908 e 6.908. Confira o CFOP dos itens."}
+                  </p>
+                )}
               </div>
               <div className="field-group">
                 <label className="field-label">Colaborador responsável</label>

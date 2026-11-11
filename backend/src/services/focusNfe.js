@@ -514,7 +514,9 @@ function montarObservacoesCte(documento) {
 }
 
 function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebedor, veiculo, veiculoReboque, documento }) {
-  const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador] ?? 3; // padrão: Destinatário
+  // Sem padrão: tomador em branco não vira "Destinatário" sozinho. A rota
+  // recusa antes (problemaDeTomador) e validarPayloadCte confere de novo.
+  const codigoTomador = CODIGO_TOMADOR[documento.definicaoTomador];
 
   // O indicador de IE precisa descrever QUEM é o tomador — se ficar fixo em
   // 9 (não contribuinte) enquanto o tomador é uma empresa com IE, a SEFAZ
@@ -694,6 +696,10 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
 // pra quem está na tela) descobrir aqui do que esperar o retorno.
 function validarPayloadCte(payload) {
   const problemas = [];
+
+  if (![0, 1, 2, 3].includes(payload.tomador)) {
+    problemas.push("Tomador do frete não escolhido.");
+  }
 
   // Rejeição 693: o grupo de documentos transportados é obrigatório, exceto
   // em redespacho intermediário (3) e serviço vinculado a multimodal (4).

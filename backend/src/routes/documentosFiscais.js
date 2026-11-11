@@ -495,6 +495,30 @@ router.get("/:id", asyncHandler(async (req, res) => {
 const ehCavalo = (tipoRodado) =>
   String(tipoRodado || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().startsWith("cavalo");
 
+// Tomador do frete: quem paga o CT-e. Nunca tem valor padrão — nem no CT-e
+// novo, nem no clonado, nem no gerado da NF-e. Já houve CT-e indo com o
+// destinatário como tomador só porque ninguém mexeu no campo, e o tomador
+// errado vai para a SEFAZ e para a cobrança. Por isso a escolha é sempre de
+// quem lança, e sem ela o CT-e não grava nem emite. Remetente pode ficar sem
+// cadastro (é a própria empresa); expedidor e recebedor, não: a Focus monta
+// o tomador com os dados desse bloco, e sem a pessoa não há dados.
+const PAPEIS_TOMADOR = ["Remetente", "Expedidor", "Recebedor", "Destinatário"];
+function problemaDeTomador({ definicaoTomador, expedidorId, recebedorId }) {
+  if (!definicaoTomador) {
+    return "Escolha quem é o tomador do frete (remetente, expedidor, recebedor ou destinatário).";
+  }
+  if (!PAPEIS_TOMADOR.includes(definicaoTomador)) {
+    return `Tomador do frete inválido: ${definicaoTomador}.`;
+  }
+  if (definicaoTomador === "Expedidor" && !expedidorId) {
+    return "O tomador marcado é o expedidor, mas nenhum expedidor foi escolhido.";
+  }
+  if (definicaoTomador === "Recebedor" && !recebedorId) {
+    return "O tomador marcado é o recebedor, mas nenhum recebedor foi escolhido.";
+  }
+  return null;
+}
+
 async function problemaDeReboque(veiculoId, reboquesIds) {
   if (!veiculoId) return null;
   const veiculo = await prisma.veiculo.findUnique({ where: { id: Number(veiculoId) }, select: { placa: true, tipoRodado: true } });
@@ -633,6 +657,8 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
   if (!tomadorId || !valorTotal) {
     return res.status(400).json({ erro: "tomadorId e valorTotal são obrigatórios" });
   }
+  const semTomador = problemaDeTomador({ definicaoTomador, expedidorId, recebedorId });
+  if (semTomador) return res.status(400).json({ erro: semTomador });
   const semReboqueCte = await problemaDeReboque(veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
   if (semReboqueCte) return res.status(400).json({ erro: semReboqueCte });
 
@@ -655,7 +681,7 @@ router.post("/cte/rascunho", asyncHandler(async (req, res) => {
       remetenteId: remetenteId || undefined,
       expedidorId: expedidorId || undefined,
       recebedorId: recebedorId || undefined,
-      definicaoTomador: definicaoTomador || undefined,
+      definicaoTomador,
       transportadoraId: transportadoraId || undefined,
       veiculoId: veiculoId || undefined,
       veiculoReboqueId: veiculoReboqueId || undefined,
@@ -899,7 +925,9 @@ router.post("/:id/gerar-cte", asyncHandler(async (req, res) => {
       // empresa emitente, e o campo espera um cadastro de pessoa. O CT-e
       // resolve isso na emissão, usando os dados da empresa.
       destinatarioId: nota.destinatarioId,
-      definicaoTomador: "Destinatário",
+      // Tomador em branco de propósito: quem paga o frete é escolha de quem
+      // confere o CT-e (ver problemaDeTomador).
+      definicaoTomador: null,
 
       origemPercurso: origem?.cidade || undefined,
       ufInicio: origem?.uf || undefined,
@@ -1283,6 +1311,9 @@ router.post("/:id/clonar", asyncHandler(async (req, res) => {
     data: {
       ...dados,
       colaboradorResponsavelId,
+      // CT-e clonado sai sem tomador: quem paga o frete muda de viagem para
+      // viagem e precisa ser escolhido de novo (ver problemaDeTomador).
+      ...(origem.tipo === "CTe" ? { definicaoTomador: null } : {}),
       status: "rascunho",
       // Só as datas mudam: o documento novo é de hoje, não do dia do
       // original. O resto vem inteiro do documento clonado.
@@ -1580,7 +1611,11 @@ router.post("/:id/emitir", asyncHandler(async (req, res) => {
   }
 
   if (documento.tipo === "CTe") {
-    const problemas = focusNfe.validarPayloadCte(payload);
+    const semTomador = problemaDeTomador(documento);
+    // Com o motivo detalhado do tomador, o aviso genérico do payload sobra.
+    const problemas = semTomador
+      ? [semTomador, ...focusNfe.validarPayloadCte(payload).filter((p) => !p.startsWith("Tomador do frete"))]
+      : focusNfe.validarPayloadCte(payload);
     if (problemas.length) {
       return res.status(422).json({
         erro: "O CT-e não passou na conferência antes do envio.",
@@ -1793,6 +1828,17 @@ router.put("/:id", asyncHandler(async (req, res) => {
       efetivo("veiculoReboqueId"), efetivo("veiculoReboque2Id"), efetivo("veiculoReboque3Id"),
     ]);
     if (semReboque) return res.status(400).json({ erro: semReboque });
+  }
+  // Edição pelo formulário sempre manda o tomador; quem não manda (ajuste de
+  // um campo só) não é barrado aqui — a emissão confere de novo.
+  if (existente.tipo === "CTe" && req.body.definicaoTomador !== undefined) {
+    const efetivo = (campo) => (req.body[campo] !== undefined ? req.body[campo] : existente[campo]);
+    const semTomador = problemaDeTomador({
+      definicaoTomador: efetivo("definicaoTomador"),
+      expedidorId: efetivo("expedidorId"),
+      recebedorId: efetivo("recebedorId"),
+    });
+    if (semTomador) return res.status(400).json({ erro: semTomador });
   }
 
   const {

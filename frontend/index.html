@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.179";
+const VERSAO_SISTEMA = "1.180";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.180", texto: "CT-e: o tomador do frete não vem mais marcado (nem no clonado, nem no gerado da NF-e). Escolha quem paga o frete; sem isso o CT-e não grava" },
   { versao: "1.179", texto: "NF-e: a natureza \"Remessa em comodato\" passa a se chamar \"Remessa de mercadoria\", com CFOP 5.949/6.949" },
   { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs. Natureza escrita como \"Venda de mercadoria\" e \"Remessa em comodato\"" },
   { versao: "1.177", texto: "NF-e: nota com \"Sem pagamento\" (remessa, comodato) deixa de ser recusada pela SEFAZ (rejeição 904)" },
@@ -12916,7 +12917,10 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
   const [expedidorId, setExpedidorId] = useState(cte?.expedidorId ? String(cte.expedidorId) : "");
   const [tomadorId, setTomadorId] = useState(cte?.destinatarioId ? String(cte.destinatarioId) : "");
   const [recebedorId, setRecebedorId] = useState(cte?.recebedorId ? String(cte.recebedorId) : "");
-  const [definicaoTomador, setDefinicaoTomador] = useState(cte?.definicaoTomador || "Destinatário");
+  // Tomador sem padrão, de propósito: o "Destinatário" marcado sozinho fazia
+  // CT-e sair com o tomador errado quando ninguém conferia. Clonado e gerado
+  // da NF-e também chegam sem ele (o servidor limpa); sem escolher, não grava.
+  const [definicaoTomador, setDefinicaoTomador] = useState(cte?.definicaoTomador || "");
 
   const [ufInicio, setUfInicio] = useState(cte?.ufInicio || "");
   const [origemPercurso, setOrigemPercurso] = useState(cte?.origemPercurso || "");
@@ -13030,6 +13034,9 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
 
   const salvar = async () => {
     if (!tomadorId) { setErro("Selecione o destinatário."); return; }
+    if (!definicaoTomador) { setErro("Escolha quem é o tomador do frete: clique em \"Tomador\" ao lado da pessoa que paga o frete (em Pessoas e tomador)."); return; }
+    if (definicaoTomador === "Expedidor" && !expedidorId) { setErro("O tomador marcado é o expedidor: escolha o expedidor."); return; }
+    if (definicaoTomador === "Recebedor" && !recebedorId) { setErro("O tomador marcado é o recebedor: escolha o recebedor."); return; }
     if (!valorTotal || Number(valorTotal) <= 0) { setErro("Informe o valor da prestação de serviço."); return; }
     const semReboqueCte = faltaReboqueDoCavalo(veiculos, veiculoId, [veiculoReboqueId, veiculoReboque2Id, veiculoReboque3Id]);
     if (semReboqueCte) { setErro(semReboqueCte); return; }
@@ -13574,6 +13581,11 @@ naturezaOperacao: naturezaOperacao || undefined,
                 </div>
               ))}
             </div>
+            {!definicaoTomador && (
+              <p className="hint" style={{ color: "#b91c1c", fontWeight: 600 }}>
+                Nenhum tomador marcado. Clique em "Tomador" ao lado de quem paga o frete.
+              </p>
+            )}
             {clientes?.length === 0 && <p className="hint">Nenhum cliente cadastrado ainda.</p>}
 
             <div className="nf-grade5" style={{ marginTop: 14 }}>

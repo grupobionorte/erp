@@ -2215,7 +2215,8 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
       data: {
         documentoId: id,
         texto,
-        numeroSequencial: resultado.numero_sequencial_evento || totalExistentes + 1,
+        // NF-e devolve numero_sequencial_evento; CT-e, numero_carta_correcao.
+        numeroSequencial: resultado.numero_sequencial_evento || resultado.numero_carta_correcao || totalExistentes + 1,
         status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
         motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
         pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf, documento.tipo),

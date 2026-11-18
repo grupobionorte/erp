@@ -1286,17 +1286,18 @@ async function cancelar({ tipo, ref, justificativa, cnpj }) {
 
 // Carta de Correção Eletrônica. Na NF-e é um texto livre (15 a 1000
 // caracteres). No CT-e não existe texto livre: o evento troca o valor de um
-// campo do XML, indicado por grupo e campo ("O valor a ser corrigido não
-// foi enviado no corpo da requisição" era a Focus recusando o texto livre
-// da NF-e num CT-e). O sistema corrige a observação geral do DACTe
-// (grupo compl, campo xObs), onde ficam veículo, reboques e motorista.
-// Nenhuma das duas serve para valores, impostos, dados cadastrais das
-// partes ou datas.
-const GRUPO_OBSERVACAO_CTE = "compl";
-const CAMPO_OBSERVACAO_CTE = "xObs";
+// campo, e a Focus quer o nome do campo na API dela (campo_api, que por
+// padrão é 1), não a tag do XML. As observações gerais do DACTe, onde ficam
+// veículo, reboques e motorista, são o campo "observacao" (tag xObs), na
+// raiz do CT-e, sem grupo — o mesmo nome usado na emissão. Já foram
+// recusados: o texto livre da NF-e ("O valor a ser corrigido não foi
+// enviado") e a tag do XML com campo_api no padrão ("Grupo 'compl' ou campo
+// 'xObs' são inválidos"). Nenhuma das duas cartas serve para valores,
+// impostos, dados cadastrais das partes ou datas.
+const CAMPO_OBSERVACAO_CTE = "observacao";
 async function emitirCartaCorrecao({ tipo, ref, texto, cnpj }) {
   const corpo = tipo === "CTe"
-    ? { grupo_corrigido: GRUPO_OBSERVACAO_CTE, campo_corrigido: CAMPO_OBSERVACAO_CTE, valor_corrigido: texto }
+    ? { campo_api: "1", campo_corrigido: CAMPO_OBSERVACAO_CTE, valor_corrigido: texto }
     : { correcao: texto };
   const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, corpo);
   return data;

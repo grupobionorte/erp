@@ -1284,13 +1284,33 @@ async function cancelar({ tipo, ref, justificativa, cnpj }) {
   return data; // status: "cancelado" quando a SEFAZ homologa o cancelamento
 }
 
-// Carta de Correção Eletrônica — só existe pra NFe. A correção deve ter
-// entre 15 e 1000 caracteres, e não serve pra corrigir valores, impostos,
-// dados cadastrais do emitente/destinatário ou datas — só detalhes como
-// descrição, endereço de entrega, etc.
+// Carta de Correção Eletrônica. Na NF-e é um texto livre (15 a 1000
+// caracteres). No CT-e não existe texto livre: o evento troca o valor de um
+// campo do XML, indicado por grupo e campo ("O valor a ser corrigido não
+// foi enviado no corpo da requisição" era a Focus recusando o texto livre
+// da NF-e num CT-e). O sistema corrige a observação geral do DACTe
+// (grupo compl, campo xObs), onde ficam veículo, reboques e motorista.
+// Nenhuma das duas serve para valores, impostos, dados cadastrais das
+// partes ou datas.
+const GRUPO_OBSERVACAO_CTE = "compl";
+const CAMPO_OBSERVACAO_CTE = "xObs";
 async function emitirCartaCorrecao({ tipo, ref, texto, cnpj }) {
-  const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, { correcao: texto });
+  const corpo = tipo === "CTe"
+    ? { grupo_corrigido: GRUPO_OBSERVACAO_CTE, campo_corrigido: CAMPO_OBSERVACAO_CTE, valor_corrigido: texto }
+    : { correcao: texto };
+  const { data } = await clienteDe(tipo, cnpj).post(`/v2/${ENDPOINT_POR_TIPO[tipo]}/${ref}/carta_correcao`, corpo);
   return data;
+}
+
+// Texto da observação geral (xObs) de um XML de CT-e, com as entidades do
+// XML desfeitas. Sem a tag, null.
+function observacaoDoXmlCte(xml) {
+  const m = /<xObs>([\s\S]*?)<\/xObs>/.exec(String(xml || ""));
+  if (!m) return null;
+  return m[1]
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, "&");
 }
 
 // Encerramento do MDF-e. Não é opcional: enquanto um manifesto não for
@@ -1328,6 +1348,7 @@ module.exports = {
   montarPayloadNfe,
   faltaNoLocalRetirada,
   montarPayloadCte,
+  observacaoDoXmlCte,
   validarPayloadCte,
   validarPayloadMdfe,
   conferirProprietarios,

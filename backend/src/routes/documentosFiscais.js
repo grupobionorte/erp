@@ -2163,11 +2163,16 @@ router.delete("/:id", asyncHandler(async (req, res) => {
   return res.status(409).json({ erro: `Documento em status "${existente.status}" não pode ser cancelado` });
 }));
 
-// Carta de Correção Eletrônica — só pra NFe já autorizada. A SEFAZ exige
-// entre 15 e 1000 caracteres, e permite até 20 por nota.
+// Carta de Correção Eletrônica, de NF-e ou CT-e autorizado; até 20 por
+// documento. Na NF-e o texto é a correção, entre 15 e 1000 caracteres. No
+// CT-e o texto é a observação geral inteira já corrigida: o evento troca o
+// campo todo, e o que ficar de fora some do documento (ver
+// focusNfe.emitirCartaCorrecao). O valor corrigido do evento do CT-e aceita
+// até 500 caracteres.
+const LIMITE_CORRECAO = { NFe: { min: 15, max: 1000 }, CTe: { min: 1, max: 500 } };
 router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  const { texto } = req.body;
+  const { texto: textoDigitado } = req.body;
 
   const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
   if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
@@ -2180,22 +2185,36 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
   if (documento.status !== "autorizado") {
     return res.status(409).json({ erro: "Só é possível corrigir um documento já autorizado" });
   }
-  if (!texto || texto.trim().length < 15 || texto.trim().length > 1000) {
-    return res.status(400).json({ erro: "O texto da correção precisa ter entre 15 e 1000 caracteres" });
+  // No CT-e o valor vai direto para um campo do XML, e o padrão de texto da
+  // SEFAZ não aceita quebra de linha: cada linha digitada vira " | ", o
+  // mesmo separador que a observação usa na emissão.
+  const texto = documento.tipo === "CTe"
+    ? String(textoDigitado || "").split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).join(" | ")
+    : String(textoDigitado || "").trim();
+  const limite = LIMITE_CORRECAO[documento.tipo] || LIMITE_CORRECAO.NFe;
+  const tamanho = texto.length;
+  if (tamanho < limite.min || tamanho > limite.max) {
+    return res.status(400).json({
+      erro: documento.tipo === "CTe"
+        ? `A observação corrigida precisa ter até ${limite.max} caracteres (tem ${tamanho})`
+        : `O texto da correção precisa ter entre ${limite.min} e ${limite.max} caracteres`,
+    });
   }
 
-  const totalExistentes = await prisma.cartaCorrecao.count({ where: { documentoId: id } });
+  // Tentativa que a Focus ou a SEFAZ recusou não é carta: não conta no
+  // limite de 20 nem ocupa número de sequência.
+  const totalExistentes = await prisma.cartaCorrecao.count({ where: { documentoId: id, status: { not: "erro" } } });
   if (totalExistentes >= 20) {
     return res.status(409).json({ erro: "Essa nota já tem 20 cartas de correção, o máximo permitido pela SEFAZ" });
   }
 
   const ref = refDocumento(documento);
   try {
-    const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto: texto.trim(), cnpj: await cnpjDoEmitente(documento.empresaId) });
+    const resultado = await focusNfe.emitirCartaCorrecao({ tipo: documento.tipo, ref, texto, cnpj: await cnpjDoEmitente(documento.empresaId) });
     const carta = await prisma.cartaCorrecao.create({
       data: {
         documentoId: id,
-        texto: texto.trim(),
+        texto,
         numeroSequencial: resultado.numero_sequencial_evento || totalExistentes + 1,
         status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
         motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
@@ -2206,9 +2225,39 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
   } catch (erro) {
     const detalheProvedor = erro.response?.data ? JSON.stringify(erro.response.data) : erro.message;
     const carta = await prisma.cartaCorrecao.create({
-      data: { documentoId: id, texto: texto.trim(), numeroSequencial: totalExistentes + 1, status: "erro", motivoErro: detalheProvedor },
+      data: { documentoId: id, texto, numeroSequencial: totalExistentes + 1, status: "erro", motivoErro: detalheProvedor },
     });
     res.status(502).json({ erro: "Falha ao enviar a correção para o provedor", detalhe: detalheProvedor, carta });
+  }
+}));
+
+// Observação geral que vale hoje no CT-e, para a tela abrir a correção já
+// com ela: a carta troca o campo inteiro, então quem corrige parte do texto
+// autorizado e muda só o que está errado. Vale a última carta registrada;
+// sem carta, a do XML autorizado.
+router.get("/:id/carta-correcao/texto-atual", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const documento = await prisma.documentoFiscal.findUnique({ where: { id } });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  if (documento.tipo !== "CTe") return res.json({ texto: null, origem: null });
+
+  const ultima = await prisma.cartaCorrecao.findFirst({
+    where: { documentoId: id, status: "registrada" },
+    orderBy: [{ numeroSequencial: "desc" }, { id: "desc" }],
+  });
+  if (ultima) return res.json({ texto: ultima.texto, origem: "carta" });
+
+  if (!documento.xmlUrl) return res.json({ texto: null, origem: null });
+  try {
+    const baixado = await fetch(documento.xmlUrl, { signal: AbortSignal.timeout(20000) });
+    if (!baixado.ok) throw new Error(`HTTP ${baixado.status}`);
+    return res.json({ texto: focusNfe.observacaoDoXmlCte(await baixado.text()), origem: "xml" });
+  } catch {
+    // Sem o XML a tela abre em branco e avisa; não inventa o texto.
+    return res.json({ texto: null, origem: null });
   }
 }));
 

@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.180";
+const VERSAO_SISTEMA = "1.181";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.181", texto: "CT-e: carta de correção funcionando. Ela abre com as observações gerais do CT-e (veículo, reboques, motorista) para corrigir só o que está errado" },
   { versao: "1.180", texto: "CT-e: o tomador do frete não vem mais marcado (nem no clonado, nem no gerado da NF-e). Escolha quem paga o frete; sem isso o CT-e não grava" },
   { versao: "1.179", texto: "NF-e: a natureza \"Remessa em comodato\" passa a se chamar \"Remessa de mercadoria\", com CFOP 5.949/6.949" },
   { versao: "1.178", texto: "Relatório de NF-e: filtro por natureza da operação (venda ou remessa em comodato), também nos XMLs. Natureza escrita como \"Venda de mercadoria\" e \"Remessa em comodato\"" },
@@ -8635,8 +8636,14 @@ function StatusDocumento({ status }) {
 }
 
 function CartaCorrecaoModal({ nota, onClose }) {
+  // No CT-e a carta não é um texto livre: ela troca as observações gerais do
+  // DACTe inteiras. Por isso abre com a observação que vale hoje, para
+  // corrigir só o que está errado (ver /carta-correcao no servidor).
+  const ehCte = nota.tipo === "CTe";
+  const limite = ehCte ? { min: 1, max: 500 } : { min: 15, max: 1000 };
   const [historico, setHistorico] = useState(null);
   const [texto, setTexto] = useState("");
+  const [textoAtual, setTextoAtual] = useState(ehCte ? null : ""); // null: carregando
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
   const [atualizandoCartaId, setAtualizandoCartaId] = useState(null);
@@ -8652,6 +8659,20 @@ function CartaCorrecaoModal({ nota, onClose }) {
 
   useEffect(() => { carregarHistorico(); }, [carregarHistorico]);
 
+  useEffect(() => {
+    if (!ehCte) return;
+    let vivo = true;
+    apiRequest(`/documentos-fiscais/${nota.id}/carta-correcao/texto-atual`)
+      .then(r => { if (!vivo) return; setTextoAtual(r.texto || ""); setTexto(t => t || (r.texto || "").split(" | ").join("\n")); })
+      .catch(() => { if (vivo) setTextoAtual(""); });
+    return () => { vivo = false; };
+  }, [ehCte, nota.id]);
+
+  // Como o servidor grava: no CT-e, cada linha vira " | ".
+  const textoFinal = ehCte
+    ? texto.split("\n").map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean).join(" | ")
+    : texto.trim();
+
   const atualizarStatusCarta = async (cartaId) => {
     setAtualizandoCartaId(cartaId);
     try {
@@ -8665,9 +8686,15 @@ function CartaCorrecaoModal({ nota, onClose }) {
   };
 
   const enviar = async () => {
-    const limpo = texto.trim();
-    if (limpo.length < 15 || limpo.length > 1000) {
-      setErro("O texto precisa ter entre 15 e 1000 caracteres.");
+    const limpo = textoFinal;
+    if (limpo.length < limite.min || limpo.length > limite.max) {
+      setErro(ehCte
+        ? `A observação corrigida precisa ter até ${limite.max} caracteres.`
+        : `O texto precisa ter entre ${limite.min} e ${limite.max} caracteres.`);
+      return;
+    }
+    if (ehCte && textoAtual && limpo === textoAtual) {
+      setErro("O texto está igual à observação atual. Corrija o que está errado antes de enviar.");
       return;
     }
     setErro("");
@@ -8677,10 +8704,12 @@ function CartaCorrecaoModal({ nota, onClose }) {
         method: "POST",
         body: JSON.stringify({ texto: limpo }),
       });
-      setTexto("");
+      // No CT-e o texto enviado passa a ser a observação que vale.
+      if (ehCte) setTextoAtual(limpo); else setTexto("");
       carregarHistorico();
     } catch (e) {
       setErro(`${e.message}${e.detalhe ? ` — ${e.detalhe}` : ""}`);
+      carregarHistorico();
     } finally {
       setEnviando(false);
     }
@@ -8694,26 +8723,38 @@ function CartaCorrecaoModal({ nota, onClose }) {
           <button className="icon-btn" onClick={onClose} aria-label="Fechar"><X size={18} /></button>
         </div>
         <div className="modal-body">
-          <p className="hint" style={{ marginTop: 0 }}>
-            Não serve pra corrigir valores, impostos, dados do cliente/emitente ou datas — só detalhes como descrição,
-            endereço de entrega, etc. Nesses outros casos, a nota precisa ser cancelada.
-          </p>
+          {ehCte ? (
+            <p className="hint" style={{ marginTop: 0 }}>
+              No CT-e, a carta de correção troca as <b>Observações gerais</b> do DACTe inteiras — é onde saem veículo,
+              reboques e motorista. Abaixo está a observação que vale hoje: corrija só o que está errado e mantenha o resto,
+              porque o que for apagado sai do CT-e. Não serve para valores, impostos, dados das partes ou datas.
+            </p>
+          ) : (
+            <p className="hint" style={{ marginTop: 0 }}>
+              Não serve pra corrigir valores, impostos, dados do cliente/emitente ou datas — só detalhes como descrição,
+              endereço de entrega, etc. Nesses outros casos, a nota precisa ser cancelada.
+            </p>
+          )}
 
           <div className="field-group">
-            <label className="field-label">Texto da correção<span className="req">*</span></label>
+            <label className="field-label">{ehCte ? "Observações gerais corrigidas" : "Texto da correção"}<span className="req">*</span></label>
             <textarea
               value={texto}
               onChange={e => setTexto(e.target.value)}
-              rows={4}
-              maxLength={1000}
+              rows={ehCte ? 7 : 4}
+              disabled={ehCte && textoAtual === null}
+              placeholder={ehCte && textoAtual === null ? "Carregando a observação atual…" : undefined}
               style={{ width: "100%", boxSizing: "border-box", fontFamily: "inherit", fontSize: 13, padding: 8 }}
             />
-            <p className="hint">{texto.trim().length}/1000 caracteres (mínimo 15)</p>
+            <p className="hint">
+              {textoFinal.length}/{limite.max} caracteres{ehCte ? "" : ` (mínimo ${limite.min})`}
+              {ehCte && textoAtual === "" && " · Não foi possível ler a observação do CT-e autorizado: digite a observação completa."}
+            </p>
           </div>
 
           {erro && <p className="error-text">{erro}</p>}
 
-          <button className="btn btn-primary" onClick={enviar} disabled={enviando}>
+          <button className="btn btn-primary" onClick={enviar} disabled={enviando || (ehCte && textoAtual === null)}>
             {enviando ? "Enviando…" : "Enviar correção"}
           </button>
 

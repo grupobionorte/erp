@@ -766,6 +766,7 @@ model CartaCorrecao {
   status           String   @default("pendente") // pendente | registrada | erro
   motivoErro       String?  @map("motivo_erro")
   pdfUrl           String?  @map("pdf_url")
+  xmlUrl           String?  @map("xml_url") // XML do evento (no CT-e, a Focus não dá PDF)
   criadoEm         DateTime @default(now()) @map("criado_em")
 
   @@map("cartas_correcao")

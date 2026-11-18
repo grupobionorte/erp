@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.182";
+const VERSAO_SISTEMA = "1.183";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.183", texto: "CT-e: carta de correção registrada agora tem \"Imprimir carta\" (a Focus não gera o PDF dela) e o XML do evento para baixar" },
   { versao: "1.182", texto: "CT-e: carta de correção das observações gerais deixa de ser recusada pela Focus (campo inválido)" },
   { versao: "1.181", texto: "CT-e: carta de correção funcionando. Ela abre com as observações gerais do CT-e (veículo, reboques, motorista) para corrigir só o que está errado" },
   { versao: "1.180", texto: "CT-e: o tomador do frete não vem mais marcado (nem no clonado, nem no gerado da NF-e). Escolha quem paga o frete; sem isso o CT-e não grava" },
@@ -8636,6 +8637,102 @@ function StatusDocumento({ status }) {
   );
 }
 
+// Condições de uso da carta de correção do CT-e: texto fixo do evento
+// (Art. 58-B do Convênio SINIEF 06/89). Vale o que veio no XML do evento;
+// este só entra quando o XML não está disponível.
+const CONDICOES_USO_CCE_CTE = "A Carta de Correção é disciplinada pelo Art. 58-B do CONVÊNIO/SINIEF 06/89: Fica permitida a utilização de carta de correção, para regularização de erro ocorrido na emissão de documentos fiscais relativos à prestação de serviço de transporte, desde que o erro não esteja relacionado com: I - as variáveis que determinam o valor do imposto tais como: base de cálculo, alíquota, diferença de preço, quantidade, valor da prestação; II - a correção de dados cadastrais que implique mudança do emitente, tomador, remetente ou do destinatário; III - a data de emissão ou de saída.";
+
+// A Focus não gera PDF da carta de correção do CT-e, só o XML do evento.
+// A impressão é do sistema, com os dados do CT-e e do registro na SEFAZ.
+// A janela abre antes da busca: aberta depois de um await, o navegador a
+// trata como pop-up e bloqueia.
+async function imprimirCartaCorrecaoCte(documentoId, cartaId) {
+  const janela = window.open("", "_blank");
+  if (!janela) { alert("O navegador bloqueou a janela de impressão. Libere pop-ups para este site."); return; }
+  janela.document.write("<p style='font:14px Arial;padding:20px'>Preparando a carta de correção…</p>");
+  let d;
+  try {
+    d = await apiRequest(`/documentos-fiscais/${documentoId}/carta-correcao/${cartaId}/impressao`);
+  } catch (e) {
+    janela.close();
+    alert(`Não foi possível imprimir: ${e.message}`);
+    return;
+  }
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const cnpj = (v) => {
+    const n = String(v || "").replace(/\D/g, "");
+    return n.length === 14 ? n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5") : (v || "");
+  };
+  const chave = String(d.documento.chaveAcesso || "").replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ");
+  const quando = (v) => v ? new Date(v).toLocaleString("pt-BR", { timeZone: FUSO_OPERACAO }) : "";
+  const e = d.emitente || {};
+  const end = e.endereco || {};
+  const endereco = [
+    [end.logradouro, end.numero].filter(Boolean).join(", "),
+    end.bairro, [end.cidade, end.uf].filter(Boolean).join("/"), end.cep && `CEP ${end.cep}`,
+  ].filter(Boolean).join(" - ");
+  const campo = (rotulo, valor) => `<div class="c"><span>${rotulo}</span><b>${esc(valor) || "&nbsp;"}</b></div>`;
+  const linhas = String(d.carta.texto || "").split(" | ").map(esc).join("<br>");
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Carta de correção CT-e ${esc(d.documento.numero)}</title>
+    <style>
+      @page { size: A4; margin: 10mm; }
+      body { font: 9pt Arial, sans-serif; margin: 0; color: #000; }
+      .caixa { border: 1px solid #000; padding: 3mm; margin-bottom: 3mm; }
+      .topo { display: flex; gap: 4mm; align-items: center; }
+      .topo img { max-height: 18mm; max-width: 40mm; }
+      .emp { font-size: 11pt; font-weight: bold; }
+      h1 { font-size: 13pt; text-align: center; margin: 0 0 1mm; }
+      .sub { text-align: center; font-size: 8pt; }
+      h4 { margin: 0 0 1.5mm; font-size: 8.5pt; background: #eee; padding: .5mm 1mm; }
+      .grade { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm 4mm; }
+      .c { display: flex; flex-direction: column; } .c span { font-size: 7pt; color: #333; }
+      .chave { font: bold 10pt monospace; letter-spacing: .3mm; }
+      .correcao { font-size: 10pt; line-height: 1.5; min-height: 30mm; }
+      .cond { font-size: 7.5pt; text-align: justify; }
+    </style></head><body>
+    <div class="caixa topo">
+      ${e.logoUrl ? `<img src="${esc(e.logoUrl)}">` : ""}
+      <div><div class="emp">${esc(e.razaoSocial)}</div>
+        CNPJ ${esc(cnpj(e.cnpj))}${e.ie ? ` · IE ${esc(e.ie)}` : ""}<br>${esc(endereco)}</div>
+    </div>
+    <div class="caixa">
+      <h1>CARTA DE CORREÇÃO ELETRÔNICA</h1>
+      <div class="sub">Evento 110110 vinculado ao Conhecimento de Transporte Eletrônico</div>
+    </div>
+    <div class="caixa">
+      <h4>CONHECIMENTO DE TRANSPORTE ELETRÔNICO</h4>
+      <div class="grade">
+        ${campo("Número / série", `${d.documento.numero ?? ""} / ${d.documento.serie ?? ""}`)}
+        ${campo("Data de emissão", quando(d.documento.dataEmissao))}
+        ${campo("Protocolo de autorização", d.documento.protocoloAutorizacao)}
+      </div>
+      <div class="c" style="margin-top:2mm"><span>Chave de acesso</span><div class="chave">${esc(chave)}</div></div>
+    </div>
+    <div class="caixa">
+      <h4>REGISTRO DA CARTA DE CORREÇÃO</h4>
+      <div class="grade">
+        ${campo("Sequência do evento", d.carta.numeroSequencial)}
+        ${campo("Data e hora do registro", quando(d.carta.registradoEm || d.carta.criadoEm))}
+        ${campo("Protocolo do evento", d.carta.protocolo)}
+      </div>
+    </div>
+    <div class="caixa">
+      <h4>CORREÇÃO — OBSERVAÇÕES GERAIS (passam a valer como abaixo)</h4>
+      <div class="correcao">${linhas}</div>
+    </div>
+    <div class="caixa">
+      <h4>CONDIÇÕES DE USO</h4>
+      <div class="cond">${esc(d.carta.condicoesUso || CONDICOES_USO_CCE_CTE)}</div>
+    </div>
+    </body></html>`;
+  janela.document.open();
+  janela.document.write(html);
+  janela.document.close();
+  janela.focus();
+  setTimeout(() => janela.print(), 500);
+}
+
 function CartaCorrecaoModal({ nota, onClose }) {
   // No CT-e a carta não é um texto livre: ela troca as observações gerais do
   // DACTe inteiras. Por isso abre com a observação que vale hoje, para
@@ -8773,7 +8870,19 @@ function CartaCorrecaoModal({ nota, onClose }) {
                 </div>
                 <p style={{ margin: "4px 0 0" }}>{c.texto}</p>
                 {c.motivoErro && <p style={{ margin: "4px 0 0", color: "#a32d2d", fontSize: 12 }}>{c.motivoErro}</p>}
-                {c.status !== "erro" && (
+                {/* CT-e: a Focus não gera PDF da carta, só o XML do evento —
+                    a impressão é do sistema. */}
+                {ehCte && c.status === "registrada" && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+                    <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => imprimirCartaCorrecaoCte(nota.id, c.id)}>
+                      Imprimir carta
+                    </button>
+                    {c.xmlUrl?.startsWith("http") && (
+                      <a href={c.xmlUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, fontWeight: 500, color: "#00732F" }}>Baixar XML</a>
+                    )}
+                  </div>
+                )}
+                {!ehCte && c.status !== "erro" && (
                   c.pdfUrl?.startsWith("http") ? (
                     <a href={c.pdfUrl} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 6, fontSize: 12, fontWeight: 500, color: "#00732F" }}>
                       Baixar PDF da carta

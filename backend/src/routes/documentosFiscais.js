@@ -2220,6 +2220,8 @@ router.post("/:id/carta-correcao", asyncHandler(async (req, res) => {
         status: resultado.status === "erro_autorizacao" ? "erro" : "registrada",
         motivoErro: resultado.status === "erro_autorizacao" ? resultado.mensagem_sefaz : undefined,
         pdfUrl: focusNfe.urlCompleta(resultado.caminho_pdf_carta_correcao || resultado.caminho_pdf, documento.tipo),
+        // CT-e: caminho_xml é o XML do evento (a Focus não gera PDF da carta).
+        xmlUrl: focusNfe.urlCompleta(resultado.caminho_xml_carta_correcao || resultado.caminho_xml, documento.tipo),
       },
     });
     res.status(201).json(carta);
@@ -2260,6 +2262,50 @@ router.get("/:id/carta-correcao/texto-atual", asyncHandler(async (req, res) => {
     // Sem o XML a tela abre em branco e avisa; não inventa o texto.
     return res.json({ texto: null, origem: null });
   }
+}));
+
+// Dados para imprimir a carta de correção do CT-e. A Focus só devolve o XML
+// do evento, sem PDF; a impressão é montada na tela com o que está aqui. O
+// protocolo e a hora do registro vêm do XML do evento; sem o XML (carta
+// registrada antes de o sistema guardar o endereço dele), ficam em branco.
+router.get("/:id/carta-correcao/:cartaId/impressao", asyncHandler(async (req, res) => {
+  const id = Number(req.params.id);
+  const cartaId = Number(req.params.cartaId);
+  const documento = await prisma.documentoFiscal.findUnique({
+    where: { id },
+    include: { empresa: { include: { endereco: true } } },
+  });
+  if (!documento) return res.status(404).json({ erro: "Documento não encontrado" });
+  if (documento.empresaId && documento.empresaId !== req.usuario.empresaId) {
+    return res.status(403).json({ erro: "Esse documento pertence a outra empresa" });
+  }
+  const carta = await prisma.cartaCorrecao.findUnique({ where: { id: cartaId } });
+  if (!carta || carta.documentoId !== id) return res.status(404).json({ erro: "Carta de correção não encontrada" });
+  if (carta.status !== "registrada") {
+    return res.status(409).json({ erro: "Só a carta registrada na SEFAZ pode ser impressa" });
+  }
+
+  let registro = { protocolo: null, registradoEm: null, condicoesUso: null };
+  if (carta.xmlUrl) {
+    try {
+      const baixado = await fetch(carta.xmlUrl, { signal: AbortSignal.timeout(20000) });
+      if (baixado.ok) registro = focusNfe.registroDoXmlEvento(await baixado.text());
+    } catch { /* sem o XML, imprime sem protocolo */ }
+  }
+
+  const { empresa } = documento;
+  res.json({
+    carta: { numeroSequencial: carta.numeroSequencial, texto: carta.texto, criadoEm: carta.criadoEm, ...registro },
+    documento: {
+      tipo: documento.tipo, numero: documento.numero, serie: documento.serie,
+      chaveAcesso: documento.chaveAcesso, dataEmissao: documento.dataEmissao,
+      protocoloAutorizacao: documento.protocoloAutorizacao,
+    },
+    emitente: empresa && {
+      razaoSocial: empresa.razaoSocial, cnpj: empresa.cnpj, ie: empresa.ie, logoUrl: empresa.logoUrl,
+      endereco: empresa.endereco,
+    },
+  });
 }));
 
 router.get("/:id/carta-correcao", asyncHandler(async (req, res) => {

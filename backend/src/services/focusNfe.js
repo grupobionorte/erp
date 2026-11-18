@@ -1303,15 +1303,40 @@ async function emitirCartaCorrecao({ tipo, ref, texto, cnpj }) {
   return data;
 }
 
+// Dados do registro lidos do XML do evento da carta de correção: protocolo,
+// data e hora do registro na SEFAZ e o texto das condições de uso. Campo
+// ausente fica null — a impressão mostra em branco, nunca um valor suposto.
+function registroDoXmlEvento(xml) {
+  const texto = String(xml || "");
+  const tag = (nome) => {
+    const m = new RegExp(`<${nome}>([\\s\\S]*?)</${nome}>`).exec(texto);
+    return m ? desfazerEntidades(m[1]) : null;
+  };
+  // O retorno da SEFAZ (retEventoCTe/infEvento) traz nProt e dhRegEvento.
+  const retorno = /<retEvento[\s\S]*$/.exec(texto)?.[0] || texto;
+  const doRetorno = (nome) => {
+    const m = new RegExp(`<${nome}>([\\s\\S]*?)</${nome}>`).exec(retorno);
+    return m ? desfazerEntidades(m[1]) : null;
+  };
+  return {
+    protocolo: doRetorno("nProt"),
+    registradoEm: doRetorno("dhRegEvento"),
+    condicoesUso: tag("xCondUso"),
+  };
+}
+
+function desfazerEntidades(t) {
+  return t
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, "&");
+}
+
 // Texto da observação geral (xObs) de um XML de CT-e, com as entidades do
 // XML desfeitas. Sem a tag, null.
 function observacaoDoXmlCte(xml) {
   const m = /<xObs>([\s\S]*?)<\/xObs>/.exec(String(xml || ""));
-  if (!m) return null;
-  return m[1]
-    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&amp;/g, "&");
+  return m ? desfazerEntidades(m[1]) : null;
 }
 
 // Encerramento do MDF-e. Não é opcional: enquanto um manifesto não for
@@ -1350,6 +1375,7 @@ module.exports = {
   faltaNoLocalRetirada,
   montarPayloadCte,
   observacaoDoXmlCte,
+  registroDoXmlEvento,
   validarPayloadCte,
   validarPayloadMdfe,
   conferirProprietarios,

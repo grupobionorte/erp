@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { diaDoCampo } = require("../lib/fuso");
 
 // Cliente HTTP para o provedor de emissão. Tudo que envolve assinatura com
 // certificado digital, comunicação SOAP com a SEFAZ e contingência fica
@@ -470,6 +471,23 @@ function blocoPessoaCte(pessoa, prefixo, empresa) {
 const CODIGO_TIPO_CTE = { "CT-e normal": 0, "Complemento de Valores": 1, "Anulação": 2, "Substituto": 3 };
 const CODIGO_TIPO_SERVICO = { "Normal": 0, "Subcontratação": 1, "Redespacho": 2, "Redespacho Intermediário": 3, "Multimodal": 4 };
 
+// Tipo do documento na tela → tpDoc do grupo infOutros do CT-e. "Fiscal" é a
+// NF-e, que vai no grupo próprio (nfes).
+const TIPO_OUTRO_DOCUMENTO_CTE = { "Declaração": "00", "Dutoviário": "10", "CF-e SAT": "59", "Outros": "99" };
+
+function montarOutrosDocumentosCte(documentos) {
+  const lista = (documentos || [])
+    .filter((doc) => TIPO_OUTRO_DOCUMENTO_CTE[doc.tipo])
+    .map((doc) => ({
+      tipo_documento: TIPO_OUTRO_DOCUMENTO_CTE[doc.tipo],
+      descricao_documento: doc.tipo === "Outros" ? textoLimpo(doc.descricaoOutros) : undefined,
+      numero: textoLimpo(doc.numeroDocumento),
+      data_emissao: doc.dataEmissao ? diaDoCampo(doc.dataEmissao) : undefined,
+      valor: Number(doc.valorTotalNota) > 0 ? dec(doc.valorTotalNota, 2) : undefined,
+    }));
+  return lista.length ? lista : undefined;
+}
+
 // Ficha da viagem para as observações gerais do DACTe.
 function montarObservacoesCte(documento) {
   const linhas = [];
@@ -654,10 +672,8 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
     observacao: montarObservacoesCte(documento),
 
     // NFe(s) que esse CTe está transportando — a chave de acesso de cada
-    // uma, já autorizada.
-    // Só manda pra Focus os documentos do tipo "Fiscal" com chave de
-    // acesso — os outros tipos (Declaração, Dutoviário, etc.) ainda não
-    // têm um formato de payload confirmado.
+    // uma, já autorizada. Os documentos que não são NF-e (declaração,
+    // dutoviário, CF-e SAT, outros) vão em outros_documentos, logo abaixo.
     nfes: documento.documentosTransportados?.some((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
       ? documento.documentosTransportados
           .filter((doc) => doc.tipo === "Fiscal" && (doc.chaveAcesso || doc.notaFiscal?.chaveAcesso))
@@ -665,6 +681,14 @@ function montarPayloadCte({ empresa, destinatario, remetente, expedidor, recebed
           // Focus devolve vem com o prefixo "NFe".
           .map((doc) => ({ chave_nfe: somenteDigitos(doc.chaveAcesso || doc.notaFiscal?.chaveAcesso) }))
       : undefined,
+
+    // Grupo infOutros: carga sem NF-e, acobertada por declaração ou outro
+    // documento. Formato da lista de campos do CT-e da Focus: tipo_documento
+    // (tpDoc), numero (nDoc), data_emissao (dEmi), valor (vDocFisc) e, só no
+    // 99-Outros, descricao_documento (descOutros). Antes a declaração era
+    // aceita na tela e não ia para a Focus, e o CT-e caía em "Nenhuma NF-e
+    // vinculada".
+    outros_documentos: montarOutrosDocumentosCte(documento.documentosTransportados),
 
     // Diferente do MDFe, o CTe não leva uma lista de veículos/condutores
     // nesse grupo — isso é coisa do MDFe (confirmado com o retorno da
@@ -710,9 +734,15 @@ function validarPayloadCte(payload) {
     Boolean(payload.outros_documentos?.length);
   if (!temDocumentos && tipoServico !== 3 && tipoServico !== 4) {
     problemas.push(
-      "Nenhuma NF-e vinculada: o CT-e precisa de pelo menos um documento transportado " +
-        "(informe a chave de acesso da nota que está sendo transportada)."
+      "Nenhum documento transportado: o CT-e precisa de pelo menos um — a chave de acesso " +
+        "da NF-e ou, sem nota, a declaração (ou outro documento) com número e valor."
     );
+  }
+
+  for (const outro of payload.outros_documentos || []) {
+    if (outro.tipo_documento === "99" && !outro.descricao_documento) {
+      problemas.push("Documento do tipo \"Outros\" sem descrição: informe que documento é, na carga do CT-e.");
+    }
   }
 
   for (const nfe of payload.nfes || []) {

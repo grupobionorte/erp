@@ -1193,12 +1193,13 @@ const MODULES = {
 // Versão do sistema. Fica aqui, num lugar só, e aparece na barra lateral e
 // na tela de login — assim dá para saber qual versão está no ar sem abrir o
 // código, o que importa quando alguém relata um problema já corrigido.
-const VERSAO_SISTEMA = "1.183";
+const VERSAO_SISTEMA = "1.184";
 
 // Novidades que aparecem na tela de entrada: a mais recente primeiro. Cada
 // entrega acrescenta uma linha curta, do ponto de vista de quem usa — é
 // assim que a equipe fica sabendo o que mudou.
 const NOVIDADES = [
+  { versao: "1.184", texto: "CT-e com Declaração (ou outro documento sem NF-e) deixa de ser recusado por \"Nenhuma NF-e vinculada\"" },
   { versao: "1.183", texto: "CT-e: carta de correção registrada agora tem \"Imprimir carta\" (a Focus não gera o PDF dela) e o XML do evento para baixar" },
   { versao: "1.182", texto: "CT-e: carta de correção das observações gerais deixa de ser recusada pela Focus (campo inválido)" },
   { versao: "1.181", texto: "CT-e: carta de correção funcionando. Ela abre com as observações gerais do CT-e (veículo, reboques, motorista) para corrigir só o que está errado" },
@@ -12904,7 +12905,7 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
   const [cteGlobalizado, setCteGlobalizado] = useState(cte?.cteGlobalizado ?? false);
   const [tipoCte, setTipoCte] = useState(cte?.tipoCte || "CT-e normal");
   const DOCUMENTO_VAZIO = {
-    tipo: "Fiscal", notaFiscalId: null, chaveAcesso: "", numeroDocumento: "", modelo: "55", serie: "1",
+    tipo: "Fiscal", descricaoOutros: "", notaFiscalId: null, chaveAcesso: "", numeroDocumento: "", modelo: "55", serie: "1",
     cfopPredominante: "", dataEmissao: "", naturezaMercadoria: "", outrasCaracteristicasCarga: "",
     baseCalculoIcms: "", valorIcms: "", baseCalculoIcmsSt: "", valorIcmsSt: "", valorTotalProdutos: "", valorTotalNota: "",
     pesoBruto: "", m3: "", quantidadeVolumes: "", pesoLiquido: "",
@@ -13049,7 +13050,12 @@ function CteForm({ cte, clientes, recarregarClientes, produtos, transportadoras,
     // Os valores da nota alimentam o valor da carga e a averbação do
     // seguro no CT-e — sem eles o documento sai com carga zerada.
     const faltando = [];
-    if (!docEmEdicao.numeroDocumento && !docEmEdicao.chaveAcesso) faltando.push("número do documento ou chave de acesso");
+    // Declaração, dutoviário etc. não têm chave: vão para a SEFAZ pelo
+    // número, data e valor (grupo infOutros). "Outros" exige descrição.
+    const ehNfe = docEmEdicao.tipo === "Fiscal";
+    if (ehNfe && !docEmEdicao.numeroDocumento && !docEmEdicao.chaveAcesso) faltando.push("número do documento ou chave de acesso");
+    if (!ehNfe && !docEmEdicao.numeroDocumento) faltando.push("número do documento");
+    if (docEmEdicao.tipo === "Outros" && !String(docEmEdicao.descricaoOutros || "").trim()) faltando.push("descrição do documento");
     if (!docEmEdicao.valorTotalProdutos) faltando.push("valor total dos produtos");
     if (!docEmEdicao.valorTotalNota) faltando.push("valor total da nota fiscal");
 
@@ -13463,6 +13469,18 @@ naturezaOperacao: naturezaOperacao || undefined,
                   <option value="Outros">Outros</option>
                 </select>
               </div>
+              {docEmEdicao.tipo === "Outros" && (
+                <div className="field-group" style={{ gridColumn: "span 4" }}>
+                  <label className="field-label">Descrição do documento<span className="req">*</span></label>
+                  <input value={docEmEdicao.descricaoOutros || ""} maxLength={100} placeholder="Que documento é (vai para a SEFAZ)"
+                    onChange={e => setDocCampo("descricaoOutros", e.target.value)} />
+                </div>
+              )}
+              {docEmEdicao.tipo !== "Fiscal" && docEmEdicao.tipo !== "Outros" && (
+                <p className="hint" style={{ gridColumn: "span 4", alignSelf: "end" }}>
+                  Sem NF-e: vai para a SEFAZ o número, a data de emissão e o valor total deste documento.
+                </p>
+              )}
               {docEmEdicao.tipo === "Fiscal" && (
                 <div className="field-group" style={{ gridColumn: "span 4" }}>
                   <label className="field-label">Buscar nota fiscal (chave ou número)</label>

@@ -723,6 +723,7 @@ model CteDocumento {
   notaFiscal  DocumentoFiscal? @relation("CteDocumentoNota", fields: [notaFiscalId], references: [id])
 
   tipo                String  @default("Fiscal") // Fiscal, Declaração, Dutoviário, CF-e SAT, Outros
+  descricaoOutros     String? @map("descricao_outros") // obrigatória no tipo Outros (descOutros)
   chaveAcesso         String? @map("chave_acesso")
   numeroDocumento     String? @map("numero_documento")
   modelo              String?

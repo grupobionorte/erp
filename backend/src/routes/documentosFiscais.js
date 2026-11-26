@@ -86,6 +86,8 @@ function mapCteDocumento(doc) {
   return {
     notaFiscalId: doc.notaFiscalId || undefined,
     tipo: doc.tipo || "Fiscal",
+    // Só o tipo Outros leva descrição (descOutros); nos demais, sobra.
+    descricaoOutros: doc.tipo === "Outros" ? (String(doc.descricaoOutros || "").trim() || undefined) : undefined,
     chaveAcesso: doc.chaveAcesso || undefined,
     numeroDocumento: doc.numeroDocumento || undefined,
     modelo: doc.modelo || undefined,
